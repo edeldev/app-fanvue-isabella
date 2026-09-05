@@ -13,7 +13,7 @@ export default async function WorkflowsPage() {
       orderBy: [{ status: "asc" }, { priority: "desc" }, { updatedAt: "desc" }],
       include: { steps: { orderBy: { position: "asc" } }, _count: { select: { enrollments: true } } },
     }),
-    prisma.messageTemplate.findMany({ where: { creatorId, status: "active" }, orderBy: { name: "asc" }, select: { id: true, name: true, type: true } }),
+    prisma.messageTemplate.findMany({ where: { creatorId, status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true, type: true } }),
   ]) : [[], []];
   const workflows = records.map((workflow) => ({
     id: workflow.id, name: workflow.name, version: workflow.version, priority: workflow.priority,
