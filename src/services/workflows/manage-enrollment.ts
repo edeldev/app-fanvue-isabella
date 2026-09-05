@@ -1,5 +1,6 @@
 import type { EnrollmentStatus, Prisma } from "@/generated/prisma/client";
 import { assertEnrollmentTransition } from "@/domain/automation/transitions";
+import { initialEnrollmentSchedule } from "@/domain/workflows/enrollment-schedule";
 import { prisma } from "@/lib/prisma";
 
 const nonTerminalStatuses: EnrollmentStatus[] = ["ACTIVE", "WAITING", "PAUSED"];
@@ -26,10 +27,12 @@ export async function startEnrollment(creatorId: string, fanId: string, workflow
       });
       await transaction.automationLog.create({ data: { creatorId, fanId, enrollmentId: current.id, eventType: "WORKFLOW_CHANGED", explanation: `${current.workflow.name} fue reemplazado por ${workflow.name}.`, metadata: { fromWorkflowId: current.workflowId, toWorkflowId: workflowId } satisfies Prisma.InputJsonValue } });
     }
+    const now = new Date();
+    const schedule = initialEnrollmentSchedule(workflow.steps[0], now);
     const enrollment = await transaction.workflowEnrollment.create({
-      data: { creatorId, fanId, workflowId, currentStepId: workflow.steps[0].id, status: "ACTIVE", isPrimary: true, nextRunAt: new Date() },
+      data: { creatorId, fanId, workflowId, currentStepId: workflow.steps[0].id, status: schedule.status, isPrimary: true, nextRunAt: schedule.nextRunAt },
     });
-    await transaction.automationLog.create({ data: { creatorId, fanId, enrollmentId: enrollment.id, eventType: "WORKFLOW_STARTED", explanation: `${workflow.name} inició en el paso ${workflow.steps[0].name}.`, metadata: { workflowId, firstStepId: workflow.steps[0].id } satisfies Prisma.InputJsonValue } });
+    await transaction.automationLog.create({ data: { creatorId, fanId, enrollmentId: enrollment.id, eventType: "WORKFLOW_STARTED", explanation: schedule.status === "WAITING" ? `${workflow.name} inició esperando hasta ${schedule.nextRunAt.toLocaleString("es-MX")}.` : `${workflow.name} inició en el paso ${workflow.steps[0].name}.`, metadata: { workflowId, firstStepId: workflow.steps[0].id } satisfies Prisma.InputJsonValue } });
     return enrollment;
   });
 }

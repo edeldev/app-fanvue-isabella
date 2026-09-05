@@ -35,3 +35,11 @@ export interface EnrollmentView {
   nextRunAt: string | null;
   pauseReason: string | null;
 }
+
+export interface AutomationLogView {
+  id: string;
+  eventType: string;
+  explanation: string;
+  occurredAt: string;
+  fanName: string | null;
+}

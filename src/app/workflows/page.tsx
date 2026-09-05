@@ -8,7 +8,7 @@ import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creato
 
 export default async function WorkflowsPage() {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
-  const [records, templates, fanRecords, enrollmentRecords] = creatorId ? await Promise.all([
+  const [records, templates, fanRecords, enrollmentRecords, logRecords] = creatorId ? await Promise.all([
     prisma.workflow.findMany({
       where: { creatorId },
       orderBy: [{ status: "asc" }, { priority: "desc" }, { updatedAt: "desc" }],
@@ -29,7 +29,13 @@ export default async function WorkflowsPage() {
       orderBy: { updatedAt: "desc" },
       include: { fan: { select: { displayName: true, username: true } }, workflow: { select: { name: true } }, currentStep: { select: { name: true } } },
     }),
-  ]) : [[], [], [], []];
+    prisma.automationLog.findMany({
+      where: { creatorId, eventType: { in: ["WORKFLOW_STARTED", "WORKFLOW_CHANGED", "WORKFLOW_PAUSED", "WORKFLOW_RESUMED", "WORKFLOW_CANCELLED"] } },
+      orderBy: { occurredAt: "desc" },
+      take: 20,
+      include: { fan: { select: { displayName: true, username: true } } },
+    }),
+  ]) : [[], [], [], [], []];
   const workflows = records.map((workflow) => ({
     id: workflow.id, name: workflow.name, version: workflow.version, priority: workflow.priority,
     status: workflow.status, isPrimary: workflow.isPrimary,
@@ -46,6 +52,13 @@ export default async function WorkflowsPage() {
     currentStepName: enrollment.currentStep?.name ?? null, nextRunAt: enrollment.nextRunAt?.toISOString() ?? null,
     pauseReason: enrollment.pauseReason,
   }));
+  const activity = logRecords.map((log) => ({
+    id: log.id,
+    eventType: log.eventType,
+    explanation: log.explanation,
+    occurredAt: log.occurredAt.toISOString(),
+    fanName: log.fan?.displayName || log.fan?.username || null,
+  }));
 
-  return <div className="flex min-h-screen bg-[#101218] text-zinc-100"><Sidebar /><div className="min-w-0 flex-1"><Topbar /><main className="mx-auto max-w-375 px-5 py-8 md:px-8"><div className="mb-8"><p className="mb-2 text-xs font-medium uppercase tracking-[.18em] text-violet-400">Automatización</p><h1 className="text-3xl font-semibold tracking-tight text-white">Workflows</h1><p className="mt-2 text-sm text-zinc-500">Construye estrategias versionadas, explicables y validadas antes de cada acción.</p></div>{creatorId ? <><WorkflowManager workflows={workflows} templates={templates} /><EnrollmentPanel fans={fans} workflows={workflows.filter((workflow) => workflow.status === "PUBLISHED" && workflow.isPrimary)} enrollments={enrollments} /></> : <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-6 text-amber-200">Conecta Fanvue para crear workflows.</div>}</main></div></div>;
+  return <div className="flex min-h-screen bg-[#101218] text-zinc-100"><Sidebar /><div className="min-w-0 flex-1"><Topbar /><main className="mx-auto max-w-375 px-5 py-8 md:px-8"><div className="mb-8"><p className="mb-2 text-xs font-medium uppercase tracking-[.18em] text-violet-400">Automatización</p><h1 className="text-3xl font-semibold tracking-tight text-white">Workflows</h1><p className="mt-2 text-sm text-zinc-500">Construye estrategias versionadas, explicables y validadas antes de cada acción.</p></div>{creatorId ? <><WorkflowManager workflows={workflows} templates={templates} /><EnrollmentPanel fans={fans} workflows={workflows.filter((workflow) => workflow.status === "PUBLISHED" && workflow.isPrimary)} enrollments={enrollments} activity={activity} /></> : <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-6 text-amber-200">Conecta Fanvue para crear workflows.</div>}</main></div></div>;
 }
