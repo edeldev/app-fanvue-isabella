@@ -1,0 +1,456 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  WAITING
+  PAUSED
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  SKIPPED
+  RETRYING
+}
+enum ValidationDecision {
+  SEND
+  WAIT
+  SKIP
+  CANCEL
+  CHANGE_WORKFLOW
+  RETRY
+}
+enum WorkflowStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+enum WorkflowStepType {
+  SEND_MESSAGE
+  WAIT
+  SEND_OFFER
+  SEND_PPV
+  CONDITION
+  CHANGE_WORKFLOW
+  END
+}
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  DELETED
+}
+enum SubscriptionStatus {
+  ACTIVE
+  CANCEL_AT_PERIOD_END
+  PENDING
+  PAUSED
+  EXPIRED
+  CANCELLED
+}
+enum ResumeStrategy {
+  MANUAL
+  AFTER_5_MINUTES
+  AFTER_10_MINUTES
+  AFTER_15_MINUTES
+  AFTER_30_MINUTES
+  AFTER_60_MINUTES
+  NEVER
+}
+enum LogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
+model Creator {
+  id                String                  @id @default(cuid())
+  fanvueUserId      String                  @unique
+  username          String?
+  displayName       String?
+  avatarUrl         String?
+  allTimeEarningsMinor Int?
+  fanvueFollowersCount Int?
+  fanvueSubscribersCount Int?
+  fanvueContactsCount Int?
+  fanvueImageCount Int?
+  fanvueVideoCount Int?
+  fanvueLikesCount Int?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  fans              Fan[]
+  settings          Settings?
+  credentials       IntegrationCredential[]
+  workflows         Workflow[]
+  templates         MessageTemplate[]
+  contents          Content[]
+  webhookEvents     WebhookEvent[]
+  fanEvents         FanEvent[]
+  automationLogs    AutomationLog[]
+  executions        AutomationExecution[]
+}
+
+model Fan {
+  id                 String               @id @default(cuid())
+  creatorId          String
+  fanvueUserId       String
+  username           String?
+  displayName        String?
+  avatarUrl          String?
+  isFollower         Boolean              @default(false)
+  isSubscriber       Boolean              @default(false)
+  isExpiredSubscriber Boolean             @default(false)
+  isCreatorAccount   Boolean              @default(false)
+  isTopSpender       Boolean              @default(false)
+  totalSpentMinor    Int                  @default(0)
+  lastActivityAt     DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  creator            Creator              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  subscriptions      Subscription[]
+  purchases          Purchase[]
+  conversations      Conversation[]
+  enrollments        WorkflowEnrollment[]
+  events             FanEvent[]
+  automationLogs     AutomationLog[]
+  executions         AutomationExecution[]
+
+  @@unique([creatorId, fanvueUserId])
+  @@index([creatorId, isFollower])
+  @@index([creatorId, lastActivityAt])
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  creatorId              String
+  fanId                  String
+  fanvueSubscriptionId   String?
+  status                 SubscriptionStatus
+  startedAt              DateTime
+  currentPeriodEndsAt    DateTime?
+  endedAt                DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  fan                    Fan                @relation(fields: [fanId], references: [id], onDelete: Cascade)
+
+  @@unique([creatorId, fanvueSubscriptionId])
+  @@unique([creatorId, fanId, startedAt])
+  @@index([creatorId, fanId, status])
+}
+
+model Purchase {
+  id                 String    @id @default(cuid())
+  creatorId          String
+  fanId              String?
+  fanvuePaymentId    String
+  source             String
+  amountMinor        Int
+  currency           String    @db.VarChar(3)
+  externalMessageId  String?
+  externalPostId     String?
+  contentId          String?
+  purchasedAt        DateTime
+  reversedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  fan                Fan?      @relation(fields: [fanId], references: [id], onDelete: SetNull)
+  content            Content?  @relation(fields: [contentId], references: [id], onDelete: SetNull)
+
+  @@unique([creatorId, fanvuePaymentId])
+  @@index([creatorId, fanId, purchasedAt])
+  @@index([creatorId, externalMessageId])
+}
+
+model Conversation {
+  id                    String    @id @default(cuid())
+  creatorId             String
+  fanId                 String
+  fanvueConversationId  String?
+  lastMessageAt         DateTime?
+  lastInboundAt         DateTime?
+  lastOutboundAt        DateTime?
+  isMuted               Boolean   @default(false)
+  unreadMessagesCount   Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  fan                   Fan       @relation(fields: [fanId], references: [id], onDelete: Cascade)
+  messages              Message[]
+
+  @@unique([creatorId, fanId])
+  @@unique([creatorId, fanvueConversationId])
+  @@index([creatorId, lastMessageAt])
+}
+
+model Message {
+  id                String           @id @default(cuid())
+  creatorId         String
+  conversationId    String
+  fanvueMessageId   String
+  templateId        String?
+  direction         MessageDirection
+  status            MessageStatus
+  text              String?
+  mediaUuids        Json?
+  mediaPreviewUuid  String?
+  priceMinor        Int?
+  sentAt            DateTime
+  readAt            DateTime?
+  deletedAt         DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  conversation      Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  template          MessageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@unique([creatorId, fanvueMessageId])
+  @@index([creatorId, conversationId, sentAt])
+}
+
+model MessageTemplate {
+  id                   String    @id @default(cuid())
+  creatorId            String
+  name                 String
+  text                 String
+  type                 String
+  category             String
+  status               String
+  metadata             Json?
+  associatedContentId  String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  creator              Creator   @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  content              Content?  @relation(fields: [associatedContentId], references: [id], onDelete: SetNull)
+  messages             Message[]
+  workflowSteps        WorkflowStep[]
+
+  @@unique([creatorId, name])
+  @@index([creatorId, category, status])
+}
+
+model Content {
+  id               String            @id @default(cuid())
+  creatorId        String
+  fanvueContentId  String?
+  name             String
+  type             String
+  metadata         Json?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  creator          Creator           @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  purchases        Purchase[]
+  templates        MessageTemplate[]
+
+  @@unique([creatorId, fanvueContentId])
+  @@index([creatorId, type])
+}
+
+model Workflow {
+  id           String             @id @default(cuid())
+  creatorId    String
+  stableKey    String
+  name         String
+  version      Int
+  priority     Int                @default(0)
+  status       WorkflowStatus     @default(DRAFT)
+  isPrimary    Boolean            @default(true)
+  publishedAt  DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  creator      Creator            @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  steps        WorkflowStep[]
+  enrollments  WorkflowEnrollment[]
+
+  @@unique([creatorId, stableKey, version])
+  @@index([creatorId, status, priority])
+}
+
+model WorkflowStep {
+  id                   String             @id @default(cuid())
+  workflowId           String
+  position             Int
+  name                 String
+  type                 WorkflowStepType
+  config               Json
+  messageTemplateId    String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  workflow             Workflow           @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  messageTemplate      MessageTemplate?    @relation(fields: [messageTemplateId], references: [id], onDelete: Restrict)
+  currentEnrollments   WorkflowEnrollment[]
+  executions           AutomationExecution[]
+
+  @@unique([workflowId, position])
+}
+
+model WorkflowEnrollment {
+  id                  String             @id @default(cuid())
+  creatorId           String
+  fanId               String
+  workflowId          String
+  currentStepId       String?
+  status              EnrollmentStatus   @default(ACTIVE)
+  isPrimary           Boolean            @default(true)
+  startedAt           DateTime            @default(now())
+  nextRunAt           DateTime?
+  lastRunAt           DateTime?
+  completedAt         DateTime?
+  pausedAt            DateTime?
+  cancelledAt         DateTime?
+  pauseReason         String?
+  cancellationReason  String?
+  lastResult          Json?
+  lockedAt            DateTime?
+  lockOwner           String?
+  lockExpiresAt       DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  fan                 Fan                 @relation(fields: [fanId], references: [id], onDelete: Cascade)
+  workflow            Workflow            @relation(fields: [workflowId], references: [id], onDelete: Restrict)
+  currentStep         WorkflowStep?        @relation(fields: [currentStepId], references: [id], onDelete: Restrict)
+  executions          AutomationExecution[]
+  logs                AutomationLog[]
+
+  @@index([creatorId, status, nextRunAt])
+  @@index([creatorId, fanId, status])
+  @@index([lockExpiresAt])
+}
+
+model AutomationExecution {
+  id              String           @id @default(cuid())
+  creatorId       String
+  fanId           String
+  enrollmentId    String
+  stepId          String
+  idempotencyKey  String           @unique
+  attempt         Int              @default(1)
+  status          ExecutionStatus  @default(PENDING)
+  decision        ValidationDecision?
+  reasonCode      String?
+  reason          String?
+  evidence        Json?
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  nextRetryAt     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  creator         Creator          @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  fan             Fan              @relation(fields: [fanId], references: [id], onDelete: Cascade)
+  enrollment      WorkflowEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  step            WorkflowStep     @relation(fields: [stepId], references: [id], onDelete: Restrict)
+  logs            AutomationLog[]
+
+  @@index([creatorId, status, nextRetryAt])
+  @@index([enrollmentId, createdAt])
+}
+
+model AutomationLog {
+  id            String               @id @default(cuid())
+  creatorId     String
+  fanId         String?
+  enrollmentId  String?
+  executionId   String?
+  eventType     String
+  level         LogLevel             @default(INFO)
+  reasonCode    String?
+  explanation   String
+  metadata      Json?
+  occurredAt    DateTime             @default(now())
+  createdAt     DateTime             @default(now())
+  creator       Creator              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  fan           Fan?                 @relation(fields: [fanId], references: [id], onDelete: SetNull)
+  enrollment    WorkflowEnrollment?  @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  execution     AutomationExecution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
+
+  @@index([creatorId, occurredAt])
+  @@index([fanId, occurredAt])
+}
+
+model FanEvent {
+  id               String    @id @default(cuid())
+  creatorId        String
+  fanId            String?
+  webhookEventId   String?
+  type             String
+  externalEventId  String?
+  occurredAt       DateTime
+  payload          Json?
+  createdAt        DateTime  @default(now())
+  creator          Creator   @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  fan              Fan?      @relation(fields: [fanId], references: [id], onDelete: SetNull)
+  webhookEvent     WebhookEvent? @relation(fields: [webhookEventId], references: [id], onDelete: SetNull)
+
+  @@unique([creatorId, externalEventId])
+  @@index([creatorId, fanId, occurredAt])
+}
+
+model WebhookEvent {
+  id                 String    @id @default(cuid())
+  creatorId          String
+  providerEventId    String
+  type               String
+  signatureVerified  Boolean
+  payload            Json
+  receivedAt         DateTime  @default(now())
+  processedAt        DateTime?
+  failedAt           DateTime?
+  failureReason      String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  creator            Creator   @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  fanEvents          FanEvent[]
+
+  @@unique([creatorId, providerEventId])
+  @@index([processedAt, failedAt])
+}
+
+model IntegrationCredential {
+  id                     String    @id @default(cuid())
+  creatorId              String
+  provider               String
+  encryptedAccessToken   String
+  encryptedRefreshToken  String?
+  tokenExpiresAt         DateTime
+  scopes                 String[]
+  apiVersion             String
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  creator                Creator   @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@unique([creatorId, provider])
+}
+
+model Settings {
+  id                       String          @id @default(cuid())
+  creatorId                String          @unique
+  automationEnabled        Boolean         @default(false)
+  resumeStrategy           ResumeStrategy  @default(MANUAL)
+  resumeIfNoNewMessages    Boolean         @default(true)
+  validateBeforeResume     Boolean         @default(true)
+  timezone                 String          @default("UTC")
+  sendingWindowStart       String          @default("09:00")
+  sendingWindowEnd         String          @default("21:00")
+  minimumDelaySeconds      Int             @default(60)
+  maximumRetries           Int             @default(3)
+  debugMode                Boolean         @default(false)
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+  creator                  Creator         @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+}

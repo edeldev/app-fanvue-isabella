@@ -1,0 +1,2 @@
+ALTER TABLE "Fan"
+ADD COLUMN "isExpiredSubscriber" BOOLEAN NOT NULL DEFAULT false;
