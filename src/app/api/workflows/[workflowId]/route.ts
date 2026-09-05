@@ -27,15 +27,19 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!creatorId) return Response.json({ error: "Sesión no autorizada." }, { status: 401 });
   const workflow = await prisma.workflow.findFirst({
     where: { id: (await params).workflowId, creatorId },
-    include: { _count: { select: { enrollments: true } } },
   });
   if (!workflow) return Response.json({ error: "Flujo no encontrado." }, { status: 404 });
-  const executions = await prisma.automationExecution.count({
-    where: { step: { workflowId: workflow.id }, creatorId },
+  const activeEnrollments = await prisma.workflowEnrollment.count({
+    where: { workflowId: workflow.id, creatorId, status: { in: ["ACTIVE", "WAITING", "PAUSED"] } },
   });
-  if (!canDeleteWorkflow(workflow.status, { enrollments: workflow._count.enrollments, executions })) {
-    return Response.json({ error: "WORKFLOW_HAS_HISTORY" }, { status: 409 });
+  if (!canDeleteWorkflow(workflow.status, { activeEnrollments })) {
+    return Response.json({ error: "WORKFLOW_IS_RUNNING" }, { status: 409 });
   }
-  await prisma.workflow.delete({ where: { id: workflow.id } });
+  await prisma.$transaction(async (transaction) => {
+    if (workflow.status === "PUBLISHED") {
+      await transaction.workflowEnrollment.deleteMany({ where: { workflowId: workflow.id, creatorId } });
+    }
+    await transaction.workflow.delete({ where: { id: workflow.id } });
+  });
   return new Response(null, { status: 204 });
 }

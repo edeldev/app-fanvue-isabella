@@ -9,6 +9,7 @@ export interface WorkflowView {
   isPrimary: boolean;
   publishedAt: string | null;
   enrollments: number;
+  activeEnrollments: number;
   steps: WorkflowDefinitionInput["steps"];
 }
 

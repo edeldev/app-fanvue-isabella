@@ -12,7 +12,11 @@ export default async function WorkflowsPage() {
     prisma.workflow.findMany({
       where: { creatorId },
       orderBy: [{ status: "asc" }, { priority: "desc" }, { updatedAt: "desc" }],
-      include: { steps: { orderBy: { position: "asc" } }, _count: { select: { enrollments: true } } },
+      include: {
+        steps: { orderBy: { position: "asc" } },
+        enrollments: { where: { status: { in: ["ACTIVE", "WAITING", "PAUSED"] } }, select: { id: true } },
+        _count: { select: { enrollments: true } },
+      },
     }),
     prisma.messageTemplate.findMany({ where: { creatorId, status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true, type: true } }),
     prisma.fan.findMany({
@@ -31,6 +35,7 @@ export default async function WorkflowsPage() {
     status: workflow.status, isPrimary: workflow.isPrimary,
     publishedAt: workflow.publishedAt?.toISOString() ?? null,
     enrollments: workflow._count.enrollments,
+    activeEnrollments: workflow.enrollments.length,
     steps: workflow.steps.map((step) => ({ name: step.name, type: step.type as "SEND_MESSAGE" | "WAIT" | "SEND_PPV" | "CONDITION" | "CHANGE_WORKFLOW" | "END", messageTemplateId: step.messageTemplateId, config: step.config as Record<string, unknown> })),
   }));
 

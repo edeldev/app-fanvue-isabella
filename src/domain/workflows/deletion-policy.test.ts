@@ -3,19 +3,18 @@ import { canDeleteWorkflow } from "./deletion-policy";
 
 describe("canDeleteWorkflow", () => {
   it("allows deleting a draft", () => {
-    expect(canDeleteWorkflow("DRAFT", { enrollments: 0, executions: 0 })).toBe(true);
+    expect(canDeleteWorkflow("DRAFT", { activeEnrollments: 1 })).toBe(true);
   });
 
   it("allows deleting a published workflow that was never used", () => {
-    expect(canDeleteWorkflow("PUBLISHED", { enrollments: 0, executions: 0 })).toBe(true);
+    expect(canDeleteWorkflow("PUBLISHED", { activeEnrollments: 0 })).toBe(true);
   });
 
-  it("preserves published history after an enrollment or execution", () => {
-    expect(canDeleteWorkflow("PUBLISHED", { enrollments: 1, executions: 0 })).toBe(false);
-    expect(canDeleteWorkflow("PUBLISHED", { enrollments: 0, executions: 1 })).toBe(false);
+  it("blocks deletion while a published workflow is still running", () => {
+    expect(canDeleteWorkflow("PUBLISHED", { activeEnrollments: 1 })).toBe(false);
   });
 
   it("does not delete archived definitions", () => {
-    expect(canDeleteWorkflow("ARCHIVED", { enrollments: 0, executions: 0 })).toBe(false);
+    expect(canDeleteWorkflow("ARCHIVED", { activeEnrollments: 0 })).toBe(false);
   });
 });
