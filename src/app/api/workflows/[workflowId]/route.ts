@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { ZodError } from "zod";
+import { canDeleteWorkflow } from "@/domain/workflows/deletion-policy";
 import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 import { updateWorkflow } from "@/services/workflows/save-workflow";
@@ -24,9 +25,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ work
 export async function DELETE(_request: Request, { params }: { params: Promise<{ workflowId: string }> }) {
   const creatorId = await sessionCreatorId();
   if (!creatorId) return Response.json({ error: "Sesión no autorizada." }, { status: 401 });
-  const workflow = await prisma.workflow.findFirst({ where: { id: (await params).workflowId, creatorId } });
+  const workflow = await prisma.workflow.findFirst({
+    where: { id: (await params).workflowId, creatorId },
+    include: { _count: { select: { enrollments: true } } },
+  });
   if (!workflow) return Response.json({ error: "Flujo no encontrado." }, { status: 404 });
-  if (workflow.status !== "DRAFT") return Response.json({ error: "Un flujo publicado es inmutable." }, { status: 409 });
+  const executions = await prisma.automationExecution.count({
+    where: { step: { workflowId: workflow.id }, creatorId },
+  });
+  if (!canDeleteWorkflow(workflow.status, { enrollments: workflow._count.enrollments, executions })) {
+    return Response.json({ error: "WORKFLOW_HAS_HISTORY" }, { status: 409 });
+  }
   await prisma.workflow.delete({ where: { id: workflow.id } });
   return new Response(null, { status: 204 });
 }
