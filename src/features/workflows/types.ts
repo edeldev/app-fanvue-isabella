@@ -17,3 +17,20 @@ export interface TemplateOption {
   name: string;
   type: string;
 }
+
+export interface FanOption {
+  id: string;
+  name: string;
+  username: string | null;
+}
+
+export interface EnrollmentView {
+  id: string;
+  status: "ACTIVE" | "WAITING" | "PAUSED" | "COMPLETED" | "CANCELLED" | "FAILED";
+  fanName: string;
+  fanUsername: string | null;
+  workflowName: string;
+  currentStepName: string | null;
+  nextRunAt: string | null;
+  pauseReason: string | null;
+}
