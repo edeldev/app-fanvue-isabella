@@ -4,6 +4,10 @@ export const workflowActivityEventTypes = [
   "WORKFLOW_PAUSED",
   "WORKFLOW_RESUMED",
   "WORKFLOW_CANCELLED",
+  "WORKFLOW_MESSAGE_SENT",
+  "WORKFLOW_WAIT_COMPLETED",
+  "WORKFLOW_COMPLETED",
+  "WORKFLOW_STEP_FAILED",
 ] as const;
 
 export function activityRetentionCutoff(now: Date, retentionDays = 90) {
