@@ -54,7 +54,8 @@ export default async function WorkflowsPage() {
     fanUsername: enrollment.fan.username, workflowName: enrollment.workflow.name,
     currentStepName: enrollment.currentStep?.name ?? null, nextRunAt: enrollment.nextRunAt?.toISOString() ?? null,
     pauseReason: enrollment.pauseReason,
-    hasStarted: enrollment._count.executions > 0 || enrollment.nextRunAt !== null || enrollment.lastRunAt !== null,
+    hasStarted: enrollment._count.executions > 0 || enrollment.nextRunAt !== null || enrollment.lastRunAt !== null || enrollment.pausedAt !== null,
+    pausedRemainingSeconds: enrollment.pausedRemainingSeconds,
   }));
   const activity = logRecords.map((log) => ({
     id: log.id,

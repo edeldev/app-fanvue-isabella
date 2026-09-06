@@ -1,5 +1,6 @@
 import type { EnrollmentStatus, Prisma } from "@/generated/prisma/client";
 import { assertEnrollmentTransition } from "@/domain/automation/transitions";
+import { remainingWaitSeconds, resumedRunAt } from "@/domain/workflows/pause-schedule";
 import { prisma } from "@/lib/prisma";
 
 const nonTerminalStatuses: EnrollmentStatus[] = ["ACTIVE", "WAITING", "PAUSED"];
@@ -41,20 +42,36 @@ export async function transitionEnrollment(creatorId: string, enrollmentId: stri
     where: { id: enrollmentId, creatorId }, include: { workflow: { select: { name: true } } },
   });
   if (!enrollment) throw new Error("ENROLLMENT_NOT_FOUND");
-  const target: EnrollmentStatus = action === "pause" ? "PAUSED" : action === "resume" ? "ACTIVE" : "CANCELLED";
+  const resumedStatus: EnrollmentStatus = enrollment.pausedFromStatus === "WAITING" ? "WAITING" : "ACTIVE";
+  const target: EnrollmentStatus = action === "pause" ? "PAUSED" : action === "resume" ? resumedStatus : "CANCELLED";
   assertEnrollmentTransition(enrollment.status, target);
   const now = new Date();
   return prisma.$transaction(async (transaction) => {
     const updated = await transaction.workflowEnrollment.update({
       where: { id: enrollment.id },
       data: action === "pause"
-        ? { status: target, pausedAt: now, pauseReason: reason || "Pausado manualmente.", nextRunAt: null }
+        ? { status: target, pausedAt: now, pausedFromStatus: enrollment.status, pausedRemainingSeconds: enrollment.status === "WAITING" ? remainingWaitSeconds(enrollment.nextRunAt, now) : null, pauseReason: reason || "Pausado manualmente.", nextRunAt: null }
         : action === "resume"
-          ? { status: target, pausedAt: null, pauseReason: null, nextRunAt: now }
-          : { status: target, cancelledAt: now, cancellationReason: reason || "Cancelado manualmente.", nextRunAt: null, lockedAt: null, lockOwner: null, lockExpiresAt: null },
+          ? { status: target, pausedAt: null, pausedFromStatus: null, pauseReason: null, nextRunAt: resumedRunAt(enrollment.pausedRemainingSeconds, now), pausedRemainingSeconds: null }
+          : { status: target, cancelledAt: now, cancellationReason: reason || "Cancelado manualmente.", nextRunAt: null, pausedFromStatus: null, pausedRemainingSeconds: null, lockedAt: null, lockOwner: null, lockExpiresAt: null },
     });
     const eventType = action === "pause" ? "WORKFLOW_PAUSED" : action === "resume" ? "WORKFLOW_RESUMED" : "WORKFLOW_CANCELLED";
-    await transaction.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, eventType, explanation: `${enrollment.workflow.name}: ${reason || (action === "pause" ? "pausado manualmente." : action === "resume" ? "reanudado manualmente." : "cancelado manualmente.")}` } });
+    const waitSeconds = action === "pause" && enrollment.status === "WAITING" ? remainingWaitSeconds(enrollment.nextRunAt, now) : action === "resume" ? enrollment.pausedRemainingSeconds : null;
+    const explanation = action === "pause" && waitSeconds !== null
+      ? `${enrollment.workflow.name}: pausado con ${formatDuration(waitSeconds)} restantes.`
+      : action === "resume" && waitSeconds !== null
+        ? `${enrollment.workflow.name}: reanudado; continuará en ${formatDuration(waitSeconds)}.`
+        : `${enrollment.workflow.name}: ${reason || (action === "pause" ? "pausado manualmente." : action === "resume" ? "reanudado manualmente." : "cancelado manualmente.")}`;
+    await transaction.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, eventType, explanation } });
     return updated;
   });
+}
+
+function formatDuration(seconds: number) {
+  if (seconds < 60) return `${seconds} s`;
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder ? `${hours} h ${remainder} min` : `${hours} h`;
 }

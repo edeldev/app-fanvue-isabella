@@ -35,6 +35,7 @@ export interface EnrollmentView {
   nextRunAt: string | null;
   pauseReason: string | null;
   hasStarted: boolean;
+  pausedRemainingSeconds: number | null;
 }
 
 export interface AutomationLogView {

@@ -313,6 +313,8 @@ model WorkflowEnrollment {
   lastRunAt           DateTime?
   completedAt         DateTime?
   pausedAt            DateTime?
+  pausedFromStatus    EnrollmentStatus?
+  pausedRemainingSeconds Int?
   cancelledAt         DateTime?
   pauseReason         String?
   cancellationReason  String?
