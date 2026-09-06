@@ -22,7 +22,7 @@ export const workflowStepInputSchema = z.object({
     const result = z.number().int().min(1).max(43_200).safeParse(step.config.durationMinutes);
     if (!result.success) context.addIssue({ code: "custom", path: ["config", "durationMinutes"], message: "La espera debe estar entre 1 minuto y 30 días." });
   }
-  if (step.type === "CONDITION" && typeof step.config.condition !== "string") {
+  if (step.type === "CONDITION" && !["IS_FOLLOWER", "IS_SUBSCRIBER", "HAS_PURCHASED", "IS_TOP_SPENDER"].includes(String(step.config.condition))) {
     context.addIssue({ code: "custom", path: ["config", "condition"], message: "Selecciona una condición." });
   }
   if (step.type === "CHANGE_WORKFLOW" && typeof step.config.targetWorkflowId !== "string") {
@@ -40,6 +40,25 @@ export const workflowDefinitionInputSchema = z.object({
   if (endPositions.length !== 1 || endPositions[0] !== workflow.steps.length - 1) {
     context.addIssue({ code: "custom", path: ["steps"], message: "El flujo debe terminar con un único paso Finalizar." });
   }
+  const keys = workflow.steps.map((step) => typeof step.config.stepKey === "string" ? step.config.stepKey : null);
+  if (keys.some((key) => !key) || new Set(keys).size !== keys.length) {
+    context.addIssue({ code: "custom", path: ["steps"], message: "Cada paso debe tener una referencia interna única." });
+  }
+  workflow.steps.forEach((step, index) => {
+    if (typeof step.config.nextTargetKey === "string") {
+      const nextIndex = keys.indexOf(step.config.nextTargetKey);
+      if (nextIndex <= index) {
+        context.addIssue({ code: "custom", path: ["steps", index, "config", "nextTargetKey"], message: "El siguiente paso personalizado debe estar después del actual." });
+      }
+    }
+    if (step.type !== "CONDITION") return;
+    for (const field of ["trueTargetKey", "falseTargetKey"] as const) {
+      const targetIndex = keys.indexOf(typeof step.config[field] === "string" ? step.config[field] : null);
+      if (targetIndex <= index) {
+        context.addIssue({ code: "custom", path: ["steps", index, "config", field], message: "Selecciona un paso posterior para ambas rutas." });
+      }
+    }
+  });
 });
 
 export type WorkflowDefinitionInput = z.infer<typeof workflowDefinitionInputSchema>;

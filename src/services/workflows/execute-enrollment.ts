@@ -1,5 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { renderTemplateVariables } from "@/domain/workflows/template-variables";
+import { evaluateWorkflowCondition, type WorkflowCondition } from "@/domain/workflows/evaluate-condition";
 import { fanvueRequest } from "@/lib/fanvue/client";
 import { sentMessageSchema } from "@/lib/fanvue/sync-schemas";
 import { prisma } from "@/lib/prisma";
@@ -47,7 +48,7 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
   if (enrollment.nextRunAt && enrollment.nextRunAt > now) throw new Error(`ENROLLMENT_NOT_DUE:${enrollment.nextRunAt.toISOString()}`);
 
   const step = enrollment.currentStep;
-  if (["SEND_PPV", "CONDITION", "CHANGE_WORKFLOW", "SEND_OFFER"].includes(step.type)) {
+  if (["SEND_PPV", "CHANGE_WORKFLOW", "SEND_OFFER"].includes(step.type)) {
     throw new Error(`STEP_NOT_IMPLEMENTED:${step.type}`);
   }
 
@@ -80,6 +81,9 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
     if (step.type === "SEND_MESSAGE") {
       return await executeMessage(enrollment, step, execution.id, now);
     }
+    if (step.type === "CONDITION") {
+      return await executeCondition(enrollment, step, execution.id, now);
+    }
     return await finishLocalStep(enrollment, step, execution.id, now);
   } catch (error) {
     await prisma.$transaction([
@@ -89,6 +93,28 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
     ]);
     throw error;
   }
+}
+
+async function executeCondition(enrollment: LoadedEnrollment, step: NonNullable<StepRecord>, executionId: string, now: Date) {
+  const config = jsonRecord(step.config);
+  const condition = String(config.condition) as WorkflowCondition;
+  const matched = evaluateWorkflowCondition(condition, {
+    isFollower: enrollment.fan.isFollower,
+    isSubscriber: enrollment.fan.isSubscriber,
+    isTopSpender: enrollment.fan.isTopSpender,
+    purchasesCount: enrollment.fan._count.purchases,
+  });
+  const targetKey = String(matched ? config.trueTargetKey : config.falseTargetKey);
+  const target = enrollment.workflow.steps.find((candidate) => jsonRecord(candidate.config).stepKey === targetKey);
+  if (!target || target.position <= step.position) throw new Error("WORKFLOW_CONDITION_TARGET_INVALID");
+  const schedule = scheduleNext(target, now);
+  const conditionLabel = condition === "IS_FOLLOWER" ? "es seguidor" : condition === "IS_SUBSCRIBER" ? "tiene suscripción activa" : condition === "HAS_PURCHASED" ? "ha realizado una compra" : "es VIP";
+  await prisma.$transaction([
+    prisma.automationExecution.update({ where: { id: executionId }, data: { status: "SUCCESS", decision: matched ? "SEND" : "SKIP", reason: matched ? "La condición se cumple." : "La condición no se cumple.", evidence: { condition, matched, targetStepId: target.id }, finishedAt: new Date() } }),
+    prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { ...schedule, lastRunAt: now, lastResult: { stepId: step.id, condition, matched, targetStepId: target.id } } }),
+    prisma.automationLog.create({ data: { creatorId: enrollment.creatorId, fanId: enrollment.fanId, enrollmentId: enrollment.id, executionId, eventType: "WORKFLOW_CONDITION_EVALUATED", explanation: `${step.name}: ${conditionLabel} = ${matched ? "sí" : "no"}; continúa en ${target.name}.`, metadata: { condition, matched, targetStepId: target.id } } }),
+  ]);
+  return { outcome: "CONDITION_EVALUATED", nextStep: target.name, shouldContinue: schedule.status === "ACTIVE" };
 }
 
 async function executeMessage(enrollment: NonNullable<Awaited<ReturnType<typeof loadEnrollment>>>, step: NonNullable<StepRecord>, executionId: string, now: Date) {
@@ -109,7 +135,7 @@ async function executeMessage(enrollment: NonNullable<Awaited<ReturnType<typeof 
     update: { lastMessageAt: now, lastOutboundAt: now },
     create: { creatorId: enrollment.creatorId, fanId: enrollment.fanId, lastMessageAt: now, lastOutboundAt: now },
   });
-  const next = nextStep(enrollment.workflow.steps, step.position);
+  const next = nextStep(enrollment.workflow.steps, step);
   const schedule = scheduleNext(next, now);
 
   await prisma.$transaction([
@@ -126,7 +152,7 @@ async function executeMessage(enrollment: NonNullable<Awaited<ReturnType<typeof 
 }
 
 async function finishLocalStep(enrollment: NonNullable<Awaited<ReturnType<typeof loadEnrollment>>>, step: NonNullable<StepRecord>, executionId: string, now: Date) {
-  const next = nextStep(enrollment.workflow.steps, step.position);
+  const next = nextStep(enrollment.workflow.steps, step);
   const schedule = scheduleNext(next, now);
   const completed = step.type === "END";
   await prisma.$transaction([
@@ -144,13 +170,20 @@ function scheduleNext(step: { id: string; type: string; config: Prisma.JsonValue
 }
 
 function scheduleWait(step: { config: Prisma.JsonValue }, now: Date) {
-  const config = typeof step.config === "object" && step.config && !Array.isArray(step.config) ? step.config : {};
-  const minutes = Number((config as Record<string, unknown>).durationMinutes);
+  const minutes = Number(jsonRecord(step.config).durationMinutes);
   return { nextRunAt: new Date(now.getTime() + minutes * 60_000) };
 }
 
-function nextStep(steps: { id: string; position: number; name: string; type: string; config: Prisma.JsonValue }[], position: number) {
-  return steps.find((candidate) => candidate.position === position + 1);
+function jsonRecord(value: Prisma.JsonValue): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function nextStep(steps: { id: string; position: number; name: string; type: string; config: Prisma.JsonValue }[], step: { position: number; config: Prisma.JsonValue }) {
+  const targetKey = jsonRecord(step.config).nextTargetKey;
+  if (typeof targetKey === "string") return steps.find((candidate) => jsonRecord(candidate.config).stepKey === targetKey);
+  return steps.find((candidate) => candidate.position === step.position + 1);
 }
 
 function readTemplateMetadata(value: Prisma.JsonValue | null) {
@@ -167,7 +200,7 @@ function loadEnrollment(creatorId: string, enrollmentId: string) {
   return prisma.workflowEnrollment.findFirst({
     where: { id: enrollmentId, creatorId },
     include: {
-      fan: { select: { fanvueUserId: true, displayName: true, username: true } },
+      fan: { select: { fanvueUserId: true, displayName: true, username: true, isFollower: true, isSubscriber: true, isTopSpender: true, _count: { select: { purchases: { where: { reversedAt: null } } } } } },
       currentStep: { include: { messageTemplate: true } },
       workflow: { include: { steps: { orderBy: { position: "asc" }, select: { id: true, position: true, name: true, type: true, config: true } } } },
     },
