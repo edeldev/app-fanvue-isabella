@@ -28,7 +28,7 @@ export default async function WorkflowsPage() {
     prisma.workflowEnrollment.findMany({
       where: { creatorId, status: { in: ["ACTIVE", "WAITING", "PAUSED"] } },
       orderBy: { updatedAt: "desc" },
-      include: { fan: { select: { displayName: true, username: true } }, workflow: { select: { name: true } }, currentStep: { select: { name: true } } },
+      include: { fan: { select: { displayName: true, username: true } }, workflow: { select: { name: true } }, currentStep: { select: { name: true } }, _count: { select: { executions: true } } },
     }),
     prisma.automationLog.findMany({
       where: { creatorId, eventType: { in: [...workflowActivityEventTypes] } },
@@ -54,6 +54,7 @@ export default async function WorkflowsPage() {
     fanUsername: enrollment.fan.username, workflowName: enrollment.workflow.name,
     currentStepName: enrollment.currentStep?.name ?? null, nextRunAt: enrollment.nextRunAt?.toISOString() ?? null,
     pauseReason: enrollment.pauseReason,
+    hasStarted: enrollment._count.executions > 0 || enrollment.nextRunAt !== null || enrollment.lastRunAt !== null,
   }));
   const activity = logRecords.map((log) => ({
     id: log.id,

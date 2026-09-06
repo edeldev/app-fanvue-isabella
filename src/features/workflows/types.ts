@@ -34,6 +34,7 @@ export interface EnrollmentView {
   currentStepName: string | null;
   nextRunAt: string | null;
   pauseReason: string | null;
+  hasStarted: boolean;
 }
 
 export interface AutomationLogView {

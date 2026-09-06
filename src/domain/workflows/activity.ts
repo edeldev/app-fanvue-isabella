@@ -1,4 +1,5 @@
 export const workflowActivityEventTypes = [
+  "WORKFLOW_ASSIGNED",
   "WORKFLOW_STARTED",
   "WORKFLOW_CHANGED",
   "WORKFLOW_PAUSED",
@@ -6,6 +7,7 @@ export const workflowActivityEventTypes = [
   "WORKFLOW_CANCELLED",
   "WORKFLOW_MESSAGE_SENT",
   "WORKFLOW_WAIT_COMPLETED",
+  "WORKFLOW_WAIT_STARTED",
   "WORKFLOW_COMPLETED",
   "WORKFLOW_STEP_FAILED",
 ] as const;

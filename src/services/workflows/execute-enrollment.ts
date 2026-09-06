@@ -21,6 +21,15 @@ export async function executeEnrollmentStep(creatorId: string, enrollmentId: str
     throw new Error(`STEP_NOT_IMPLEMENTED:${step.type}`);
   }
 
+  if (step.type === "WAIT" && enrollment.status === "ACTIVE" && !enrollment.nextRunAt) {
+    const schedule = scheduleWait(step, now);
+    await prisma.$transaction([
+      prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { status: "WAITING", nextRunAt: schedule.nextRunAt } }),
+      prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, eventType: "WORKFLOW_WAIT_STARTED", explanation: `${step.name}: esperando hasta ${schedule.nextRunAt.toLocaleString("es-MX")}.` } }),
+    ]);
+    return { outcome: "WAIT_STARTED", nextStep: step.name };
+  }
+
   const idempotencyKey = `${enrollment.id}:${step.id}`;
   const previous = await prisma.automationExecution.findUnique({ where: { idempotencyKey } });
   if (previous?.status === "SUCCESS") throw new Error("STEP_ALREADY_EXECUTED");
@@ -93,9 +102,13 @@ async function finishLocalStep(enrollment: NonNullable<Awaited<ReturnType<typeof
 function scheduleNext(step: { id: string; type: string; config: Prisma.JsonValue } | undefined, now: Date) {
   if (!step) return { status: "COMPLETED" as const, currentStepId: null, nextRunAt: null, completedAt: now };
   if (step.type !== "WAIT") return { status: "ACTIVE" as const, currentStepId: step.id, nextRunAt: now, completedAt: null };
+  return { status: "WAITING" as const, currentStepId: step.id, nextRunAt: scheduleWait(step, now).nextRunAt, completedAt: null };
+}
+
+function scheduleWait(step: { config: Prisma.JsonValue }, now: Date) {
   const config = typeof step.config === "object" && step.config && !Array.isArray(step.config) ? step.config : {};
   const minutes = Number((config as Record<string, unknown>).durationMinutes);
-  return { status: "WAITING" as const, currentStepId: step.id, nextRunAt: new Date(now.getTime() + minutes * 60_000), completedAt: null };
+  return { nextRunAt: new Date(now.getTime() + minutes * 60_000) };
 }
 
 function nextStep(steps: { id: string; position: number; name: string; type: string; config: Prisma.JsonValue }[], position: number) {
