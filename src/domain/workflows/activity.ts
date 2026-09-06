@@ -10,6 +10,7 @@ export const workflowActivityEventTypes = [
   "WORKFLOW_WAIT_STARTED",
   "WORKFLOW_COMPLETED",
   "WORKFLOW_STEP_FAILED",
+  "WORKFLOW_FAILED",
 ] as const;
 
 export function activityRetentionCutoff(now: Date, retentionDays = 90) {
