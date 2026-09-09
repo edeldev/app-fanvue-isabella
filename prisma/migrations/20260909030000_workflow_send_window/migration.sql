@@ -1,0 +1,6 @@
+ALTER TABLE "Workflow"
+ADD COLUMN "sendWindowEnabled" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "sendWindowTimezone" TEXT NOT NULL DEFAULT 'America/Monterrey',
+ADD COLUMN "sendWindowStartMinute" INTEGER NOT NULL DEFAULT 540,
+ADD COLUMN "sendWindowEndMinute" INTEGER NOT NULL DEFAULT 1320,
+ADD COLUMN "sendWindowDays" JSONB NOT NULL DEFAULT '[0,1,2,3,4,5,6]'::jsonb;

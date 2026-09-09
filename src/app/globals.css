@@ -20,3 +20,27 @@ body {
 
 * { box-sizing: border-box; }
 button, a { outline-offset: 3px; }
+
+/* El editor contiene selects con etiquetas largas y filas de condiciones
+   dinámicas. Permitir que sus hijos reduzcan su ancho evita que el grid
+   ensanche las tarjetas al agregar una cantidad. */
+[data-workflow-editor],
+[data-workflow-editor] * {
+  min-width: 0;
+}
+
+[data-workflow-editor] input,
+[data-workflow-editor] select,
+[data-workflow-editor] button {
+  max-width: 100%;
+}
+
+@media (max-width: 639px) {
+  [data-workflow-editor] {
+    padding: 1rem;
+  }
+
+  [data-workflow-editor] select {
+    text-overflow: ellipsis;
+  }
+}

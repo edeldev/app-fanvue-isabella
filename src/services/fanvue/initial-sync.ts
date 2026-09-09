@@ -34,13 +34,17 @@ async function processInBatches<T>(items: T[], worker: (item: T) => Promise<void
 
 export async function runInitialFanvueSync(creatorId: string): Promise<InitialSyncResult> {
   const accessToken = await getValidFanvueAccessToken(creatorId);
-  const [followers, subscribers, chats, earnings, creatorAccounts, expiredSubscribers, account, profile] = await Promise.all([
+  const [followers, subscribers, chats, earnings, creatorAccounts, expiredSubscribers, freeTrialSubscribers, autoRenewingSubscribers, nonRenewingSubscribers, mutedFans, account, profile] = await Promise.all([
     fetchAllCursorPages("/v1/followers", accessToken, followersPageSchema),
     fetchAllCursorPages("/v1/subscribers", accessToken, subscribersPageSchema),
     fetchAllCursorPages("/v1/chats", accessToken, chatsPageSchema),
     fetchAllCursorPages("/v1/insights/earnings", accessToken, earningsPageSchema),
     fetchAllCursorPages("/v1/chats/lists/smart/creators", accessToken, creatorListPageSchema),
     fetchAllCursorPages("/v1/chats/lists/smart/expired_subscribers", accessToken, creatorListPageSchema),
+    fetchAllCursorPages("/v1/chats/lists/smart/free_trial_subscribers", accessToken, creatorListPageSchema),
+    fetchAllCursorPages("/v1/chats/lists/smart/auto_renewing", accessToken, creatorListPageSchema),
+    fetchAllCursorPages("/v1/chats/lists/smart/non_renewing", accessToken, creatorListPageSchema),
+    fetchAllCursorPages("/v1/chats/lists/smart/muted", accessToken, creatorListPageSchema),
     fanvueRequest("/v1/users/account", accessToken, accountSchema),
     fanvueRequest("/v1/users/me", accessToken, fanvueCurrentUserSchema),
   ]);
@@ -87,8 +91,8 @@ export async function runInitialFanvueSync(creatorId: string): Promise<InitialSy
         const startedAt = new Date(subscriber.subscription.currentPeriodStart);
         await prisma.subscription.upsert({
           where: { creatorId_fanId_startedAt: { creatorId, fanId: fan.id, startedAt } },
-          update: { status: subscriptionStatus(subscriber.subscription.status, subscriber.subscription.autoRenewalEnabled), currentPeriodEndsAt: subscriber.subscription.currentPeriodEnd ? new Date(subscriber.subscription.currentPeriodEnd) : null },
-          create: { creatorId, fanId: fan.id, status: subscriptionStatus(subscriber.subscription.status, subscriber.subscription.autoRenewalEnabled), startedAt, currentPeriodEndsAt: subscriber.subscription.currentPeriodEnd ? new Date(subscriber.subscription.currentPeriodEnd) : null },
+          update: { status: subscriptionStatus(subscriber.subscription.status, subscriber.subscription.autoRenewalEnabled), currentPeriodEndsAt: subscriber.subscription.currentPeriodEnd ? new Date(subscriber.subscription.currentPeriodEnd) : null, priceMinor: subscriber.subscription.price, amountPaidMinor: subscriber.subscription.amountPaid, autoRenewalEnabled: subscriber.subscription.autoRenewalEnabled },
+          create: { creatorId, fanId: fan.id, status: subscriptionStatus(subscriber.subscription.status, subscriber.subscription.autoRenewalEnabled), startedAt, currentPeriodEndsAt: subscriber.subscription.currentPeriodEnd ? new Date(subscriber.subscription.currentPeriodEnd) : null, priceMinor: subscriber.subscription.price, amountPaidMinor: subscriber.subscription.amountPaid, autoRenewalEnabled: subscriber.subscription.autoRenewalEnabled },
         });
       }
   });
@@ -102,12 +106,29 @@ export async function runInitialFanvueSync(creatorId: string): Promise<InitialSy
     });
   });
 
+  const updateSegment = async (field: "isFreeTrialSubscriber" | "isAutoRenewingSubscriber" | "isNonRenewingSubscriber" | "isMuted", members: typeof freeTrialSubscribers) => {
+    await prisma.fan.updateMany({ where: { creatorId }, data: { [field]: false } });
+    await processInBatches(members, async (member) => {
+      await prisma.fan.upsert({
+        where: { creatorId_fanvueUserId: { creatorId, fanvueUserId: member.uuid } },
+        update: { username: member.handle, displayName: member.displayName, [field]: true },
+        create: { creatorId, fanvueUserId: member.uuid, username: member.handle, displayName: member.displayName, [field]: true },
+      });
+    });
+  };
+  await updateSegment("isFreeTrialSubscriber", freeTrialSubscribers);
+  await updateSegment("isAutoRenewingSubscriber", autoRenewingSubscribers);
+  await updateSegment("isNonRenewingSubscriber", nonRenewingSubscribers);
+  await updateSegment("isMuted", mutedFans);
+  await prisma.subscription.updateMany({ where: { creatorId }, data: { isFreeTrial: false } });
+  await prisma.subscription.updateMany({ where: { creatorId, fan: { isFreeTrialSubscriber: true }, status: { in: ["ACTIVE", "CANCEL_AT_PERIOD_END"] } }, data: { isFreeTrial: true } });
+
   await prisma.fan.updateMany({ where: { creatorId }, data: { isCreatorAccount: false } });
   await processInBatches(chats, async (chat) => {
       const fan = await prisma.fan.upsert({
         where: { creatorId_fanvueUserId: { creatorId, fanvueUserId: chat.user.uuid } },
-        update: { username: chat.user.handle, displayName: chat.user.displayName, avatarUrl: chat.user.avatarUrl, isCreatorAccount: chat.isCreator ?? false, isTopSpender: chat.user.isTopSpender, lastActivityAt: chat.lastMessageAt ? new Date(chat.lastMessageAt) : undefined },
-        create: { creatorId, fanvueUserId: chat.user.uuid, username: chat.user.handle, displayName: chat.user.displayName, avatarUrl: chat.user.avatarUrl, isCreatorAccount: chat.isCreator ?? false, isTopSpender: chat.user.isTopSpender, lastActivityAt: chat.lastMessageAt ? new Date(chat.lastMessageAt) : undefined },
+        update: { username: chat.user.handle, displayName: chat.user.displayName, avatarUrl: chat.user.avatarUrl, isCreatorAccount: chat.isCreator ?? false, isTopSpender: chat.user.isTopSpender, isOnline: chat.online, isMuted: chat.isMuted, lastActivityAt: chat.lastMessageAt ? new Date(chat.lastMessageAt) : undefined },
+        create: { creatorId, fanvueUserId: chat.user.uuid, username: chat.user.handle, displayName: chat.user.displayName, avatarUrl: chat.user.avatarUrl, isCreatorAccount: chat.isCreator ?? false, isTopSpender: chat.user.isTopSpender, isOnline: chat.online ?? false, isMuted: chat.isMuted, lastActivityAt: chat.lastMessageAt ? new Date(chat.lastMessageAt) : undefined },
       });
       const conversation = await prisma.conversation.upsert({
         where: { creatorId_fanId: { creatorId, fanId: fan.id } },

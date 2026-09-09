@@ -38,6 +38,20 @@ enum WorkflowStatus {
   PUBLISHED
   ARCHIVED
 }
+enum WorkflowReentryPolicy {
+  ONCE
+  AFTER_DELAY
+  EVERY_EVENT
+}
+enum WorkflowGoalType {
+  NONE
+  PAID_SUBSCRIPTION
+  FIRST_PURCHASE
+  ANY_PURCHASE
+  PPV_PURCHASE
+  TIP_RECEIVED
+  SPEND_AMOUNT
+}
 enum WorkflowStepType {
   SEND_MESSAGE
   WAIT
@@ -118,8 +132,14 @@ model Fan {
   avatarUrl          String?
   isFollower         Boolean              @default(false)
   isSubscriber       Boolean              @default(false)
+  isFreeTrialSubscriber Boolean           @default(false)
+  isAutoRenewingSubscriber Boolean        @default(false)
+  isNonRenewingSubscriber Boolean         @default(false)
   isExpiredSubscriber Boolean             @default(false)
   isCreatorAccount   Boolean              @default(false)
+  isMuted            Boolean              @default(false)
+  isOnline           Boolean              @default(false)
+  presenceChangedAt  DateTime?
   isTopSpender       Boolean              @default(false)
   totalSpentMinor    Int                  @default(0)
   lastActivityAt     DateTime?
@@ -147,6 +167,10 @@ model Subscription {
   status                 SubscriptionStatus
   startedAt              DateTime
   currentPeriodEndsAt    DateTime?
+  priceMinor             Int?
+  amountPaidMinor        Int?
+  autoRenewalEnabled     Boolean?
+  isFreeTrial            Boolean          @default(false)
   endedAt                DateTime?
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
@@ -271,15 +295,51 @@ model Workflow {
   priority     Int                @default(0)
   status       WorkflowStatus     @default(DRAFT)
   isPrimary    Boolean            @default(true)
+  triggerEvent String             @default("MANUAL")
+  reentryPolicy WorkflowReentryPolicy @default(ONCE)
+  reentryDelayDays Int?
+  sendWindowEnabled Boolean          @default(false)
+  sendWindowTimezone String          @default("America/Monterrey")
+  sendWindowStartMinute Int          @default(540)
+  sendWindowEndMinute Int            @default(1320)
+  sendWindowDays Json                @default("[0,1,2,3,4,5,6]")
+  sendLimitsEnabled Boolean          @default(false)
+  maxMessagesPerHour Int             @default(30)
+  maxMessagesPerDay Int              @default(200)
+  minMinutesBetweenFanMessages Int   @default(60)
+  pauseOnFanReply Boolean            @default(false)
+  replySilenceMinutes Int            @default(60)
+  replyAttributionHours Int          @default(24)
+  goalType WorkflowGoalType          @default(NONE)
+  goalAmountMinor Int?
   publishedAt  DateTime?
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
   creator      Creator            @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   steps        WorkflowStep[]
   enrollments  WorkflowEnrollment[]
+  sendReservations WorkflowSendReservation[]
 
   @@unique([creatorId, stableKey, version])
   @@index([creatorId, status, priority])
+  @@index([creatorId, status, triggerEvent, priority])
+}
+
+model WorkflowSendReservation {
+  id           String    @id @default(cuid())
+  creatorId    String
+  workflowId   String
+  fanId        String
+  enrollmentId String
+  stepId       String
+  reservedAt   DateTime  @default(now())
+  sentAt       DateTime?
+  failedAt     DateTime?
+  workflow     Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, stepId])
+  @@index([workflowId, reservedAt])
+  @@index([creatorId, fanId, reservedAt])
 }
 
 model WorkflowStep {
@@ -319,6 +379,7 @@ model WorkflowEnrollment {
   pauseReason         String?
   cancellationReason  String?
   lastResult          Json?
+  workflowPath        Json?
   lockedAt            DateTime?
   lockOwner           String?
   lockExpiresAt       DateTime?
@@ -375,6 +436,7 @@ model AutomationLog {
   explanation   String
   metadata      Json?
   occurredAt    DateTime             @default(now())
+  reviewedAt    DateTime?
   createdAt     DateTime             @default(now())
   creator       Creator              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   fan           Fan?                 @relation(fields: [fanId], references: [id], onDelete: SetNull)
@@ -382,6 +444,7 @@ model AutomationLog {
   execution     AutomationExecution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
 
   @@index([creatorId, occurredAt])
+  @@index([creatorId, level, reviewedAt])
   @@index([fanId, occurredAt])
 }
 

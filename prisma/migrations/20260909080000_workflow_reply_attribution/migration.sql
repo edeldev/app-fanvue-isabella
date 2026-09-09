@@ -1,0 +1,2 @@
+ALTER TABLE "Workflow"
+ADD COLUMN "replyAttributionHours" INTEGER NOT NULL DEFAULT 24;

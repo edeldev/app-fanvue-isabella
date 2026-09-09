@@ -1,0 +1,1 @@
+ALTER TABLE "Fan" ADD COLUMN "presenceChangedAt" TIMESTAMP(3);

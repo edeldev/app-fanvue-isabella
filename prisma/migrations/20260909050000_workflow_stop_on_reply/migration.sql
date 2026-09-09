@@ -1,0 +1,2 @@
+ALTER TABLE "Workflow"
+ADD COLUMN "stopOnFanReply" BOOLEAN NOT NULL DEFAULT false;

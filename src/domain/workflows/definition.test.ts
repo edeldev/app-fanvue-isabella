@@ -14,6 +14,15 @@ describe("workflowDefinitionInputSchema", () => {
       ],
     });
     expect(result.success).toBe(true);
+    if (result.success) expect(result.data.replyAttributionHours).toBe(24);
+  });
+
+  it("rejects an invalid reply attribution window", () => {
+    const result = workflowDefinitionInputSchema.safeParse({
+      name: "Atribución inválida", priority: 1, isPrimary: true, replyAttributionHours: 0,
+      steps: [{ name: "Finalizar", type: "END", config: { stepKey: "end" } }],
+    });
+    expect(result.success).toBe(false);
   });
 
   it("rejects a message without a template", () => {
@@ -23,6 +32,23 @@ describe("workflowDefinitionInputSchema", () => {
         { name: "Mensaje", type: "SEND_MESSAGE", config: { stepKey: "message" } },
         { name: "Finalizar", type: "END", config: { stepKey: "end" } },
       ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("requires at least one enabled day when a send window is provided", () => {
+    const result = workflowDefinitionInputSchema.safeParse({
+      name: "Horario inválido", priority: 1, isPrimary: true,
+      sendWindowEnabled: true, sendWindowDays: [],
+      steps: [{ name: "Finalizar", type: "END", config: { stepKey: "end" } }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("requires an amount for an accumulated spending goal", () => {
+    const result = workflowDefinitionInputSchema.safeParse({
+      name: "Objetivo inválido", priority: 1, isPrimary: true, goalType: "SPEND_AMOUNT",
+      steps: [{ name: "Finalizar", type: "END", config: { stepKey: "end" } }],
     });
     expect(result.success).toBe(false);
   });

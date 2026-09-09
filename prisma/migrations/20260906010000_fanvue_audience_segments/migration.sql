@@ -1,0 +1,12 @@
+ALTER TABLE "Fan"
+ADD COLUMN "isFreeTrialSubscriber" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "isAutoRenewingSubscriber" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "isNonRenewingSubscriber" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "isMuted" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "isOnline" BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE "Subscription"
+ADD COLUMN "priceMinor" INTEGER,
+ADD COLUMN "amountPaidMinor" INTEGER,
+ADD COLUMN "autoRenewalEnabled" BOOLEAN,
+ADD COLUMN "isFreeTrial" BOOLEAN NOT NULL DEFAULT false;

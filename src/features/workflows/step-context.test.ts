@@ -16,6 +16,7 @@ describe("workflowStepContext", () => {
 
   it("describes conditions and workflow changes", () => {
     expect(workflowStepContext({ name: "Condición", type: "CONDITION", config: { condition: "HAS_PURCHASED" } }, templates, workflows)).toBe("Ha realizado una compra");
+    expect(workflowStepContext({ name: "Condición", type: "CONDITION", config: { conditions: [{ condition: "SPENT_LESS_THAN", amountMinor: 7_500 }], conditionOperator: "ALL" } }, templates, workflows)).toBe("Ha gastado menos de $75.00");
     expect(workflowStepContext({ name: "Cambio", type: "CHANGE_WORKFLOW", config: { targetWorkflowId: "vip" } }, templates, workflows)).toBe("Atención VIP");
   });
 });

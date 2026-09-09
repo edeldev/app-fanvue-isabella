@@ -1,60 +1,218 @@
 import { cookies } from "next/headers";
 import { Sidebar } from "@/components/app-shell/sidebar";
 import { Topbar } from "@/components/app-shell/topbar";
+import { LiveRefresh } from "@/components/live-refresh";
 import { WorkflowManager } from "@/features/workflows/workflow-manager";
 import { EnrollmentPanel } from "@/features/workflows/enrollment-panel";
+import { WorkflowAnalyticsPanel } from "@/features/workflows/workflow-analytics-panel";
 import { prisma } from "@/lib/prisma";
-import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
-import { activityRetentionCutoff, workflowActivityEventTypes } from "@/domain/workflows/activity";
+import {
+  CREATOR_SESSION_COOKIE,
+  readCreatorSession,
+} from "@/lib/session/creator-session";
+import {
+  activityRetentionCutoff,
+  workflowActivityEventTypes,
+} from "@/domain/workflows/activity";
+import {
+  audienceSegments,
+  audienceSegmentLabels,
+  buildAudienceWhere,
+} from "@/domain/workflows/audience";
+import {
+  buildWorkflowStepAnalytics,
+  type WorkflowAnalyticsEvent,
+} from "@/domain/workflows/step-analytics";
 
 export default async function WorkflowsPage() {
-  const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
-  const [records, templates, fanRecords, enrollmentRecords, logRecords, allActivityCount, oldActivityCount] = creatorId ? await Promise.all([
-    prisma.workflow.findMany({
-      where: { creatorId },
-      orderBy: [{ status: "asc" }, { priority: "desc" }, { updatedAt: "desc" }],
-      include: {
-        steps: { orderBy: { position: "asc" } },
-        enrollments: { where: { status: { in: ["ACTIVE", "WAITING", "PAUSED"] } }, select: { id: true } },
-        _count: { select: { enrollments: true } },
-      },
-    }),
-    prisma.messageTemplate.findMany({ where: { creatorId, status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true, type: true } }),
-    prisma.fan.findMany({
-      where: { creatorId, isCreatorAccount: false, OR: [{ isFollower: true }, { isSubscriber: true }, { isExpiredSubscriber: true }] },
-      orderBy: [{ displayName: "asc" }, { username: "asc" }],
-      select: { id: true, displayName: true, username: true },
-    }),
-    prisma.workflowEnrollment.findMany({
-      where: { creatorId, status: { in: ["ACTIVE", "WAITING", "PAUSED"] } },
-      orderBy: { updatedAt: "desc" },
-      include: { fan: { select: { displayName: true, username: true } }, workflow: { select: { name: true } }, currentStep: { select: { name: true } }, _count: { select: { executions: true } } },
-    }),
-    prisma.automationLog.findMany({
-      where: { creatorId, eventType: { in: [...workflowActivityEventTypes] } },
-      orderBy: { occurredAt: "desc" },
-      take: 20,
-      include: { fan: { select: { displayName: true, username: true } } },
-    }),
-    prisma.automationLog.count({ where: { creatorId, eventType: { in: [...workflowActivityEventTypes] } } }),
-    prisma.automationLog.count({ where: { creatorId, eventType: { in: [...workflowActivityEventTypes] }, occurredAt: { lt: activityRetentionCutoff(new Date()) } } }),
-  ]) : [[], [], [], [], [], 0, 0];
+  const creatorId = readCreatorSession(
+    (await cookies()).get(CREATOR_SESSION_COOKIE)?.value,
+  );
+  const [
+    records,
+    templates,
+    fanRecords,
+    enrollmentRecords,
+    logRecords,
+    allActivityCount,
+    oldActivityCount,
+    analyticsRecords,
+    historyRecords,
+  ] = creatorId
+    ? await Promise.all([
+        prisma.workflow.findMany({
+          where: { creatorId },
+          orderBy: [
+            { status: "asc" },
+            { priority: "desc" },
+            { updatedAt: "desc" },
+          ],
+          include: {
+            steps: { orderBy: { position: "asc" } },
+            enrollments: {
+              where: { status: { in: ["ACTIVE", "WAITING", "PAUSED"] } },
+              select: { id: true },
+            },
+            _count: { select: { enrollments: true } },
+          },
+        }),
+        prisma.messageTemplate.findMany({
+          where: { creatorId, status: "ACTIVE" },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true, type: true, metadata: true },
+        }),
+        prisma.fan.findMany({
+          where: {
+            creatorId,
+            isCreatorAccount: false,
+            OR: [
+              { isFollower: true },
+              { isSubscriber: true },
+              { isExpiredSubscriber: true },
+            ],
+          },
+          orderBy: [{ displayName: "asc" }, { username: "asc" }],
+          select: { id: true, displayName: true, username: true },
+        }),
+        prisma.workflowEnrollment.findMany({
+          where: { creatorId, status: { in: ["ACTIVE", "WAITING", "PAUSED"] } },
+          orderBy: { updatedAt: "desc" },
+          include: {
+            fan: { select: { displayName: true, username: true } },
+            workflow: { select: { name: true } },
+            currentStep: { select: { name: true } },
+            _count: { select: { executions: true } },
+          },
+        }),
+        prisma.automationLog.findMany({
+          where: {
+            creatorId,
+            eventType: { in: [...workflowActivityEventTypes] },
+          },
+          orderBy: { occurredAt: "desc" },
+          take: 20,
+          include: { fan: { select: { displayName: true, username: true } } },
+        }),
+        prisma.automationLog.count({
+          where: {
+            creatorId,
+            eventType: { in: [...workflowActivityEventTypes] },
+          },
+        }),
+        prisma.automationLog.count({
+          where: {
+            creatorId,
+            eventType: { in: [...workflowActivityEventTypes] },
+            occurredAt: { lt: activityRetentionCutoff(new Date()) },
+          },
+        }),
+        prisma.workflowEnrollment.findMany({
+          where: { creatorId },
+          select: {
+            id: true,
+            workflowId: true,
+            fanId: true,
+            status: true,
+            startedAt: true,
+            logs: {
+              where: { eventType: { in: ["WORKFLOW_MESSAGE_SENT", "WORKFLOW_PPV_SENT", "WORKFLOW_FAN_REPLIED", "WORKFLOW_GOAL_COMPLETED"] } },
+              select: {
+                eventType: true,
+                occurredAt: true,
+                metadata: true,
+                execution: {
+                  select: {
+                    step: {
+                      select: {
+                        id: true,
+                        name: true,
+                        messageTemplate: { select: { id: true, name: true } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        }),
+        prisma.workflowEnrollment.findMany({
+          where: { creatorId },
+          orderBy: { updatedAt: "desc" },
+          take: 30,
+          select: {
+            id: true, status: true, startedAt: true, completedAt: true, cancelledAt: true,
+            fan: { select: { displayName: true, username: true } },
+            workflow: { select: { name: true } },
+          },
+        }),
+      ])
+    : [[], [], [], [], [], 0, 0, [], []];
   const workflows = records.map((workflow) => ({
-    id: workflow.id, name: workflow.name, version: workflow.version, priority: workflow.priority,
-    status: workflow.status, isPrimary: workflow.isPrimary,
+    id: workflow.id,
+    name: workflow.name,
+    version: workflow.version,
+    priority: workflow.priority,
+    status: workflow.status,
+    isPrimary: workflow.isPrimary,
+    triggerEvent:
+      workflow.triggerEvent as (typeof import("@/domain/workflows/triggers").workflowTriggers)[number],
+    reentryPolicy: workflow.reentryPolicy,
+    reentryDelayDays: workflow.reentryDelayDays,
+    sendWindowEnabled: workflow.sendWindowEnabled,
+    sendWindowTimezone: workflow.sendWindowTimezone,
+    sendWindowStartMinute: workflow.sendWindowStartMinute,
+    sendWindowEndMinute: workflow.sendWindowEndMinute,
+    sendWindowDays: Array.isArray(workflow.sendWindowDays) ? workflow.sendWindowDays.filter((day): day is number => typeof day === "number") : [0, 1, 2, 3, 4, 5, 6],
+    sendLimitsEnabled: workflow.sendLimitsEnabled,
+    maxMessagesPerHour: workflow.maxMessagesPerHour,
+    maxMessagesPerDay: workflow.maxMessagesPerDay,
+    minMinutesBetweenFanMessages: workflow.minMinutesBetweenFanMessages,
+    pauseOnFanReply: workflow.pauseOnFanReply,
+    replySilenceMinutes: workflow.replySilenceMinutes,
+    replyAttributionHours: workflow.replyAttributionHours,
+    goalType: workflow.goalType,
+    goalAmountMinor: workflow.goalAmountMinor,
     publishedAt: workflow.publishedAt?.toISOString() ?? null,
     enrollments: workflow._count.enrollments,
     activeEnrollments: workflow.enrollments.length,
-    steps: workflow.steps.map((step) => ({ name: step.name, type: step.type as "SEND_MESSAGE" | "WAIT" | "SEND_PPV" | "CONDITION" | "CHANGE_WORKFLOW" | "END", messageTemplateId: step.messageTemplateId, config: step.config as Record<string, unknown> })),
+    steps: workflow.steps.map((step) => ({
+      name: step.name,
+      type: step.type as
+        | "SEND_MESSAGE"
+        | "WAIT"
+        | "SEND_PPV"
+        | "CONDITION"
+        | "CHANGE_WORKFLOW"
+        | "END",
+      messageTemplateId: step.messageTemplateId,
+      config: step.config as Record<string, unknown>,
+    })),
   }));
+  const templateOptions = templates.map((template) => {
+    const metadata = typeof template.metadata === "object" && template.metadata && !Array.isArray(template.metadata) ? template.metadata as Record<string, unknown> : {};
+    return { id: template.id, name: template.name, type: template.type, priceMinor: typeof metadata.priceMinor === "number" ? metadata.priceMinor : null, previewUuid: typeof metadata.previewUuid === "string" ? metadata.previewUuid : null };
+  });
 
-  const fans = fanRecords.map((fan) => ({ id: fan.id, name: fan.displayName || fan.username || "Fan sin nombre", username: fan.username }));
+  const fans = fanRecords.map((fan) => ({
+    id: fan.id,
+    name: fan.displayName || fan.username || "Fan sin nombre",
+    username: fan.username,
+  }));
   const enrollments = enrollmentRecords.map((enrollment) => ({
-    id: enrollment.id, status: enrollment.status, fanName: enrollment.fan.displayName || enrollment.fan.username || "Fan sin nombre",
-    fanUsername: enrollment.fan.username, workflowName: enrollment.workflow.name,
-    currentStepName: enrollment.currentStep?.name ?? null, nextRunAt: enrollment.nextRunAt?.toISOString() ?? null,
+    id: enrollment.id,
+    status: enrollment.status,
+    fanName:
+      enrollment.fan.displayName || enrollment.fan.username || "Fan sin nombre",
+    fanUsername: enrollment.fan.username,
+    workflowName: enrollment.workflow.name,
+    currentStepName: enrollment.currentStep?.name ?? null,
+    nextRunAt: enrollment.nextRunAt?.toISOString() ?? null,
     pauseReason: enrollment.pauseReason,
-    hasStarted: enrollment._count.executions > 0 || enrollment.nextRunAt !== null || enrollment.lastRunAt !== null || enrollment.pausedAt !== null,
+    hasStarted:
+      enrollment._count.executions > 0 ||
+      enrollment.nextRunAt !== null ||
+      enrollment.lastRunAt !== null ||
+      enrollment.pausedAt !== null,
     pausedRemainingSeconds: enrollment.pausedRemainingSeconds,
   }));
   const activity = logRecords.map((log) => ({
@@ -64,6 +222,128 @@ export default async function WorkflowsPage() {
     occurredAt: log.occurredAt.toISOString(),
     fanName: log.fan?.displayName || log.fan?.username || null,
   }));
+  const enrollmentHistory = historyRecords.map((enrollment) => ({
+    id: enrollment.id,
+    status: enrollment.status,
+    fanName: enrollment.fan.displayName || enrollment.fan.username || "Fan sin nombre",
+    fanUsername: enrollment.fan.username,
+    workflowName: enrollment.workflow.name,
+    startedAt: enrollment.startedAt.toISOString(),
+    endedAt: (enrollment.completedAt ?? enrollment.cancelledAt)?.toISOString() ?? null,
+  }));
+  const audiences = creatorId
+    ? await Promise.all(
+        audienceSegments.map(async (id) => ({
+          id,
+          label: audienceSegmentLabels[id],
+          count: await prisma.fan.count({
+            where: buildAudienceWhere(creatorId, [id], []),
+          }),
+        })),
+      )
+    : [];
+  const workflowAnalytics = workflows.map((workflow) => {
+    const enrollmentsForWorkflow = analyticsRecords.filter((enrollment) => enrollment.workflowId === workflow.id);
+    const uniqueFans = new Set(enrollmentsForWorkflow.map((enrollment) => enrollment.fanId));
+    const repliedFans = new Set(enrollmentsForWorkflow.flatMap((enrollment) => enrollment.logs.some((log) => log.eventType === "WORKFLOW_FAN_REPLIED") ? [enrollment.fanId] : []));
+    const conversionLogs = enrollmentsForWorkflow.flatMap((enrollment) => enrollment.logs.filter((log) => log.eventType === "WORKFLOW_GOAL_COMPLETED").map((log) => ({ ...log, fanId: enrollment.fanId, startedAt: enrollment.startedAt })));
+    const convertedFans = new Set(conversionLogs.map((log) => log.fanId));
+    const attributedRevenueMinor = conversionLogs.reduce((total, log) => {
+      const metadata = typeof log.metadata === "object" && log.metadata && !Array.isArray(log.metadata) ? log.metadata as Record<string, unknown> : {};
+      return total + (typeof metadata.amountMinor === "number" ? metadata.amountMinor : 0);
+    }, 0);
+    const conversionMinutes = conversionLogs.map((log) => Math.max(0, (log.occurredAt.getTime() - log.startedAt.getTime()) / 60_000));
+    return {
+      workflowId: workflow.id,
+      workflowName: workflow.name,
+      uniqueFans: uniqueFans.size,
+      enrollments: enrollmentsForWorkflow.length,
+      active: enrollmentsForWorkflow.filter((enrollment) => ["ACTIVE", "WAITING", "PAUSED"].includes(enrollment.status)).length,
+      completed: enrollmentsForWorkflow.filter((enrollment) => enrollment.status === "COMPLETED").length,
+      cancelled: enrollmentsForWorkflow.filter((enrollment) => enrollment.status === "CANCELLED").length,
+      failed: enrollmentsForWorkflow.filter((enrollment) => enrollment.status === "FAILED").length,
+      messagesSent: enrollmentsForWorkflow.reduce((total, enrollment) => total + enrollment.logs.filter((log) => log.eventType === "WORKFLOW_MESSAGE_SENT" || log.eventType === "WORKFLOW_PPV_SENT").length, 0),
+      fansReplied: repliedFans.size,
+      conversions: convertedFans.size,
+      conversionRate: uniqueFans.size ? convertedFans.size / uniqueFans.size * 100 : 0,
+      attributedRevenueMinor,
+      averageConversionMinutes: conversionMinutes.length ? conversionMinutes.reduce((total, minutes) => total + minutes, 0) / conversionMinutes.length : null,
+    };
+  });
+  const stepAnalyticsEvents: WorkflowAnalyticsEvent[] = analyticsRecords.flatMap((enrollment) =>
+    enrollment.logs.flatMap((log): WorkflowAnalyticsEvent[] => {
+      const metadata = typeof log.metadata === "object" && log.metadata && !Array.isArray(log.metadata) ? log.metadata as Record<string, unknown> : {};
+      if (log.eventType === "WORKFLOW_FAN_REPLIED") {
+        return [{ enrollmentId: enrollment.id, workflowId: enrollment.workflowId, fanId: enrollment.fanId, type: "REPLY", occurredAt: log.occurredAt }];
+      }
+      if (log.eventType === "WORKFLOW_GOAL_COMPLETED") {
+        return [{ enrollmentId: enrollment.id, workflowId: enrollment.workflowId, fanId: enrollment.fanId, type: "CONVERSION", occurredAt: log.occurredAt, amountMinor: typeof metadata.amountMinor === "number" ? metadata.amountMinor : 0 }];
+      }
+      const step = log.execution?.step;
+      const template = step?.messageTemplate;
+      if (!step || !template) return [];
+      return [{
+        enrollmentId: enrollment.id,
+        workflowId: enrollment.workflowId,
+        fanId: enrollment.fanId,
+        type: "SEND",
+        occurredAt: log.occurredAt,
+        stepId: step.id,
+        stepName: step.name,
+        templateId: template.id,
+        templateName: template.name,
+        messageKind: log.eventType === "WORKFLOW_PPV_SENT" ? "PPV" : "MESSAGE",
+      }];
+    }),
+  );
+  const stepAnalytics = buildWorkflowStepAnalytics(stepAnalyticsEvents);
 
-  return <div className="flex min-h-screen bg-[#101218] text-zinc-100"><Sidebar /><div className="min-w-0 flex-1"><Topbar /><main className="mx-auto max-w-375 px-5 py-8 md:px-8"><div className="mb-8"><p className="mb-2 text-xs font-medium uppercase tracking-[.18em] text-violet-400">Automatización</p><h1 className="text-3xl font-semibold tracking-tight text-white">Workflows</h1><p className="mt-2 text-sm text-zinc-500">Construye estrategias versionadas, explicables y validadas antes de cada acción.</p></div>{creatorId ? <><WorkflowManager workflows={workflows} templates={templates} /><EnrollmentPanel fans={fans} workflows={workflows.filter((workflow) => workflow.status === "PUBLISHED" && workflow.isPrimary)} enrollments={enrollments} activity={activity} activityCounts={{ all: allActivityCount, olderThan90Days: oldActivityCount }} /></> : <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-6 text-amber-200">Conecta Fanvue para crear workflows.</div>}</main></div></div>;
+  return (
+    <div className="flex min-h-screen bg-[#101218] text-zinc-100">
+      <LiveRefresh />
+      <Sidebar />
+      <div className="min-w-0 flex-1">
+        <Topbar />
+        <main className="mx-auto max-w-375 px-5 py-8 md:px-8">
+          <div className="mb-8">
+            <p className="mb-2 text-xs font-medium uppercase tracking-[.18em] text-violet-400">
+              Automatización
+            </p>
+            <h1 className="text-3xl font-semibold tracking-tight text-white">
+              Workflows
+            </h1>
+            <p className="mt-2 text-sm text-zinc-500">
+              Construye estrategias versionadas, explicables y validadas antes
+              de cada acción.
+            </p>
+          </div>
+          {creatorId ? (
+            <>
+              <WorkflowManager workflows={workflows} templates={templateOptions} />
+              <WorkflowAnalyticsPanel analytics={workflowAnalytics} stepAnalytics={stepAnalytics} />
+              <EnrollmentPanel
+                fans={fans}
+                audiences={audiences}
+                workflows={workflows.filter(
+                  (workflow) =>
+                    workflow.status === "PUBLISHED" && workflow.isPrimary,
+                )}
+                enrollments={enrollments}
+                enrollmentHistory={enrollmentHistory}
+                activity={activity}
+                activityCounts={{
+                  all: allActivityCount,
+                  olderThan90Days: oldActivityCount,
+                }}
+              />
+            </>
+          ) : (
+            <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-6 text-amber-200">
+              Conecta Fanvue para crear workflows.
+            </div>
+          )}
+        </main>
+      </div>
+    </div>
+  );
 }
