@@ -1,4 +1,4 @@
-import type { MessageStatus, Prisma, SubscriptionStatus } from "@/generated/prisma/client";
+import type { MessageStatus, Prisma, SubscriptionStatus } from "@prisma/client";
 import { fetchAllCursorPages } from "@/lib/fanvue/pagination";
 import { accountSchema, chatsPageSchema, creatorListPageSchema, earningsPageSchema, fanInsightsBulkSchema, followersPageSchema, subscribersPageSchema } from "@/lib/fanvue/sync-schemas";
 import { fanvueRequest } from "@/lib/fanvue/client";

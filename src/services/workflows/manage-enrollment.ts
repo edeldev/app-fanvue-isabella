@@ -1,4 +1,4 @@
-import type { EnrollmentStatus, Prisma } from "@/generated/prisma/client";
+import type { EnrollmentStatus, Prisma } from "@prisma/client";
 import { assertEnrollmentTransition } from "@/domain/automation/transitions";
 import { remainingWaitSeconds, resumedRunAt } from "@/domain/workflows/pause-schedule";
 import { prisma } from "@/lib/prisma";

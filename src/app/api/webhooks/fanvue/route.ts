@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { after, NextResponse } from "next/server";
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma } from "@prisma/client";
 import { parseServerEnv } from "@/config/env";
 import { verifyFanvueWebhookSignature } from "@/lib/fanvue/webhook-signature";
 import { logger } from "@/lib/logger";

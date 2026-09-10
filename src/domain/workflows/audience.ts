@@ -1,4 +1,4 @@
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma } from "@prisma/client";
 
 export const audienceSegments = [
   "ALL_CONTACTS", "FOLLOWERS", "FOLLOWERS_ONLY", "ACTIVE_SUBSCRIBERS",

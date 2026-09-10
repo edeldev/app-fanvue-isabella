@@ -1,4 +1,4 @@
-import type { Prisma, WorkflowStepType } from "@/generated/prisma/client";
+import type { Prisma, WorkflowStepType } from "@prisma/client";
 import { workflowDefinitionInputSchema } from "@/domain/workflows/definition";
 import { prisma } from "@/lib/prisma";
 

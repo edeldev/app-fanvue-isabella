@@ -1,4 +1,4 @@
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma } from "@prisma/client";
 import { renderTemplateVariables } from "@/domain/workflows/template-variables";
 import { evaluateWorkflowConditionGroup, workflowConditionLabels, workflowConditions, type WorkflowCondition, type WorkflowConditionOperator, type WorkflowConditionRule } from "@/domain/workflows/evaluate-condition";
 import { fanvueRequest } from "@/lib/fanvue/client";

@@ -2,7 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
-    "/*": ["src/generated/prisma/libquery_engine-*.node"],
+    "/*": [
+      "node_modules/.prisma/client/**/*",
+      "node_modules/@prisma/client/**/*",
+    ],
   },
 };
 
