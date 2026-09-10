@@ -1,31 +1,10 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
-import {
-  BarChart3,
-  Bot,
-  FileText,
-  Gauge,
-  LayoutDashboard,
-  MessageSquare,
-  Settings,
-  Users,
-  Workflow,
-} from "lucide-react";
+import { Gauge } from "lucide-react";
+import { SidebarNavigation } from "@/components/app-shell/sidebar-navigation";
 import {
   CREATOR_SESSION_COOKIE,
   readCreatorSession,
 } from "@/lib/session/creator-session";
-
-const navigation = [
-  ["Dashboard", "/", LayoutDashboard],
-  ["Fans", "/fans", Users],
-  ["Mensajes", "/messages", MessageSquare],
-  ["Plantillas", "/templates", FileText],
-  ["Flujos", "/workflows", Workflow],
-  ["Automatización", "/automation", Bot],
-  ["Analítica", "/analytics", BarChart3],
-  ["Configuración", "/settings", Settings],
-] as const;
 
 export async function Sidebar() {
   const cookieStore = await cookies();
@@ -46,18 +25,7 @@ export async function Sidebar() {
           </p>
         </div>
       </div>
-      <nav aria-label="Primary" className="space-y-1">
-        {navigation.map(([label, href, Icon], index) => (
-          <Link
-            key={href}
-            href={href}
-            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${index === 0 ? "bg-white/8 text-white" : "text-zinc-400 hover:bg-white/5 hover:text-zinc-100"}`}
-          >
-            <Icon className="size-4" />
-            {label}
-          </Link>
-        ))}
-      </nav>
+      <SidebarNavigation />
       {!creatorId ? (
         <div className="mt-auto rounded-xl border border-amber-400/15 bg-amber-400/5 p-3">
           <div className="mb-1.5 flex items-center gap-2 text-xs font-medium text-amber-200">
