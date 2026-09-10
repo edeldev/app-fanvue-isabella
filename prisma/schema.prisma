@@ -448,6 +448,18 @@ model AutomationLog {
   @@index([fanId, occurredAt])
 }
 
+model SchedulerHeartbeat {
+  id              String    @id
+  status          String
+  lastStartedAt   DateTime
+  lastFinishedAt  DateTime?
+  lastSucceededAt DateTime?
+  result          Json?
+  error           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
 model FanEvent {
   id               String    @id @default(cuid())
   creatorId        String
