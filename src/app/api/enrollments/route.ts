@@ -5,9 +5,11 @@ import { startEnrollment, transitionEnrollment } from "@/services/workflows/mana
 import { audienceSegments, buildAudienceWhere } from "@/domain/workflows/audience";
 import { prisma } from "@/lib/prisma";
 import { executeEnrollmentUntilBlocked } from "@/services/workflows/execute-enrollment";
+import { reentryBlockedReason } from "@/domain/workflows/reentry-policy";
 
 const inputSchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("fan"), fanId: z.string().min(1), workflowId: z.string().min(1) }),
+  z.object({ mode: z.literal("preview"), include: z.array(z.enum(audienceSegments)).min(1), exclude: z.array(z.enum(audienceSegments)).default([]), excludedFanIds: z.array(z.string().min(1)).max(500).default([]), workflowId: z.string().min(1) }),
   z.object({ mode: z.literal("audience"), include: z.array(z.enum(audienceSegments)).min(1), exclude: z.array(z.enum(audienceSegments)).default([]), excludedFanIds: z.array(z.string().min(1)).max(500).default([]), workflowId: z.string().min(1) }),
   z.object({ mode: z.literal("start"), enrollmentIds: z.array(z.string().min(1)).min(1).max(2_000) }),
   z.object({ mode: z.literal("cancel_unstarted"), enrollmentIds: z.array(z.string().min(1)).min(1).max(2_000) }),
@@ -19,6 +21,41 @@ export async function POST(request: Request) {
   const input = inputSchema.safeParse(await request.json());
   if (!input.success) return Response.json({ error: "Selecciona un destino y un workflow." }, { status: 400 });
   try {
+    if (input.data.mode === "preview") {
+      const [workflow, fans] = await Promise.all([
+        prisma.workflow.findFirst({ where: { id: input.data.workflowId, creatorId, status: "PUBLISHED", isPrimary: true }, select: { id: true, reentryPolicy: true, reentryDelayDays: true } }),
+        prisma.fan.findMany({
+          where: { ...buildAudienceWhere(creatorId, input.data.include, input.data.exclude), ...(input.data.excludedFanIds.length ? { id: { notIn: input.data.excludedFanIds } } : {}) },
+          select: { id: true },
+          take: 2_000,
+        }),
+      ]);
+      if (!workflow) throw new Error("ENROLLMENT_WORKFLOW_NOT_FOUND");
+      const fanIds = fans.map((fan) => fan.id);
+      const [existing, prior] = await Promise.all([
+        prisma.workflowEnrollment.findMany({
+          where: { creatorId, workflowId: workflow.id, fanId: { in: fanIds }, status: { in: ["ACTIVE", "WAITING", "PAUSED"] } },
+          select: { fanId: true, lastRunAt: true, nextRunAt: true, pausedAt: true, _count: { select: { executions: true } } },
+        }),
+        prisma.workflowEnrollment.findMany({
+          where: { creatorId, workflowId: workflow.id, fanId: { in: fanIds } },
+          orderBy: { createdAt: "desc" },
+          distinct: ["fanId"],
+          select: { fanId: true, createdAt: true, completedAt: true, cancelledAt: true, updatedAt: true },
+        }),
+      ]);
+      const existingFanIds = new Set(existing.map((item) => item.fanId));
+      const priorByFan = new Map(prior.map((item) => [item.fanId, item]));
+      const alreadyReady = existing.filter((item) => !item.lastRunAt && !item.nextRunAt && !item.pausedAt && item._count.executions === 0).length;
+      const newAssignments = fans.filter((fan) => {
+        if (existingFanIds.has(fan.id)) return false;
+        const previous = priorByFan.get(fan.id);
+        const reference = previous ? previous.completedAt ?? previous.cancelledAt ?? previous.updatedAt ?? previous.createdAt : null;
+        return !reentryBlockedReason(workflow.reentryPolicy, reference ? { reentryReferenceAt: reference } : null, workflow.reentryDelayDays, new Date());
+      }).length;
+      const alreadyActive = existing.length - alreadyReady;
+      return Response.json({ preview: { matched: fans.length, newAssignments, alreadyReady, alreadyActive, skipped: fans.length - newAssignments - alreadyReady - alreadyActive, limited: fans.length === 2_000 } });
+    }
     if (input.data.mode === "fan") {
       const enrollment = await startEnrollment(creatorId, input.data.fanId, input.data.workflowId);
       return Response.json({ enrollment }, { status: 201 });

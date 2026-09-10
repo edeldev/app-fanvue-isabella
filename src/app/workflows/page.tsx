@@ -297,6 +297,16 @@ export default async function WorkflowsPage() {
     }),
   );
   const stepAnalytics = buildWorkflowStepAnalytics(stepAnalyticsEvents);
+  const unstartedEnrollmentIds = enrollments.filter((enrollment) => !enrollment.hasStarted).map((enrollment) => enrollment.id);
+  const enrollmentProgress = {
+    assigned: unstartedEnrollmentIds.length,
+    active: analyticsRecords.filter((item) => item.status === "ACTIVE" && !unstartedEnrollmentIds.includes(item.id)).length,
+    waiting: analyticsRecords.filter((item) => item.status === "WAITING").length,
+    paused: analyticsRecords.filter((item) => item.status === "PAUSED").length,
+    completed: analyticsRecords.filter((item) => item.status === "COMPLETED").length,
+    cancelled: analyticsRecords.filter((item) => item.status === "CANCELLED").length,
+    failed: analyticsRecords.filter((item) => item.status === "FAILED").length,
+  };
 
   return (
     <div className="flex min-h-screen bg-[#101218] text-zinc-100">
@@ -329,6 +339,8 @@ export default async function WorkflowsPage() {
                     workflow.status === "PUBLISHED" && workflow.isPrimary,
                 )}
                 enrollments={enrollments}
+                unstartedEnrollmentIds={unstartedEnrollmentIds}
+                enrollmentProgress={enrollmentProgress}
                 enrollmentHistory={enrollmentHistory}
                 activity={activity}
                 activityCounts={{

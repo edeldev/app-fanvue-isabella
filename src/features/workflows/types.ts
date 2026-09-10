@@ -91,6 +91,16 @@ export interface AutomationLogView {
   fanName: string | null;
 }
 
+export interface EnrollmentProgressView {
+  assigned: number;
+  active: number;
+  waiting: number;
+  paused: number;
+  completed: number;
+  cancelled: number;
+  failed: number;
+}
+
 export interface WorkflowAnalyticsView {
   workflowId: string;
   workflowName: string;
