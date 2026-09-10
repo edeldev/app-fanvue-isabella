@@ -80,6 +80,7 @@ export interface EnrollmentHistoryLogView {
   stepName: string | null;
   templateName: string | null;
   detail: string | null;
+  detailDate: string | null;
 }
 
 export interface AutomationLogView {

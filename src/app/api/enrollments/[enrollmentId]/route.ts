@@ -38,6 +38,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ enr
       pauseReason: enrollment.pauseReason,
       cancellationReason: enrollment.cancellationReason,
       logs: enrollment.logs.map((log) => ({
+        ...historyDetail(log.metadata),
         id: log.id,
         eventType: log.eventType,
         level: log.level,
@@ -46,20 +47,21 @@ export async function GET(_request: Request, { params }: { params: Promise<{ enr
         occurredAt: log.occurredAt.toISOString(),
         stepName: log.execution?.step.name ?? null,
         templateName: log.execution?.step.messageTemplate?.name ?? null,
-        detail: historyDetail(log.metadata),
       })),
     },
   });
 }
 
 function historyDetail(metadata: unknown) {
-  if (typeof metadata !== "object" || !metadata || Array.isArray(metadata)) return null;
+  if (typeof metadata !== "object" || !metadata || Array.isArray(metadata)) {
+    return { detail: null, detailDate: null };
+  }
   const value = metadata as Record<string, unknown>;
-  if (typeof value.error === "string") return `Error: ${value.error}`;
-  if (typeof value.matched === "boolean") return `Resultado de la condición: ${value.matched ? "sí cumple" : "no cumple"}.`;
-  if (typeof value.amountMinor === "number") return `Importe confirmado: $${(value.amountMinor / 100).toFixed(2)} USD.`;
-  if (typeof value.autoResumeAt === "string") return `Reanudación programada: ${new Date(value.autoResumeAt).toLocaleString("es-MX")}.`;
-  return null;
+  if (typeof value.error === "string") return { detail: `Error: ${value.error}`, detailDate: null };
+  if (typeof value.matched === "boolean") return { detail: `Resultado de la condición: ${value.matched ? "sí cumple" : "no cumple"}.`, detailDate: null };
+  if (typeof value.amountMinor === "number") return { detail: `Importe confirmado: $${(value.amountMinor / 100).toFixed(2)} USD.`, detailDate: null };
+  if (typeof value.autoResumeAt === "string") return { detail: "Reanudación programada", detailDate: value.autoResumeAt };
+  return { detail: null, detailDate: null };
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ enrollmentId: string }> }) {
