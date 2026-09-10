@@ -7,14 +7,21 @@ export function WorkflowAutoRunner({ intervalMs = 10_000 }: { intervalMs?: numbe
   const router = useRouter();
   useEffect(() => {
     let running = false;
+    let unauthorized = false;
     async function run() {
-      if (running || document.visibilityState !== "visible") return;
+      if (running || unauthorized || document.visibilityState !== "visible") return;
       running = true;
       try {
         const response = await fetch("/api/workflows/run-due", { method: "POST" });
+        if (response.status === 401) {
+          unauthorized = true;
+          return;
+        }
         if (!response.ok) return;
         const result = await response.json() as { claimed?: number };
         if (result.claimed) router.refresh();
+      } catch {
+        // A temporary network failure should not interrupt the page.
       } finally {
         running = false;
       }
