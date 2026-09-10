@@ -23,12 +23,25 @@ export function WorkflowHistoryBrowser({ workflows }: { workflows: Pick<Workflow
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams({ page: String(page), search, workflowId, status });
-    fetch(`/api/enrollments/history?${params}`, { signal: controller.signal })
-      .then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.error); return body; })
-      .then((body) => { setEntries(body.entries); setPagination(body.pagination); })
-      .catch((caught) => { if (caught instanceof Error && caught.name !== "AbortError") setError(caught.message); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
+    let fetching = false;
+    const load = async () => {
+      if (fetching || controller.signal.aborted) return;
+      fetching = true;
+      try {
+        const response = await fetch(`/api/enrollments/history?${params}`, { signal: controller.signal, cache: "no-store" });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error);
+        setEntries(body.entries); setPagination(body.pagination); setError(null);
+      } catch (caught) {
+        if (caught instanceof Error && caught.name !== "AbortError") setError(caught.message);
+      } finally {
+        fetching = false;
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    };
+    void load();
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 10_000);
+    return () => { controller.abort(); window.clearInterval(timer); };
   }, [page, revision, search, status, workflowId]);
 
   function beginLoad() { setLoading(true); setError(null); setRevision((value) => value + 1); }
@@ -37,7 +50,7 @@ export function WorkflowHistoryBrowser({ workflows }: { workflows: Pick<Workflow
   const filtered = Boolean(search || workflowId || status);
 
   return <div id="historial-workflows" className="mt-6 scroll-mt-20 border-t border-white/8 pt-5">
-    <div className="flex items-center gap-2"><History className="size-4 text-violet-400" /><div><h3 className="text-sm font-medium text-white">Historial por fan</h3><p className="mt-0.5 text-[11px] text-zinc-600">Busca todas las ejecuciones y abre su línea de tiempo completa.</p></div></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><History className="size-4 text-violet-400" /><div><h3 className="text-sm font-medium text-white">Historial por fan</h3><p className="mt-0.5 text-[11px] text-zinc-600">Busca todas las ejecuciones y abre su línea de tiempo completa.</p></div></div><span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/15 bg-emerald-400/[.04] px-2.5 py-1 text-[10px] text-emerald-300"><span className="size-1.5 rounded-full bg-emerald-400" />Actualización automática</span></div>
     <form onSubmit={submit} className="mt-4 grid gap-2 lg:grid-cols-[1fr_220px_180px_auto]">
       <label className="relative"><span className="sr-only">Buscar fan</span><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600" /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Nombre o @usuario" className="w-full rounded-xl border border-white/10 bg-[#1b1d25] py-2.5 pr-3 pl-10 text-sm text-zinc-200 outline-none focus:border-violet-400/30" /></label>
       <select aria-label="Filtrar por workflow" value={workflowId} onChange={(event) => { beginLoad(); setWorkflowId(event.target.value); setPage(1); }} className="rounded-xl border border-white/10 bg-[#1b1d25] px-3 py-2.5 text-sm text-zinc-300"><option value="">Todos los workflows</option>{workflows.map((workflow) => <option key={workflow.id} value={workflow.id}>{workflow.name}</option>)}</select>

@@ -460,6 +460,19 @@ model SchedulerHeartbeat {
   updatedAt       DateTime  @updatedAt
 }
 
+model RateLimitBucket {
+  id              String   @id
+  creatorId       String
+  scope           String
+  requestCount    Int      @default(1)
+  windowStartedAt DateTime
+  expiresAt       DateTime
+  updatedAt       DateTime @updatedAt
+
+  @@index([expiresAt])
+  @@index([creatorId, scope])
+}
+
 model FanEvent {
   id               String    @id @default(cuid())
   creatorId        String
@@ -522,8 +535,14 @@ model Settings {
   resumeIfNoNewMessages    Boolean         @default(true)
   validateBeforeResume     Boolean         @default(true)
   timezone                 String          @default("UTC")
+  sendWindowEnabled        Boolean         @default(false)
   sendingWindowStart       String          @default("09:00")
   sendingWindowEnd         String          @default("21:00")
+  sendingWindowDays        Json            @default("[0,1,2,3,4,5,6]")
+  sendLimitsEnabled        Boolean         @default(false)
+  maxMessagesPerHour       Int             @default(30)
+  maxMessagesPerDay        Int             @default(200)
+  minMinutesBetweenFanMessages Int         @default(60)
   minimumDelaySeconds      Int             @default(60)
   maximumRetries           Int             @default(3)
   debugMode                Boolean         @default(false)

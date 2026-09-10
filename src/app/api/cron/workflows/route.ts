@@ -1,6 +1,8 @@
 import { isCronRequestAuthorized } from "@/lib/cron-auth";
 import { prisma } from "@/lib/prisma";
 import { runDueWorkflowsForAllCreators } from "@/services/automation/workflow-runner";
+import { runScheduledCleanup } from "@/services/maintenance/cleanup";
+import { logger, sanitizeErrorMessage } from "@/lib/logger";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -20,20 +22,21 @@ export async function GET(request: Request) {
   });
   try {
     const result = await runDueWorkflowsForAllCreators(startedAt);
+    const maintenance = await runScheduledCleanup(startedAt);
     const finishedAt = new Date();
     await prisma.schedulerHeartbeat.update({
       where: { id: "workflow-cron" },
-      data: { status: "SUCCESS", lastFinishedAt: finishedAt, lastSucceededAt: finishedAt, result: { ...result }, error: null },
+      data: { status: "SUCCESS", lastFinishedAt: finishedAt, lastSucceededAt: finishedAt, result: { ...result, maintenance }, error: null },
     });
-    return Response.json({ ok: true, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), ...result });
+    return Response.json({ ok: true, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), ...result, maintenance });
   } catch (error) {
     const errorName = error instanceof Error ? error.name : "UnknownError";
-    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+    const errorMessage = sanitizeErrorMessage(error instanceof Error ? error.message : "Error desconocido");
     await prisma.schedulerHeartbeat.update({
       where: { id: "workflow-cron" },
       data: { status: "FAILED", lastFinishedAt: new Date(), error: `${errorName}: ${errorMessage}`.slice(0, 1000) },
     }).catch(() => undefined);
-    console.error(JSON.stringify({ level: "error", message: "Workflow cron failed", errorName }));
+    logger.error("Workflow cron failed", { errorName });
     return Response.json({ error: "No se pudo ejecutar el ciclo de workflows." }, { status: 500 });
   }
 }

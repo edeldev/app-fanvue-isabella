@@ -37,6 +37,7 @@ export default async function WorkflowsPage() {
     allActivityCount,
     oldActivityCount,
     analyticsRecords,
+    settingsRecord,
   ] = creatorId
     ? await Promise.all([
         prisma.workflow.findMany({
@@ -134,8 +135,9 @@ export default async function WorkflowsPage() {
             },
           },
         }),
+        prisma.settings.findUnique({ where: { creatorId } }),
       ])
-    : [[], [], [], [], [], 0, 0, []];
+    : [[], [], [], [], [], 0, 0, [], null];
   const workflows = records.map((workflow) => ({
     id: workflow.id,
     name: workflow.name,
@@ -181,6 +183,18 @@ export default async function WorkflowsPage() {
     const metadata = typeof template.metadata === "object" && template.metadata && !Array.isArray(template.metadata) ? template.metadata as Record<string, unknown> : {};
     return { id: template.id, name: template.name, type: template.type, priceMinor: typeof metadata.priceMinor === "number" ? metadata.priceMinor : null, previewUuid: typeof metadata.previewUuid === "string" ? metadata.previewUuid : null };
   });
+  const timeToMinute = (value: string) => { const [hour, minute] = value.split(":").map(Number); return hour * 60 + minute; };
+  const workflowDefaults = {
+    sendWindowEnabled: settingsRecord?.sendWindowEnabled ?? false,
+    sendWindowTimezone: settingsRecord?.timezone ?? "America/Monterrey",
+    sendWindowStartMinute: timeToMinute(settingsRecord?.sendingWindowStart ?? "09:00"),
+    sendWindowEndMinute: timeToMinute(settingsRecord?.sendingWindowEnd ?? "21:00"),
+    sendWindowDays: Array.isArray(settingsRecord?.sendingWindowDays) ? settingsRecord.sendingWindowDays.filter((value): value is number => typeof value === "number") : [0, 1, 2, 3, 4, 5, 6],
+    sendLimitsEnabled: settingsRecord?.sendLimitsEnabled ?? false,
+    maxMessagesPerHour: settingsRecord?.maxMessagesPerHour ?? 30,
+    maxMessagesPerDay: settingsRecord?.maxMessagesPerDay ?? 200,
+    minMinutesBetweenFanMessages: settingsRecord?.minMinutesBetweenFanMessages ?? 60,
+  };
 
   const fans = fanRecords.map((fan) => ({
     id: fan.id,
@@ -309,7 +323,7 @@ export default async function WorkflowsPage() {
           </div>
           {creatorId ? (
             <>
-              <WorkflowManager workflows={workflows} templates={templateOptions} />
+              <WorkflowManager workflows={workflows} templates={templateOptions} defaults={workflowDefaults} />
               <WorkflowAnalyticsPanel analytics={workflowAnalytics} stepAnalytics={stepAnalytics} />
               <EnrollmentPanel
                 fans={fans}

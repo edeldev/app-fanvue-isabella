@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { after, NextResponse } from "next/server";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { parseServerEnv } from "@/config/env";
 import { verifyFanvueWebhookSignature } from "@/lib/fanvue/webhook-signature";
 import { logger } from "@/lib/logger";
@@ -51,16 +51,24 @@ export async function POST(request: Request) {
   });
   if (existing) return NextResponse.json({ received: true, duplicate: true });
 
-  const event = await prisma.webhookEvent.create({
-    data: {
-      creatorId: credential.creatorId,
-      providerEventId,
-      type: parsed.envelope.type,
-      signatureVerified: true,
-      payload: parsed.payload,
-    },
-    select: { id: true },
-  });
+  let event: { id: string };
+  try {
+    event = await prisma.webhookEvent.create({
+      data: {
+        creatorId: credential.creatorId,
+        providerEventId,
+        type: parsed.envelope.type,
+        signatureVerified: true,
+        payload: parsed.payload,
+      },
+      select: { id: true },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    throw error;
+  }
 
   after(async () => {
     try {

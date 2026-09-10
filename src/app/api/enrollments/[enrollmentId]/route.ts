@@ -3,6 +3,7 @@ import { z } from "zod";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 import { transitionEnrollment } from "@/services/workflows/manage-enrollment";
 import { prisma } from "@/lib/prisma";
+import { consumeRateLimit, rateLimitedResponse, rateLimitPolicies } from "@/lib/rate-limit";
 
 const inputSchema = z.object({ action: z.enum(["pause", "resume", "cancel"]), reason: z.string().trim().max(250).optional() });
 
@@ -67,6 +68,8 @@ function historyDetail(metadata: unknown) {
 export async function PATCH(request: Request, { params }: { params: Promise<{ enrollmentId: string }> }) {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
   if (!creatorId) return Response.json({ error: "Sesión no autorizada." }, { status: 401 });
+  const rateLimit = await consumeRateLimit(creatorId, rateLimitPolicies.workflowMutation);
+  if (!rateLimit.allowed) return rateLimitedResponse(rateLimit);
   const input = inputSchema.safeParse(await request.json());
   if (!input.success) return Response.json({ error: "Acción de enrollment inválida." }, { status: 400 });
   try {

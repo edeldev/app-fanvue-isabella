@@ -9,6 +9,7 @@ import { extendWorkflowPath } from "@/domain/workflows/transition-path";
 import { isInsideSendWindow, nextSendWindowOpening } from "@/domain/workflows/send-window";
 import { markWorkflowSendFailed, markWorkflowSendSucceeded, reserveWorkflowSend } from "./send-rate-limit";
 import { maximumWorkflowAttempts, workflowRetryDecision } from "@/domain/workflows/retry-policy";
+import { sanitizeErrorMessage } from "@/lib/logger";
 
 type LoadedEnrollment = NonNullable<Awaited<ReturnType<typeof loadEnrollment>>>;
 type StepRecord = LoadedEnrollment["currentStep"];
@@ -52,6 +53,8 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
   if (enrollment.nextRunAt && enrollment.nextRunAt > now) throw new Error(`ENROLLMENT_NOT_DUE:${enrollment.nextRunAt.toISOString()}`);
 
   const step = enrollment.currentStep;
+  const retrySettings = enrollment.workflow.creator.settings;
+  const maximumAttempts = retrySettings?.maximumRetries ?? maximumWorkflowAttempts;
   if (["SEND_OFFER"].includes(step.type)) {
     throw new Error(`STEP_NOT_IMPLEMENTED:${step.type}`);
   }
@@ -90,10 +93,10 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
   const previous = await prisma.automationExecution.findUnique({ where: { idempotencyKey } });
   if (previous?.status === "SUCCESS") throw new Error("STEP_ALREADY_EXECUTED");
   if (previous?.status === "RUNNING") throw new Error("STEP_ALREADY_RUNNING");
-  if (previous?.status === "FAILED" && previous.attempt >= maximumWorkflowAttempts) {
+  if (previous?.status === "FAILED" && previous.attempt >= maximumAttempts) {
     await prisma.$transaction([
       prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { status: "FAILED", nextRunAt: null, lastResult: { reasonCode: "MAXIMUM_RETRIES_REACHED", stepId: step.id } } }),
-      prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, executionId: previous.id, eventType: "WORKFLOW_FAILED", level: "ERROR", reasonCode: "MAXIMUM_RETRIES_REACHED", explanation: `${step.name} agotó ${maximumWorkflowAttempts} intentos; el workflow fue detenido.` } }),
+      prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, executionId: previous.id, eventType: "WORKFLOW_FAILED", level: "ERROR", reasonCode: "MAXIMUM_RETRIES_REACHED", explanation: `${step.name} agotó ${maximumAttempts} intentos; el workflow fue detenido.` } }),
     ]);
     throw new Error("MAXIMUM_RETRIES_REACHED");
   }
@@ -117,14 +120,14 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
     }
     return await finishLocalStep(enrollment, step, execution.id, now);
   } catch (error) {
-    const decision = workflowRetryDecision(error, execution.attempt);
-    const errorMessage = error instanceof Error ? error.message : "Error inesperado";
+    const decision = workflowRetryDecision(error, execution.attempt, { maximumAttempts, minimumDelaySeconds: retrySettings?.minimumDelaySeconds });
+    const errorMessage = sanitizeErrorMessage(error instanceof Error ? error.message : "Error inesperado");
     if (decision.retryable && decision.delaySeconds !== null) {
       const retryAt = new Date(now.getTime() + decision.delaySeconds * 1_000);
       await prisma.$transaction([
         prisma.automationExecution.update({ where: { id: execution.id }, data: { status: "RETRYING", decision: "RETRY", reasonCode: decision.reasonCode, reason: errorMessage, finishedAt: new Date(), nextRetryAt: retryAt } }),
         prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { status: "WAITING", nextRunAt: retryAt, lastResult: { reasonCode: decision.reasonCode, attempt: execution.attempt, retryAt: retryAt.toISOString() } } }),
-        prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, executionId: execution.id, eventType: "WORKFLOW_RETRY_SCHEDULED", level: "WARN", reasonCode: decision.reasonCode, explanation: `${step.name}: intento ${execution.attempt} falló temporalmente; se reintentará el ${retryAt.toLocaleString("es-MX")}.`, metadata: { error: errorMessage, attempt: execution.attempt, maximumAttempts: maximumWorkflowAttempts, retryAt: retryAt.toISOString() } } }),
+        prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, executionId: execution.id, eventType: "WORKFLOW_RETRY_SCHEDULED", level: "WARN", reasonCode: decision.reasonCode, explanation: `${step.name}: intento ${execution.attempt} falló temporalmente; se reintentará el ${retryAt.toLocaleString("es-MX")}.`, metadata: { error: errorMessage, attempt: execution.attempt, maximumAttempts, retryAt: retryAt.toISOString() } } }),
       ]);
       return { outcome: "RETRY_SCHEDULED", nextStep: step.name, shouldContinue: false };
     }
@@ -378,7 +381,7 @@ function loadEnrollment(creatorId: string, enrollmentId: string) {
     include: {
       fan: { select: { fanvueUserId: true, displayName: true, username: true, isFollower: true, isSubscriber: true, isFreeTrialSubscriber: true, isAutoRenewingSubscriber: true, isNonRenewingSubscriber: true, isExpiredSubscriber: true, isCreatorAccount: true, isMuted: true, isOnline: true, isTopSpender: true, totalSpentMinor: true, _count: { select: { purchases: { where: { reversedAt: null, amountMinor: { gt: 0 } } } } } } },
       currentStep: { include: { messageTemplate: true } },
-      workflow: { include: { steps: { orderBy: { position: "asc" }, select: { id: true, position: true, name: true, type: true, config: true } } } },
+      workflow: { include: { creator: { select: { settings: { select: { maximumRetries: true, minimumDelaySeconds: true } } } }, steps: { orderBy: { position: "asc" }, select: { id: true, position: true, name: true, type: true, config: true } } } },
     },
   });
 }

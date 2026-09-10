@@ -117,3 +117,15 @@ export interface WorkflowAnalyticsView {
   attributedRevenueMinor: number;
   averageConversionMinutes: number | null;
 }
+
+export interface WorkflowDefaultsView {
+  sendWindowEnabled: boolean;
+  sendWindowTimezone: string;
+  sendWindowStartMinute: number;
+  sendWindowEndMinute: number;
+  sendWindowDays: number[];
+  sendLimitsEnabled: boolean;
+  maxMessagesPerHour: number;
+  maxMessagesPerDay: number;
+  minMinutesBetweenFanMessages: number;
+}

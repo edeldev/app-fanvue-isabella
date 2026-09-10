@@ -6,6 +6,7 @@ import { FanvueError } from "@/lib/fanvue/errors";
 import { logger } from "@/lib/logger";
 import { connectFanvueCreator } from "@/services/fanvue/connect-creator";
 import { CREATOR_SESSION_COOKIE, createCreatorSession } from "@/lib/session/creator-session";
+import { getFanvueConfig } from "@/lib/fanvue/config";
 
 function valuesMatch(left: string, right: string): boolean {
   const a = Buffer.from(left);
@@ -13,8 +14,8 @@ function valuesMatch(left: string, right: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-function dashboardUrl(request: NextRequest, status: string): URL {
-  const url = new URL("/", request.url);
+function dashboardUrl(_request: NextRequest, status: string): URL {
+  const url = new URL("/", getFanvueConfig().redirectUri);
   url.searchParams.set("fanvue", status);
   return url;
 }

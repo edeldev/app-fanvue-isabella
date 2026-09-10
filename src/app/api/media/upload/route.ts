@@ -6,6 +6,7 @@ import { getFanvueConfig } from "@/lib/fanvue/config";
 import { mediaUploadCompleteSchema, mediaUploadSessionSchema } from "@/lib/fanvue/sync-schemas";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
+import { consumeRateLimit, rateLimitedResponse, rateLimitPolicies } from "@/lib/rate-limit";
 
 const allowedTypes = new Map([["image/jpeg", "image"], ["image/png", "image"], ["image/webp", "image"], ["image/gif", "image"], ["video/mp4", "video"], ["video/quicktime", "video"], ["video/webm", "video"]]);
 const MAX_FILE_SIZE = 250 * 1024 * 1024;
@@ -55,6 +56,8 @@ async function uploadFile(file: File, token: string) {
 export async function POST(request: Request) {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
   if (!creatorId) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const rateLimit = await consumeRateLimit(creatorId, rateLimitPolicies.mediaUpload);
+  if (!rateLimit.allowed) return rateLimitedResponse(rateLimit);
   const form = await request.formData();
   const files = form.getAll("files").filter((value): value is File => value instanceof File);
   if (files.length < 1 || files.length > 10) return NextResponse.json({ error: "Selecciona entre 1 y 10 archivos." }, { status: 400 });

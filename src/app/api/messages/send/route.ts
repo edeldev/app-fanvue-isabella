@@ -6,6 +6,7 @@ import { sentMessageSchema } from "@/lib/fanvue/sync-schemas";
 import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
+import { consumeRateLimit, rateLimitPolicies } from "@/lib/rate-limit";
 
 const mediaSchema = z.array(z.object({ uuid: z.string().uuid(), name: z.string(), mediaType: z.enum(["image", "video"]) })).max(10);
 const formSchema = z.object({ fanUuid: z.string().uuid(), text: z.string().trim().max(5000), templateId: z.string().optional(), price: z.string(), previewUuid: z.string().optional() });
@@ -15,6 +16,8 @@ function parseJson(value: FormDataEntryValue | null) { try { return JSON.parse(S
 export async function POST(request: Request) {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
   if (!creatorId) redirect("/?fanvue=connection_required");
+  const rateLimit = await consumeRateLimit(creatorId, rateLimitPolicies.messageSend);
+  if (!rateLimit.allowed) redirect(`/messages?error=rate_limited&retryAfter=${rateLimit.retryAfterSeconds}`);
   const form = await request.formData();
   const parsed = formSchema.safeParse({ fanUuid: form.get("fanUuid"), text: form.get("text") || "", templateId: form.get("templateId") || undefined, price: String(form.get("price") || ""), previewUuid: form.get("previewUuid") || undefined });
   if (!parsed.success) redirect("/messages?error=invalid_message");

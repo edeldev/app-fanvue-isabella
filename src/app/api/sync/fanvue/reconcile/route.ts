@@ -2,12 +2,15 @@ import { cookies } from "next/headers";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 import { prisma } from "@/lib/prisma";
 import { runInitialFanvueSync } from "@/services/fanvue/initial-sync";
+import { consumeRateLimit, rateLimitedResponse, rateLimitPolicies } from "@/lib/rate-limit";
 
 const RECONCILIATION_INTERVAL_MS = 15 * 60 * 1_000;
 
 export async function POST() {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
   if (!creatorId) return Response.json({ error: "Sesión no autorizada." }, { status: 401 });
+  const rateLimit = await consumeRateLimit(creatorId, rateLimitPolicies.fanvueSync);
+  if (!rateLimit.allowed) return rateLimitedResponse(rateLimit);
   const latest = await prisma.automationLog.findFirst({
     where: { creatorId, eventType: "INITIAL_SYNC_COMPLETED" },
     orderBy: { occurredAt: "desc" },

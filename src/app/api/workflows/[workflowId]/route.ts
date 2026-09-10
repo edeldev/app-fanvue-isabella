@@ -4,6 +4,7 @@ import { canDeleteWorkflow } from "@/domain/workflows/deletion-policy";
 import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 import { updateWorkflow } from "@/services/workflows/save-workflow";
+import { consumeRateLimit, rateLimitedResponse, rateLimitPolicies } from "@/lib/rate-limit";
 
 async function sessionCreatorId() {
   return readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
@@ -12,6 +13,8 @@ async function sessionCreatorId() {
 export async function PUT(request: Request, { params }: { params: Promise<{ workflowId: string }> }) {
   const creatorId = await sessionCreatorId();
   if (!creatorId) return Response.json({ error: "Sesión no autorizada." }, { status: 401 });
+  const rateLimit = await consumeRateLimit(creatorId, rateLimitPolicies.workflowMutation);
+  if (!rateLimit.allowed) return rateLimitedResponse(rateLimit);
   try {
     const workflow = await updateWorkflow(creatorId, (await params).workflowId, await request.json());
     return Response.json({ workflow });
@@ -25,6 +28,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ work
 export async function DELETE(_request: Request, { params }: { params: Promise<{ workflowId: string }> }) {
   const creatorId = await sessionCreatorId();
   if (!creatorId) return Response.json({ error: "Sesión no autorizada." }, { status: 401 });
+  const rateLimit = await consumeRateLimit(creatorId, rateLimitPolicies.workflowMutation);
+  if (!rateLimit.allowed) return rateLimitedResponse(rateLimit);
   const workflow = await prisma.workflow.findFirst({
     where: { id: (await params).workflowId, creatorId },
   });

@@ -1,10 +1,13 @@
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
+import { consumeRateLimit, rateLimitedResponse, rateLimitPolicies } from "@/lib/rate-limit";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ workflowId: string }> }) {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
   if (!creatorId) return Response.json({ error: "Sesión no autorizada." }, { status: 401 });
+  const rateLimit = await consumeRateLimit(creatorId, rateLimitPolicies.workflowMutation);
+  if (!rateLimit.allowed) return rateLimitedResponse(rateLimit);
   const workflow = await prisma.workflow.findFirst({
     where: { id: (await params).workflowId, creatorId },
     include: { steps: { orderBy: { position: "asc" } } },

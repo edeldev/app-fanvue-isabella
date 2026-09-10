@@ -6,6 +6,7 @@ import { audienceSegments, buildAudienceWhere } from "@/domain/workflows/audienc
 import { prisma } from "@/lib/prisma";
 import { executeEnrollmentUntilBlocked } from "@/services/workflows/execute-enrollment";
 import { reentryBlockedReason } from "@/domain/workflows/reentry-policy";
+import { consumeRateLimit, rateLimitedResponse, rateLimitPolicies } from "@/lib/rate-limit";
 
 const inputSchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("fan"), fanId: z.string().min(1), workflowId: z.string().min(1) }),
@@ -18,6 +19,8 @@ const inputSchema = z.discriminatedUnion("mode", [
 export async function POST(request: Request) {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
   if (!creatorId) return Response.json({ error: "Sesión no autorizada." }, { status: 401 });
+  const rateLimit = await consumeRateLimit(creatorId, rateLimitPolicies.workflowMutation);
+  if (!rateLimit.allowed) return rateLimitedResponse(rateLimit);
   const input = inputSchema.safeParse(await request.json());
   if (!input.success) return Response.json({ error: "Selecciona un destino y un workflow." }, { status: 400 });
   try {
