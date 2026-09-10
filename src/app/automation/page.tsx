@@ -6,6 +6,7 @@ import { LiveRefresh } from "@/components/live-refresh";
 import { LocalDateTime } from "@/components/local-date-time";
 import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
+import { FailureRecoveryActions } from "@/features/automation/failure-recovery-actions";
 
 const heartbeatId = "workflow-cron";
 const healthyThresholdMs = 150_000;
@@ -37,7 +38,7 @@ export default async function AutomationPage() {
           select: {
             id: true, reason: true, reasonCode: true, updatedAt: true,
             fan: { select: { displayName: true, username: true } },
-            enrollment: { select: { workflow: { select: { name: true } } } },
+            enrollment: { select: { id: true, workflow: { select: { name: true } } } },
             step: { select: { name: true } },
           },
         }),
@@ -108,6 +109,7 @@ export default async function AutomationPage() {
                   <div className="flex flex-col justify-between gap-1 sm:flex-row"><p className="text-xs text-zinc-300">{failure.enrollment.workflow.name} · {failure.step.name}</p><span className="text-[10px] text-zinc-600"><LocalDateTime value={failure.updatedAt} /></span></div>
                   <p className="mt-1 text-[11px] text-zinc-500">{failure.fan.displayName || failure.fan.username || "Fan sin nombre"}{failure.reasonCode ? ` · ${failure.reasonCode}` : ""}</p>
                   {failure.reason ? <p className="mt-2 text-[11px] text-red-300/70">{failure.reason}</p> : null}
+                  <FailureRecoveryActions enrollmentId={failure.enrollment.id} workflowName={failure.enrollment.workflow.name} stepName={failure.step.name} />
                 </div>)}</div> : <div className="mt-5 flex items-center gap-2 text-sm text-emerald-300/70"><CheckCircle2 className="size-4" /> No hay ejecuciones fallidas.</div>}
               </article>
             </section>
