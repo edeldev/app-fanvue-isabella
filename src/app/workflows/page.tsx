@@ -37,7 +37,6 @@ export default async function WorkflowsPage() {
     allActivityCount,
     oldActivityCount,
     analyticsRecords,
-    historyRecords,
   ] = creatorId
     ? await Promise.all([
         prisma.workflow.findMany({
@@ -135,18 +134,8 @@ export default async function WorkflowsPage() {
             },
           },
         }),
-        prisma.workflowEnrollment.findMany({
-          where: { creatorId },
-          orderBy: { updatedAt: "desc" },
-          take: 30,
-          select: {
-            id: true, status: true, startedAt: true, completedAt: true, cancelledAt: true,
-            fan: { select: { displayName: true, username: true } },
-            workflow: { select: { name: true } },
-          },
-        }),
       ])
-    : [[], [], [], [], [], 0, 0, [], []];
+    : [[], [], [], [], [], 0, 0, []];
   const workflows = records.map((workflow) => ({
     id: workflow.id,
     name: workflow.name,
@@ -221,15 +210,6 @@ export default async function WorkflowsPage() {
     explanation: log.explanation,
     occurredAt: log.occurredAt.toISOString(),
     fanName: log.fan?.displayName || log.fan?.username || null,
-  }));
-  const enrollmentHistory = historyRecords.map((enrollment) => ({
-    id: enrollment.id,
-    status: enrollment.status,
-    fanName: enrollment.fan.displayName || enrollment.fan.username || "Fan sin nombre",
-    fanUsername: enrollment.fan.username,
-    workflowName: enrollment.workflow.name,
-    startedAt: enrollment.startedAt.toISOString(),
-    endedAt: (enrollment.completedAt ?? enrollment.cancelledAt)?.toISOString() ?? null,
   }));
   const audiences = creatorId
     ? await Promise.all(
@@ -341,7 +321,6 @@ export default async function WorkflowsPage() {
                 enrollments={enrollments}
                 unstartedEnrollmentIds={unstartedEnrollmentIds}
                 enrollmentProgress={enrollmentProgress}
-                enrollmentHistory={enrollmentHistory}
                 activity={activity}
                 activityCounts={{
                   all: allActivityCount,
