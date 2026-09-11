@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { ExternalLink, LogOut, Search } from "lucide-react";
+import { ExternalLink, LogOut } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import {
   CREATOR_SESSION_COOKIE,
@@ -7,6 +7,7 @@ import {
 } from "@/lib/session/creator-session";
 import { WorkflowAlertsMenu } from "./workflow-alerts-menu";
 import { MobileNavigation } from "./mobile-navigation";
+import { GlobalSearch } from "./global-search";
 
 export async function Topbar() {
   const cookieStore = await cookies();
@@ -51,13 +52,10 @@ export async function Topbar() {
     .toUpperCase();
 
   return (
-    <header className="relative z-30 flex h-16 items-center justify-between border-b border-white/8 bg-[#101218]/85 px-5 md:px-8">
-      <div className="flex min-w-0 items-center gap-3 text-zinc-500">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-white/8 bg-[#101218]/90 px-3 backdrop-blur-xl sm:px-5 md:px-8">
+      <div className="flex min-w-0 flex-1 items-center gap-2 text-zinc-500 sm:gap-3">
         <MobileNavigation />
-        <Search className="size-4" />
-        <span className="hidden text-sm sm:inline">
-          Buscar fans, mensajes y workflows…
-        </span>
+        <GlobalSearch />
       </div>
       <div className="flex items-center gap-3">
         {creator ? <WorkflowAlertsMenu alerts={alerts} unreadCount={unreadAlertCount} /> : null}

@@ -49,3 +49,17 @@ test("el enlace de salto lleva el foco al contenido", async ({ page }) => {
   await skipLink.press("Enter");
   await expect(page.locator("main#main-content")).toBeFocused();
 });
+
+test("la búsqueda global responde al atajo y la navegación permanece fija", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "El sidebar solo existe en escritorio.");
+  await page.goto("/");
+
+  const search = page.getByRole("textbox", { name: "Buscar en toda la aplicación" });
+  await page.keyboard.press("Control+k");
+  await expect(search).toBeFocused();
+
+  const sidebar = page.getByRole("complementary");
+  const header = page.getByRole("banner");
+  await expect(sidebar).toHaveCSS("position", "sticky");
+  await expect(header).toHaveCSS("position", "sticky");
+});

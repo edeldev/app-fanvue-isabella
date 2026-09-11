@@ -34,17 +34,18 @@ const PAGE_SIZE = 6;
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 type StatusFilter = "ALL" | WorkflowView["status"];
 
-export function WorkflowManager({ workflows, templates, defaults, analytics }: {
+export function WorkflowManager({ workflows, templates, defaults, analytics, initialQuery = "" }: {
   workflows: WorkflowView[];
   templates: TemplateOption[];
   defaults: WorkflowDefaultsView;
   analytics: WorkflowAnalyticsView[];
+  initialQuery?: string;
 }) {
   const router = useRouter();
   const [editor, setEditor] = useState<WorkflowView | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<WorkflowView | null>(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [status, setStatus] = useState<StatusFilter>("ALL");
   const [page, setPage] = useState(1);
   const templateNames = useMemo(() => new Map(templates.map((template) => [template.id, template.name])), [templates]);

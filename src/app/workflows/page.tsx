@@ -24,7 +24,9 @@ import {
   type WorkflowAnalyticsEvent,
 } from "@/domain/workflows/step-analytics";
 
-export default async function WorkflowsPage() {
+export default async function WorkflowsPage({ searchParams }: { searchParams: Promise<{ q?: string | string[] }> }) {
+  const queryParams = await searchParams;
+  const initialQuery = (Array.isArray(queryParams.q) ? queryParams.q[0] : queryParams.q)?.trim().slice(0, 80) ?? "";
   const creatorId = readCreatorSession(
     (await cookies()).get(CREATOR_SESSION_COOKIE)?.value,
   );
@@ -323,7 +325,7 @@ export default async function WorkflowsPage() {
           </div>
           {creatorId ? (
             <>
-              <WorkflowManager workflows={workflows} templates={templateOptions} defaults={workflowDefaults} analytics={workflowAnalytics} />
+              <WorkflowManager workflows={workflows} templates={templateOptions} defaults={workflowDefaults} analytics={workflowAnalytics} initialQuery={initialQuery} />
               <WorkflowAnalyticsPanel analytics={workflowAnalytics} stepAnalytics={stepAnalytics} />
               <EnrollmentPanel
                 fans={fans}

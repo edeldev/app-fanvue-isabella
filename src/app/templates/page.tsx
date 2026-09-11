@@ -84,7 +84,8 @@ export default async function TemplatesPage() {
                 return (
                   <details
                     key={template.id}
-                    className="group rounded-2xl border border-white/8 bg-white/[.025] open:border-violet-400/20"
+                    id={`template-${template.id}`}
+                    className="group scroll-mt-20 rounded-2xl border border-white/8 bg-white/[.025] open:border-violet-400/20 target:border-violet-400/50 target:ring-2 target:ring-violet-400/10"
                   >
                     <summary className="flex cursor-pointer list-none items-start gap-4 p-5">
                       <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-violet-500/10 text-violet-300">
