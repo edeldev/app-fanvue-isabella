@@ -162,6 +162,21 @@ export const mediaBulkSchema = z.object({
   errors: z.array(z.unknown()).optional().default([]),
 }).passthrough();
 
+export const vaultMediaPageSchema = z.object({
+  data: z.array(z.object({
+    uuid: z.string().uuid(),
+    status: z.enum(["created", "processing", "ready", "error"]),
+    name: z.string().nullable().optional(),
+    mediaType: z.enum(["image", "video", "audio", "document"]).optional(),
+    createdAt: z.string().nullable().optional(),
+    variants: z.array(z.object({
+      variantType: z.enum(["main", "thumbnail", "thumbnail_gallery", "blurred"]),
+      url: z.string().optional(),
+    }).passthrough()).optional().default([]),
+  }).passthrough()),
+  nextCursor: z.string().nullable(),
+}).passthrough();
+
 export const creatorListPageSchema = cursorPage(z.object({
   uuid: z.string().uuid(),
   displayName: z.string(),

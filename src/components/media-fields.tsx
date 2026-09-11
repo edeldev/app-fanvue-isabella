@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Eye, ImagePlus, LoaderCircle, LockKeyhole, X } from "lucide-react";
+import { Eye, FolderOpen, ImagePlus, LoaderCircle, LockKeyhole, X } from "lucide-react";
 import { ExpandableImage } from "@/components/expandable-image";
 import { enqueueSnackbar } from "notistack";
+import { VaultMediaPicker } from "@/components/vault-media-picker";
 
 export type AttachedMedia = {
   uuid: string;
@@ -27,6 +28,7 @@ export function MediaFields({
   );
   const [previewUuid, setPreviewUuid] = useState(initialPreviewUuid ?? "");
   const [uploading, setUploading] = useState(false);
+  const [vaultOpen, setVaultOpen] = useState(false);
   const objectUrls = useRef(new Set<string>());
 
   useEffect(() => {
@@ -111,7 +113,7 @@ export function MediaFields({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 rounded-xl border border-white/8 bg-black/10 p-3">
       <input
         type="hidden"
         name="mediaJson"
@@ -120,7 +122,7 @@ export function MediaFields({
         )}
       />
       <input type="hidden" name="previewUuid" value={previewUuid} />
-      <div className="flex flex-wrap items-center gap-2">
+      <div><p className="text-xs font-medium text-zinc-400">Contenido multimedia <span className="font-normal text-zinc-700">(opcional)</span></p><p className="mt-1 text-[10px] leading-4 text-zinc-600">Sube archivos nuevos o reutiliza fotos y videos que ya existen en Fanvue.</p></div><div className="flex flex-wrap items-center gap-2">
         <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-zinc-300 hover:bg-white/10">
           <ImagePlus className="size-4" />
           Agregar fotos o videos
@@ -133,6 +135,7 @@ export function MediaFields({
             onChange={(event) => void upload(event.target.files)}
           />
         </label>
+        <button type="button" disabled={uploading || media.length >= 10} onClick={() => setVaultOpen(true)} className="flex items-center gap-2 rounded-lg border border-violet-400/20 bg-violet-400/[.06] px-3 py-2 text-xs text-violet-300 hover:bg-violet-400/10 disabled:opacity-40"><FolderOpen className="size-4" />Elegir de la bóveda</button>
         {uploading ? (
           <span className="flex items-center gap-2 text-xs text-violet-300">
             <LoaderCircle className="size-3.5 animate-spin" />
@@ -226,6 +229,7 @@ export function MediaFields({
           </p>
         </div>
       ) : null}
+      {vaultOpen ? <VaultMediaPicker selectedUuids={media.map((item) => item.uuid)} remaining={10 - media.length} onClose={() => setVaultOpen(false)} onAdd={(incoming) => { setMedia((current) => [...current, ...incoming].slice(0, 10)); setVaultOpen(false); enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo agregado" : "archivos agregados"} desde la bóveda.`, { variant: "success" }); }} /> : null}
     </div>
   );
 }
