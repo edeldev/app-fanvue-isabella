@@ -1,6 +1,8 @@
 "use client";
 
+import { Braces, LoaderCircle, Save } from "lucide-react";
 import { useRef, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { MediaFields, type AttachedMedia } from "@/components/media-fields";
 
 const categories = {
@@ -42,14 +44,14 @@ export function TemplateForm({
     });
   }
   return (
-    <form action="/api/templates" method="post" className="space-y-4">
+    <form action="/api/templates" method="post" className="space-y-5">
       <input
         type="hidden"
         name="action"
         value={template ? "update" : "create"}
       />
       {template ? <input type="hidden" name="id" value={template.id} /> : null}
-      <div className={template ? "grid gap-4 sm:grid-cols-2" : "space-y-4"}>
+      <div className="rounded-xl border border-white/8 bg-black/10 p-3"><p className="mb-3 text-[10px] font-medium uppercase tracking-[.14em] text-zinc-600">Información básica</p><div className={template ? "grid gap-4 sm:grid-cols-2" : "space-y-4"}>
         <label className="block text-xs text-zinc-500">
           Nombre
           <input
@@ -75,9 +77,9 @@ export function TemplateForm({
             ))}
           </select>
         </label>
-      </div>
+      </div></div>
       <label className="block text-xs text-zinc-500">
-        Mensaje
+        <span className="flex items-center justify-between"><span>Mensaje</span><span className="text-[10px] text-zinc-700">{text.length}/5000</span></span>
         <textarea
           ref={textarea}
           name="text"
@@ -86,11 +88,11 @@ export function TemplateForm({
           value={text}
           onChange={(event) => setText(event.target.value)}
           placeholder="Hola {{nombre}}, gracias por seguirme…"
-          className="mt-2 w-full resize-y rounded-xl border border-white/8 bg-black/20 px-3 py-3 text-sm text-zinc-200 outline-none focus:border-violet-500/60"
+          className="mt-2 min-h-36 w-full resize-y rounded-xl border border-white/8 bg-black/20 px-3 py-3 text-sm leading-6 text-zinc-200 outline-none transition focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/10"
         />
       </label>
-      <div className="flex flex-wrap gap-2">
-        <span className="py-1 text-xs text-zinc-600">Insertar:</span>
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/8 bg-white/[.02] p-2.5">
+        <span className="flex items-center gap-1.5 py-1 text-xs text-zinc-600"><Braces className="size-3.5" />Personalizar:</span>
         {["{{nombre}}", "{{usuario}}"].map((variable) => (
           <button
             key={variable}
@@ -107,15 +109,12 @@ export function TemplateForm({
         initialPriceMinor={template?.priceMinor}
         initialPreviewUuid={template?.previewUuid}
       />
-      <button
-        className={
-          template
-            ? "rounded-xl bg-violet-500 px-4 py-2 text-sm font-medium text-white"
-            : "w-full rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-semibold text-white"
-        }
-      >
-        {template ? "Guardar cambios" : "Crear plantilla"}
-      </button>
+      <TemplateSubmitButton editing={Boolean(template)} />
     </form>
   );
+}
+
+function TemplateSubmitButton({ editing }: { editing: boolean }) {
+  const { pending } = useFormStatus();
+  return <button disabled={pending} className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-950/25 transition hover:bg-violet-400 disabled:cursor-wait disabled:opacity-60">{pending ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}{pending ? "Guardando…" : editing ? "Guardar cambios" : "Crear plantilla"}</button>;
 }
