@@ -24,7 +24,7 @@ export default async function TemplatesPage() {
   const stats = [
     { label: "Total", value: templates.length, detail: "plantillas guardadas", icon: FileText, tone: "text-violet-300 bg-violet-400/10" },
     { label: "Solo texto", value: textCount, detail: "listas para conversar", icon: FileImage, tone: "text-sky-300 bg-sky-400/10" },
-    { label: "Multimedia", value: mediaCount, detail: "con fotos o videos", icon: Images, tone: "text-fuchsia-300 bg-fuchsia-400/10" },
+    { label: "Multimedia gratis", value: mediaCount, detail: "fotos o videos sin precio", icon: Images, tone: "text-fuchsia-300 bg-fuchsia-400/10" },
     { label: "PPV", value: ppvCount, detail: "contenido de pago", icon: LockKeyhole, tone: "text-amber-300 bg-amber-400/10" },
   ];
 

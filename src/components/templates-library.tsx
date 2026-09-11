@@ -9,7 +9,7 @@ import { matchesTemplateKind, type TemplateKindFilter } from "@/domain/templates
 export type TemplateLibraryItem = { id: string; name: string; text: string; type: string; category: string; status: string; updatedAt: string; media: AttachedMedia[]; priceMinor: number | null; previewUuid: string | null };
 const PAGE_SIZE = 8;
 const categories: Record<string, string> = { WELCOME: "Bienvenida", FOLLOW_UP: "Seguimiento", RENEWAL: "Renovación", SALES: "Venta", VIP: "VIP", REACTIVATION: "Reactivación", GENERAL: "General" };
-const kindFilters: ReadonlyArray<[TemplateKindFilter, string]> = [["ALL", "Todas"], ["TEXT", "Solo texto"], ["MEDIA", "Con multimedia"], ["IMAGE", "Fotos"], ["VIDEO", "Videos"], ["MEDIA_ONLY", "Solo archivos"], ["PPV", "PPV"]];
+const kindFilters: ReadonlyArray<[TemplateKindFilter, string]> = [["ALL", "Todas"], ["TEXT", "Solo texto"], ["MEDIA", "Multimedia gratis"], ["IMAGE", "Fotos gratis"], ["VIDEO", "Videos gratis"], ["MEDIA_ONLY", "Solo archivos gratis"], ["PPV", "PPV"]];
 
 function mediaComposition(template: TemplateLibraryItem) {
   const images = template.media.filter((item) => item.mediaType === "image").length;
@@ -34,13 +34,13 @@ export function TemplatesLibrary({ templates }: { templates: TemplateLibraryItem
     return () => { document.body.style.overflow = previous; window.removeEventListener("keydown", close); };
   }, [editing]);
 
-  const filtered = useMemo(() => templates.filter((template) => {
+  const baseFiltered = useMemo(() => templates.filter((template) => {
     const term = query.trim().toLocaleLowerCase("es-MX");
     const matchesQuery = !term || template.name.toLocaleLowerCase("es-MX").includes(term) || template.text.toLocaleLowerCase("es-MX").includes(term);
     const matchesCategory = category === "ALL" || template.category === category;
-    const matchesKind = matchesTemplateKind(template, kind);
-    return matchesQuery && matchesCategory && matchesKind;
-  }), [templates, query, category, kind]);
+    return matchesQuery && matchesCategory;
+  }), [templates, query, category]);
+  const filtered = useMemo(() => baseFiltered.filter((template) => matchesTemplateKind(template, kind)), [baseFiltered, kind]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const visible = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -48,7 +48,7 @@ export function TemplatesLibrary({ templates }: { templates: TemplateLibraryItem
 
   return <section className="min-w-0">
     <div className="rounded-2xl border border-white/8 bg-white/[.025] p-4"><div className="flex flex-col gap-3 lg:flex-row"><label className="flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-3 focus-within:border-violet-400/40 focus-within:ring-2 focus-within:ring-violet-400/10"><Search className="size-4 text-zinc-600" /><span className="sr-only">Buscar plantillas</span><input value={query} onChange={(event) => { setQuery(event.target.value); resetPage(); }} placeholder="Buscar por nombre o contenido…" className="h-11 min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-zinc-600" />{query ? <button type="button" onClick={() => { setQuery(""); resetPage(); }} aria-label="Limpiar búsqueda" className="rounded-md p-1 text-zinc-600 hover:bg-white/5 hover:text-white"><X className="size-4" /></button> : null}</label><select value={category} onChange={(event) => { setCategory(event.target.value); resetPage(); }} aria-label="Filtrar por categoría" className="h-11 rounded-xl border border-white/10 bg-[#181a21] px-3 text-xs text-zinc-300 outline-none"><option value="ALL">Todas las categorías</option>{Object.entries(categories).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
-      <div className="mt-3 flex gap-1 overflow-x-auto rounded-xl border border-white/8 bg-black/15 p-1">{kindFilters.map(([value, label]) => <button key={value} type="button" onClick={() => { setKind(value); resetPage(); }} className={`shrink-0 rounded-lg px-3 py-2 text-xs transition ${kind === value ? "bg-violet-500 text-white" : "text-zinc-500 hover:bg-white/5 hover:text-white"}`}>{label}</button>)}<span className="ml-auto shrink-0 self-center px-2 text-[10px] text-zinc-600">{filtered.length} resultados</span></div>
+      <div className="mt-3 flex gap-1 overflow-x-auto rounded-xl border border-white/8 bg-black/15 p-1">{kindFilters.map(([value, label]) => { const count = baseFiltered.filter((template) => matchesTemplateKind(template, value)).length; return <button key={value} type="button" onClick={() => { setKind(value); resetPage(); }} className={`shrink-0 rounded-lg px-3 py-2 text-xs transition ${kind === value ? "bg-violet-500 text-white" : "text-zinc-500 hover:bg-white/5 hover:text-white"}`}>{label} <span className="ml-1 opacity-60">{count}</span></button>; })}<span className="ml-auto shrink-0 self-center px-2 text-[10px] text-zinc-600">{filtered.length} resultados</span></div>
       {kind === "MEDIA" ? <p className="mt-2 text-[10px] text-zinc-600">Incluye plantillas gratuitas con fotos o videos, tengan texto o sean solo archivos. Las plantillas de pago aparecen únicamente en PPV.</p> : null}
     </div>
 
