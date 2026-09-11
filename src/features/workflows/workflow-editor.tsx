@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { ArrowDown, ArrowUp, Flag, GitBranch, GripVertical, ImageIcon, MessageSquare, Repeat2, Save, Timer, Trash2, X, Zap } from "lucide-react";
-import { useState, type DragEvent, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
+import { closestCenter, DndContext, DragOverlay, KeyboardSensor, PointerSensor, useDraggable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { editableStepTypes, stepTypeLabels, type WorkflowDefinitionInput } from "@/domain/workflows/definition";
 import type { TemplateOption, WorkflowDefaultsView, WorkflowView } from "./types";
 import { workflowTriggerLabels, workflowTriggers } from "@/domain/workflows/triggers";
@@ -112,6 +115,10 @@ export function WorkflowEditor({ value, defaults, templates, publishedWorkflows,
 function StepList({ initialSteps, templates, publishedWorkflows }: { initialSteps: WorkflowDefinitionInput["steps"]; templates: TemplateOption[]; publishedWorkflows: Pick<WorkflowView, "id" | "name">[] }) {
   const [steps, setSteps] = useState(initialSteps);
   const [dragging, setDragging] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   const update = (index: number, patch: Partial<(typeof steps)[number]>) => setSteps((current) => current.map((step, position) => position === index ? { ...step, ...patch } : step));
   const move = (index: number, offset: number) => setSteps((current) => reorderWorkflowSteps(current, index, index + offset));
   const addStep = (type: (typeof editableStepTypes)[number], at?: number) => setSteps((current) => {
@@ -120,46 +127,69 @@ function StepList({ initialSteps, templates, publishedWorkflows }: { initialStep
     next.splice(Math.min(at ?? endIndex, endIndex), 0, newStep(type));
     return next;
   });
-  const dropAt = (event: DragEvent, at: number) => {
-    event.preventDefault();
-    const payload = event.dataTransfer.getData("text/workflow-step");
-    if (payload.startsWith("new:")) addStep(payload.slice(4) as (typeof editableStepTypes)[number], at);
-    if (payload.startsWith("step:")) {
-      const from = Number(payload.slice(5));
-      setSteps((current) => reorderWorkflowSteps(current, from, from < at ? at - 1 : at));
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    const activeId = String(active.id);
+    if (!over) {
+      setDragging(null);
+      return;
+    }
+    const overId = String(over.id);
+    const targetIndex = steps.findIndex((step) => String(step.config.stepKey) === overId);
+    if (targetIndex < 0) {
+      setDragging(null);
+      return;
+    }
+    if (activeId.startsWith("palette:")) {
+      addStep(activeId.slice(8) as (typeof editableStepTypes)[number], targetIndex);
+    } else {
+      const fromIndex = steps.findIndex((step) => String(step.config.stepKey) === activeId);
+      if (fromIndex >= 0 && fromIndex !== targetIndex) setSteps((current) => reorderWorkflowSteps(current, fromIndex, targetIndex));
     }
     setDragging(null);
   };
+  const stepIds = steps.map((step) => String(step.config.stepKey));
+  const draggingType = dragging?.startsWith("palette:") ? dragging.slice(8) as (typeof editableStepTypes)[number] : steps.find((step) => String(step.config.stepKey) === dragging)?.type;
 
-  return <section className="mt-6 overflow-hidden rounded-2xl border border-white/8 bg-[#101218]"><input type="hidden" name="steps" value={JSON.stringify(steps)} />
+  return <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={({ active }) => setDragging(String(active.id))} onDragCancel={() => setDragging(null)} onDragEnd={handleDragEnd}><section className="mt-6 overflow-hidden rounded-2xl border border-white/8 bg-[#101218]"><input type="hidden" name="steps" value={JSON.stringify(steps)} />
     <div className="border-b border-white/8 p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-sm font-medium text-white">Diagrama del flujo</h3><p className="mt-1 text-xs text-zinc-600">Arrastra un bloque al lienzo o toma el asa de un paso para cambiar su orden.</p></div><span className="rounded-full bg-white/5 px-3 py-1.5 text-[11px] text-zinc-500">{steps.length} bloques</span></div>
-      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">{editableStepTypes.filter((type) => type !== "END").map((type) => <button key={type} type="button" draggable onDragStart={(event) => { event.dataTransfer.setData("text/workflow-step", `new:${type}`); event.dataTransfer.effectAllowed = "copy"; setDragging(`new:${type}`); }} onDragEnd={() => setDragging(null)} onClick={() => addStep(type)} className="group flex cursor-grab items-center gap-2 rounded-xl border border-white/8 bg-white/[.025] px-3 py-2.5 text-left text-[11px] text-zinc-400 transition hover:border-violet-400/30 hover:bg-violet-400/8 hover:text-white active:cursor-grabbing"><StepIcon type={type} /><span>{stepTypeLabels[type]}</span></button>)}</div>
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">{editableStepTypes.filter((type) => type !== "END").map((type) => <PaletteBlock key={type} type={type} onClick={() => addStep(type)} />)}</div>
     </div>
     <div className="relative mx-auto max-w-3xl px-3 py-5 sm:px-6">
       <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/8 px-4 py-2 text-xs font-medium text-emerald-300"><Zap className="size-3.5" />Inicio</div>
-      <DropConnector active={dragging !== null} onDrop={(event) => dropAt(event, 0)} />
-      {steps.map((step, index) => <div key={String(step.config.stepKey)}>
-        <article className={`relative rounded-2xl border bg-[#181a21] shadow-lg shadow-black/15 transition ${dragging === `step:${index}` ? "scale-[.99] border-violet-400/50 opacity-45" : step.type === "CONDITION" ? "border-amber-400/20" : step.type === "END" ? "border-emerald-400/20" : "border-white/10"}`}>
-          <div className="flex items-center gap-3 border-b border-white/7 px-3 py-3 sm:px-4">
-            {step.type !== "END" ? <button type="button" draggable onDragStart={(event) => { event.stopPropagation(); event.dataTransfer.setData("text/workflow-step", `step:${index}`); event.dataTransfer.effectAllowed = "move"; setDragging(`step:${index}`); }} onDragEnd={() => setDragging(null)} aria-label={`Arrastrar paso ${index + 1}`} title="Arrastra para cambiar la posición" className="cursor-grab rounded-lg p-1.5 text-zinc-600 hover:bg-white/5 hover:text-zinc-300 active:cursor-grabbing"><GripVertical className="size-4" /></button> : <span className="w-7" />}
-            <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-white/5 text-violet-300"><StepIcon type={step.type} /></span>
-            <span className="grid size-6 shrink-0 place-items-center rounded-full bg-violet-400/10 text-[10px] font-semibold text-violet-300">{index + 1}</span>
-            <input value={step.name} onChange={(event) => update(index, { name: event.target.value })} aria-label={`Nombre del paso ${index + 1}`} className="min-w-0 flex-1 bg-transparent text-sm font-medium text-zinc-100 outline-none focus:text-white" />
-            <span className="hidden rounded-md bg-white/5 px-2 py-1 text-[10px] text-zinc-500 sm:block">{stepTypeLabels[step.type]}</span>
-            <button type="button" disabled={index === 0 || step.type === "END"} onClick={() => move(index, -1)} aria-label="Mover arriba" className="rounded-md p-1 text-zinc-600 hover:bg-white/5 hover:text-white disabled:opacity-20"><ArrowUp className="size-4" /></button>
-            <button type="button" disabled={index >= steps.length - 2 || step.type === "END"} onClick={() => move(index, 1)} aria-label="Mover abajo" className="rounded-md p-1 text-zinc-600 hover:bg-white/5 hover:text-white disabled:opacity-20"><ArrowDown className="size-4" /></button>
-            <button type="button" disabled={step.type === "END"} onClick={() => setSteps((current) => clearBackwardWorkflowConnections(current.filter((_, position) => position !== index)))} aria-label="Eliminar paso" className="rounded-md p-1 text-zinc-600 hover:bg-red-400/8 hover:text-red-300 disabled:opacity-20"><Trash2 className="size-4" /></button>
-          </div>
-          <div className="p-3 sm:p-4"><StepConfig step={step} stepIndex={index} steps={steps} templates={templates} publishedWorkflows={publishedWorkflows} onChange={(patch) => update(index, patch)} />{step.type !== "CONDITION" && step.type !== "END" ? <NextStepSelect step={step} targets={steps.slice(index + 1)} onChange={(value) => update(index, { config: { ...step.config, nextTargetKey: value || undefined } })} /> : null}</div>
-        </article>
-        {index < steps.length - 1 ? <DropConnector active={dragging !== null} onDrop={(event) => dropAt(event, index + 1)} condition={step.type === "CONDITION"} /> : null}
-      </div>)}
+      <DropConnector active={dragging !== null} />
+      <SortableContext items={stepIds} strategy={verticalListSortingStrategy}>{steps.map((step, index) => <SortableStepCard key={String(step.config.stepKey)} step={step} index={index} steps={steps} dragging={dragging} templates={templates} publishedWorkflows={publishedWorkflows} update={update} move={move} remove={() => setSteps((current) => clearBackwardWorkflowConnections(current.filter((_, position) => position !== index)))} />)}</SortableContext>
     </div>
-  </section>;
+  </section><DragOverlay dropAnimation={{ duration: 180, easing: "ease-out" }}>{draggingType ? <div className="flex items-center gap-2 rounded-xl border border-violet-400/50 bg-[#20222b] px-4 py-3 text-sm font-medium text-white shadow-2xl shadow-black/60"><GripVertical className="size-4 text-violet-300" /><StepIcon type={draggingType} />{stepTypeLabels[draggingType]}</div> : null}</DragOverlay></DndContext>;
 }
 
-function DropConnector({ active, condition = false, onDrop }: { active: boolean; condition?: boolean; onDrop: (event: DragEvent) => void }) {
-  return <div onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={onDrop} className={`group relative mx-auto flex h-12 w-full max-w-xl items-center justify-center transition ${active ? "my-1 rounded-xl border border-dashed border-violet-400/30 bg-violet-400/[.035]" : ""}`}><span className={`h-full w-px ${condition ? "bg-gradient-to-b from-amber-400/50 to-violet-400/40" : "bg-white/12"}`} /><span className={`absolute rounded-full border bg-[#181a21] px-2 py-0.5 text-[9px] transition ${active ? "border-violet-400/30 text-violet-300" : "border-white/8 text-zinc-700"}`}>{active ? "Soltar aquí" : condition ? "ramifica" : "continúa"}</span></div>;
+function PaletteBlock({ type, onClick }: { type: (typeof editableStepTypes)[number]; onClick: () => void }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `palette:${type}` });
+  return <button ref={setNodeRef} {...attributes} {...listeners} type="button" onClick={() => { if (!isDragging) onClick(); }} className={`group flex touch-none cursor-grab items-center gap-2 rounded-xl border border-white/8 bg-white/[.025] px-3 py-2.5 text-left text-[11px] text-zinc-400 transition hover:border-violet-400/30 hover:bg-violet-400/8 hover:text-white active:cursor-grabbing ${isDragging ? "opacity-40" : ""}`}><StepIcon type={type} /><span>{stepTypeLabels[type]}</span></button>;
+}
+
+function SortableStepCard({ step, index, steps, dragging, templates, publishedWorkflows, update, move, remove }: { step: WorkflowDefinitionInput["steps"][number]; index: number; steps: WorkflowDefinitionInput["steps"]; dragging: string | null; templates: TemplateOption[]; publishedWorkflows: Pick<WorkflowView, "id" | "name">[]; update: (index: number, patch: Partial<WorkflowDefinitionInput["steps"][number]>) => void; move: (index: number, offset: number) => void; remove: () => void }) {
+  const id = String(step.config.stepKey);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({ id, disabled: { draggable: step.type === "END" } });
+  return <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className="relative z-10">
+    <article className={`relative rounded-2xl border bg-[#181a21] shadow-lg shadow-black/15 transition-colors ${isDragging ? "border-violet-400/50 opacity-35" : isOver && dragging ? "border-violet-400/60 ring-2 ring-violet-400/15" : step.type === "CONDITION" ? "border-amber-400/20" : step.type === "END" ? "border-emerald-400/20" : "border-white/10"}`}>
+      <div className="flex items-center gap-3 border-b border-white/7 px-3 py-3 sm:px-4">
+        {step.type !== "END" ? <button type="button" {...attributes} {...listeners} aria-label={`Arrastrar paso ${index + 1}`} title="Arrastra para cambiar la posición" className="touch-none cursor-grab rounded-lg p-1.5 text-zinc-600 hover:bg-white/5 hover:text-zinc-300 active:cursor-grabbing"><GripVertical className="size-4" /></button> : <span className="w-7" />}
+        <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-white/5 text-violet-300"><StepIcon type={step.type} /></span>
+        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-violet-400/10 text-[10px] font-semibold text-violet-300">{index + 1}</span>
+        <input value={step.name} onChange={(event) => update(index, { name: event.target.value })} aria-label={`Nombre del paso ${index + 1}`} className="min-w-0 flex-1 bg-transparent text-sm font-medium text-zinc-100 outline-none focus:text-white" />
+        <span className="hidden rounded-md bg-white/5 px-2 py-1 text-[10px] text-zinc-500 sm:block">{stepTypeLabels[step.type]}</span>
+        <button type="button" disabled={index === 0 || step.type === "END"} onClick={() => move(index, -1)} aria-label="Mover arriba" className="rounded-md p-1 text-zinc-600 hover:bg-white/5 hover:text-white disabled:opacity-20"><ArrowUp className="size-4" /></button>
+        <button type="button" disabled={index >= steps.length - 2 || step.type === "END"} onClick={() => move(index, 1)} aria-label="Mover abajo" className="rounded-md p-1 text-zinc-600 hover:bg-white/5 hover:text-white disabled:opacity-20"><ArrowDown className="size-4" /></button>
+        <button type="button" disabled={step.type === "END"} onClick={remove} aria-label="Eliminar paso" className="rounded-md p-1 text-zinc-600 hover:bg-red-400/8 hover:text-red-300 disabled:opacity-20"><Trash2 className="size-4" /></button>
+      </div>
+      <div className="p-3 sm:p-4"><StepConfig step={step} stepIndex={index} steps={steps} templates={templates} publishedWorkflows={publishedWorkflows} onChange={(patch) => update(index, patch)} />{step.type !== "CONDITION" && step.type !== "END" ? <NextStepSelect step={step} targets={steps.slice(index + 1)} onChange={(value) => update(index, { config: { ...step.config, nextTargetKey: value || undefined } })} /> : null}</div>
+    </article>
+    {index < steps.length - 1 ? <DropConnector active={dragging !== null} condition={step.type === "CONDITION"} /> : null}
+  </div>;
+}
+
+function DropConnector({ active, condition = false }: { active: boolean; condition?: boolean }) {
+  return <div className="group relative mx-auto flex h-12 w-full max-w-xl items-center justify-center transition"><span className={`h-full w-px ${condition ? "bg-gradient-to-b from-amber-400/50 to-violet-400/40" : "bg-white/12"}`} /><span className={`absolute rounded-full border bg-[#181a21] px-2 py-0.5 text-[9px] transition ${active ? "border-violet-400/30 text-violet-300" : "border-white/8 text-zinc-700"}`}>{active ? "Suelta sobre un bloque" : condition ? "ramifica" : "continúa"}</span></div>;
 }
 
 function StepIcon({ type }: { type: WorkflowDefinitionInput["steps"][number]["type"] }) {
