@@ -33,6 +33,7 @@ async function processInBatches<T>(items: T[], worker: (item: T) => Promise<void
 }
 
 export async function runInitialFanvueSync(creatorId: string): Promise<InitialSyncResult> {
+  const presenceObservedAt = new Date();
   const accessToken = await getValidFanvueAccessToken(creatorId);
   const [followers, subscribers, chats, earnings, creatorAccounts, expiredSubscribers, freeTrialSubscribers, autoRenewingSubscribers, nonRenewingSubscribers, mutedFans, account, profile] = await Promise.all([
     fetchAllCursorPages("/v1/followers", accessToken, followersPageSchema),
@@ -127,8 +128,8 @@ export async function runInitialFanvueSync(creatorId: string): Promise<InitialSy
   await processInBatches(chats, async (chat) => {
       const fan = await prisma.fan.upsert({
         where: { creatorId_fanvueUserId: { creatorId, fanvueUserId: chat.user.uuid } },
-        update: { username: chat.user.handle, displayName: chat.user.displayName, avatarUrl: chat.user.avatarUrl, isCreatorAccount: chat.isCreator ?? false, isTopSpender: chat.user.isTopSpender, isOnline: chat.online, isMuted: chat.isMuted, lastActivityAt: chat.lastMessageAt ? new Date(chat.lastMessageAt) : undefined },
-        create: { creatorId, fanvueUserId: chat.user.uuid, username: chat.user.handle, displayName: chat.user.displayName, avatarUrl: chat.user.avatarUrl, isCreatorAccount: chat.isCreator ?? false, isTopSpender: chat.user.isTopSpender, isOnline: chat.online ?? false, isMuted: chat.isMuted, lastActivityAt: chat.lastMessageAt ? new Date(chat.lastMessageAt) : undefined },
+        update: { username: chat.user.handle, displayName: chat.user.displayName, avatarUrl: chat.user.avatarUrl, isCreatorAccount: chat.isCreator ?? false, isTopSpender: chat.user.isTopSpender, isOnline: chat.online, presenceChangedAt: typeof chat.online === "boolean" ? presenceObservedAt : undefined, isMuted: chat.isMuted, lastActivityAt: chat.lastMessageAt ? new Date(chat.lastMessageAt) : undefined },
+        create: { creatorId, fanvueUserId: chat.user.uuid, username: chat.user.handle, displayName: chat.user.displayName, avatarUrl: chat.user.avatarUrl, isCreatorAccount: chat.isCreator ?? false, isTopSpender: chat.user.isTopSpender, isOnline: chat.online ?? false, presenceChangedAt: typeof chat.online === "boolean" ? presenceObservedAt : null, isMuted: chat.isMuted, lastActivityAt: chat.lastMessageAt ? new Date(chat.lastMessageAt) : undefined },
       });
       const conversation = await prisma.conversation.upsert({
         where: { creatorId_fanId: { creatorId, fanId: fan.id } },
