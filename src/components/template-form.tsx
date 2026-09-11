@@ -1,9 +1,11 @@
 "use client";
 
 import { Braces, LoaderCircle, Save } from "lucide-react";
-import { useRef, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { MediaFields, type AttachedMedia } from "@/components/media-fields";
+import { enqueueSnackbar } from "notistack";
+import { hasLockedPpvMedia } from "@/domain/templates/ppv";
 
 const categories = {
   WELCOME: "Bienvenida",
@@ -43,8 +45,21 @@ export function TemplateForm({
       );
     });
   }
+  function validatePpv(event: FormEvent<HTMLFormElement>) {
+    const form = new FormData(event.currentTarget);
+    if (!String(form.get("price") || "").trim()) return;
+    try {
+      const media = JSON.parse(String(form.get("mediaJson") || "[]")) as Array<{ uuid: string }>;
+      const previewUuid = String(form.get("previewUuid") || "") || null;
+      if (hasLockedPpvMedia(media, previewUuid)) return;
+    } catch {
+      // The server performs the authoritative validation as well.
+    }
+    event.preventDefault();
+    enqueueSnackbar("Agrega al menos una foto o video bloqueado además de la vista gratuita.", { variant: "error" });
+  }
   return (
-    <form action="/api/templates" method="post" className="space-y-5">
+    <form action="/api/templates" method="post" onSubmit={validatePpv} className="space-y-5">
       <input
         type="hidden"
         name="action"

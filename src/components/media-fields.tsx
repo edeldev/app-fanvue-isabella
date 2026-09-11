@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Eye, FolderOpen, ImageOff, ImagePlus, LoaderCircle, LockKeyhole, X } from "lucide-react";
+import { Expand, Eye, FolderOpen, ImageOff, ImagePlus, LoaderCircle, LockKeyhole, X } from "lucide-react";
 import { ExpandableImage } from "@/components/expandable-image";
 import { enqueueSnackbar } from "notistack";
 import { VaultMediaPicker } from "@/components/vault-media-picker";
+import { MediaLightbox } from "@/components/media-lightbox";
 
 export type AttachedMedia = {
   uuid: string;
@@ -32,6 +33,9 @@ export function MediaFields({
   const [vaultOpen, setVaultOpen] = useState(false);
   const [resolvingMedia, setResolvingMedia] = useState(initialMedia.some((item) => !item.localUrl));
   const objectUrls = useRef(new Set<string>());
+  const missingLockedMedia = Boolean(
+    price && previewUuid && media.every((item) => item.uuid === previewUuid),
+  );
 
   useEffect(() => {
     const urls = objectUrls.current;
@@ -222,8 +226,10 @@ export function MediaFields({
               className="ml-3 w-28 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-amber-400/50"
             />
           </label>
-          <p className="mt-2 text-[11px] leading-4 text-zinc-500">
-            {price
+          <p className={`mt-2 text-[11px] leading-4 ${missingLockedMedia ? "font-medium text-red-300" : "text-zinc-500"}`}>
+            {missingLockedMedia
+              ? "Falta contenido bloqueado. Agrega otra foto o video, o quita el precio."
+              : price
               ? "Todo queda bloqueado salvo el archivo que marques como vista previa gratuita."
               : "Sin precio, todos los archivos serán visibles gratuitamente."}
           </p>
@@ -235,7 +241,8 @@ export function MediaFields({
 }
 
 function VideoPreview({ src, poster, name }: { src: string; poster?: string; name: string }) {
+  const [open, setOpen] = useState(false);
   const [state, setState] = useState<{ src: string; status: "loading" | "loaded" | "error" }>({ src, status: "loading" });
   const status = state.src === src ? state.status : "loading";
-  return <div className="relative h-28 overflow-hidden bg-white/[.035]">{status === "loading" ? <span className="absolute inset-0 z-10 grid animate-pulse place-items-center bg-gradient-to-br from-white/[.06] via-white/[.025] to-transparent text-zinc-500"><span className="text-center"><LoaderCircle className="mx-auto mb-2 size-5 animate-spin" /><span className="text-[10px]">Cargando video…</span></span></span> : null}{status === "error" ? <span className="absolute inset-0 z-10 grid place-items-center text-zinc-600"><span className="text-center"><ImageOff className="mx-auto mb-2 size-5" /><span className="text-[10px]">Vista previa no disponible</span></span></span> : null}<video src={src} poster={poster} controls preload="metadata" aria-label={name} onLoadedData={() => setState({ src, status: "loaded" })} onError={() => setState({ src, status: "error" })} className={`h-28 w-full object-cover transition-opacity duration-300 ${status === "loaded" ? "opacity-100" : "opacity-0"}`} /></div>;
+  return <><button type="button" disabled={status !== "loaded"} onClick={() => setOpen(true)} aria-label={`Ampliar ${name}`} className="group relative block h-28 w-full overflow-hidden bg-black disabled:cursor-default">{status === "loading" ? <span className="absolute inset-0 z-10 grid animate-pulse place-items-center bg-gradient-to-br from-white/[.06] via-white/[.025] to-transparent text-zinc-500"><span className="text-center"><LoaderCircle className="mx-auto mb-2 size-5 animate-spin" /><span className="text-[10px]">Cargando video…</span></span></span> : null}{status === "error" ? <span className="absolute inset-0 z-10 grid place-items-center text-zinc-600"><span className="text-center"><ImageOff className="mx-auto mb-2 size-5" /><span className="text-[10px]">Vista previa no disponible</span></span></span> : null}<video src={src} poster={poster} muted playsInline preload="metadata" aria-label={name} onLoadedData={() => setState({ src, status: "loaded" })} onError={() => setState({ src, status: "error" })} className={`pointer-events-none h-28 w-full object-contain transition-opacity duration-300 ${status === "loaded" ? "opacity-100" : "opacity-0"}`} /><span className="absolute right-2 top-2 grid size-8 place-items-center rounded-full bg-black/65 text-white opacity-0 backdrop-blur transition group-hover:opacity-100 group-focus-visible:opacity-100"><Expand className="size-4" /></span></button>{open ? <MediaLightbox src={src} type="video" name={name} poster={poster} onClose={() => setOpen(false)} /> : null}</>;
 }

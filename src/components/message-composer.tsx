@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { FileText, Plus, Send, Sparkles } from "lucide-react";
+import { useFormStatus } from "react-dom";
+import { useSearchParams } from "next/navigation";
+import { Check, FileText, LoaderCircle, Plus, Send, Sparkles } from "lucide-react";
 import { MediaFields, type AttachedMedia } from "@/components/media-fields";
 
 type Template = { id: string; name: string; text: string; category: string; media: AttachedMedia[]; priceMinor: number | null; previewUuid: string | null };
@@ -80,7 +82,32 @@ export function MessageComposer({ fanUuid, fanName, username, templates }: { fan
     <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 shadow-inner focus-within:border-violet-500/45">
       <button type="button" aria-label="Agregar fotos y videos" title="Agregar fotos y videos" onClick={() => { setCommand(null); setMediaOpen(open => !open); }} className={`grid size-10 shrink-0 place-items-center rounded-xl transition ${mediaOpen ? "rotate-45 bg-violet-500 text-white" : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"}`}><Plus className="size-5" /></button>
       <div className="min-w-0 flex-1"><textarea ref={textarea} name="text" value={text} onChange={event => { setText(event.target.value); updateCommand(event.target.value, event.target.selectionStart); }} onClick={event => updateCommand(text, event.currentTarget.selectionStart)} onKeyDown={handleKeyDown} maxLength={5000} rows={1} placeholder="Escribe un mensaje o / para usar una plantilla…" className="max-h-32 min-h-10 w-full resize-none bg-transparent px-2 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-600" /><div className="flex gap-1 px-2 pb-1">{["{{nombre}}", "{{usuario}}"].map(variable => <button key={variable} type="button" onClick={() => insertVariable(variable)} className="rounded px-1.5 py-0.5 font-mono text-[9px] text-zinc-600 hover:bg-violet-500/10 hover:text-violet-300">{variable}</button>)}</div></div>
-      <button aria-label="Enviar mensaje" className="grid size-10 shrink-0 place-items-center rounded-xl bg-violet-500 text-white shadow-lg shadow-violet-950/30 transition hover:bg-violet-400"><Send className="size-4" /></button>
+      <SendMessageButton />
     </div>
   </form>;
+}
+
+function SendMessageButton() {
+  const { pending } = useFormStatus();
+  const sent = useSearchParams().has("sent");
+  const label = pending ? "Enviando mensaje" : sent ? "Mensaje enviado" : "Enviar mensaje";
+
+  return (
+    <button
+      type="submit"
+      disabled={pending || sent}
+      aria-label={label}
+      aria-busy={pending}
+      title={label}
+      className={`grid size-10 shrink-0 place-items-center rounded-xl text-white shadow-lg transition-all duration-200 ${sent ? "bg-emerald-500 shadow-emerald-950/30" : "bg-violet-500 shadow-violet-950/30 hover:bg-violet-400"} disabled:cursor-wait`}
+    >
+      {pending ? (
+        <LoaderCircle className="size-4 animate-spin" />
+      ) : sent ? (
+        <Check className="message-send-check size-5 stroke-[3]" />
+      ) : (
+        <Send className="size-4" />
+      )}
+    </button>
+  );
 }

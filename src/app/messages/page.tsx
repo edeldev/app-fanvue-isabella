@@ -22,6 +22,7 @@ import {
   readCreatorSession,
 } from "@/lib/session/creator-session";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
+import { fanFilterWhere, isFanOnlineNow, type FanFilter } from "@/domain/fans/filters";
 
 type Props = {
   searchParams: Promise<{
@@ -46,6 +47,21 @@ const audience = [
   { isSubscriber: true },
   { isExpiredSubscriber: true },
 ];
+const conversationFilters = [
+  { value: "all", label: "Todos" },
+  { value: "unread", label: "No leídos" },
+  { value: "online", label: "En línea", fanFilter: "ONLINE" },
+  { value: "subscribers", label: "Suscriptores", fanFilter: "ACTIVE_SUBSCRIBERS" },
+  { value: "paid", label: "De pago", fanFilter: "PAID_SUBSCRIBERS" },
+  { value: "trial", label: "Prueba gratuita", fanFilter: "FREE_TRIAL_SUBSCRIBERS" },
+  { value: "followers", label: "Seguidores", fanFilter: "FOLLOWERS" },
+  { value: "followers_only", label: "Solo seguidores", fanFilter: "FOLLOWERS_ONLY" },
+  { value: "expired", label: "Vencidos", fanFilter: "EXPIRED_SUBSCRIBERS" },
+  { value: "spent_50", label: "Gastaron +$50", fanFilter: "SPENT_MORE_THAN_50" },
+  { value: "tipped", label: "Dieron propina", fanFilter: "HAS_TIPPED" },
+  { value: "purchased", label: "Compraron", fanFilter: "HAS_PURCHASED" },
+  { value: "vip", label: "VIP", fanFilter: "TOP_SPENDERS" },
+] as const satisfies ReadonlyArray<{ value: string; label: string; fanFilter?: FanFilter }>;
 const initials = (name: string) =>
   name
     .split(/\s+/)
@@ -60,7 +76,14 @@ export default async function MessagesPage({ searchParams }: Props) {
     (await cookies()).get(CREATOR_SESSION_COOKIE)?.value,
   );
   const query = params.q?.trim() ?? "";
-  const unreadOnly = params.filter === "unread";
+  const activeFilter = conversationFilters.some((item) => item.value === params.filter)
+    ? params.filter!
+    : "all";
+  const unreadOnly = activeFilter === "unread";
+  const selectedFilter = conversationFilters.find((item) => item.value === activeFilter);
+  const fanSegment = selectedFilter && "fanFilter" in selectedFilter
+    ? fanFilterWhere(selectedFilter.fanFilter)
+    : {};
   const conversations = creatorId
     ? await prisma.conversation.findMany({
         where: {
@@ -70,6 +93,7 @@ export default async function MessagesPage({ searchParams }: Props) {
             isCreatorAccount: false,
             AND: [
               { OR: audience },
+              fanSegment,
               ...(query
                 ? [
                     {
@@ -252,13 +276,19 @@ export default async function MessagesPage({ searchParams }: Props) {
   const conversationHref = (fanUuid: string) => {
     const next = new URLSearchParams({ fan: fanUuid });
     if (query) next.set("q", query);
-    if (unreadOnly) next.set("filter", "unread");
+    if (activeFilter !== "all") next.set("filter", activeFilter);
     return `/messages?${next}`;
   };
   const inboxParams = new URLSearchParams();
   if (query) inboxParams.set("q", query);
-  if (unreadOnly) inboxParams.set("filter", "unread");
+  if (activeFilter !== "all") inboxParams.set("filter", activeFilter);
   const inboxHref = inboxParams.size ? `/messages?${inboxParams}` : "/messages";
+  const filterHref = (filter: string) => {
+    const next = new URLSearchParams();
+    if (query) next.set("q", query);
+    if (filter !== "all") next.set("filter", filter);
+    return next.size ? `/messages?${next}` : "/messages";
+  };
   const conversationIsOpen = Boolean(params.fan);
 
   return (
@@ -293,23 +323,22 @@ export default async function MessagesPage({ searchParams }: Props) {
                     placeholder="Buscar conversación"
                     className="min-w-0 flex-1 bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-600"
                   />
-                  {unreadOnly ? (
-                    <input type="hidden" name="filter" value="unread" />
+                  {activeFilter !== "all" ? (
+                    <input type="hidden" name="filter" value={activeFilter} />
                   ) : null}
                 </form>
-                <div className="mt-3 flex items-center gap-2 text-xs">
-                  <Link
-                    href="/messages"
-                    className={`rounded-full px-3 py-1.5 ${!unreadOnly ? "bg-violet-500 text-white" : "bg-white/5 text-zinc-400"}`}
-                  >
-                    Todos
-                  </Link>
-                  <Link
-                    href="/messages?filter=unread"
-                    className={`rounded-full px-3 py-1.5 ${unreadOnly ? "bg-violet-500 text-white" : "bg-white/5 text-zinc-400"}`}
-                  >
-                    No leídos {unreadTotal > 0 ? `(${unreadTotal})` : ""}
-                  </Link>
+                <div className="mt-3 flex gap-2 overflow-x-auto pb-1 text-xs [scrollbar-width:thin]">
+                  {conversationFilters.map((filter) => (
+                    <Link
+                      key={filter.value}
+                      href={filterHref(filter.value)}
+                      prefetch={false}
+                      aria-current={activeFilter === filter.value ? "page" : undefined}
+                      className={`shrink-0 rounded-full border px-3 py-1.5 transition ${activeFilter === filter.value ? "border-violet-400/30 bg-violet-500 text-white shadow-md shadow-violet-950/30" : "border-white/8 bg-white/5 text-zinc-400 hover:border-white/15 hover:bg-white/8 hover:text-white"}`}
+                    >
+                      {filter.label}{filter.value === "unread" && unreadTotal > 0 ? ` (${unreadTotal})` : ""}
+                    </Link>
+                  ))}
                 </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto">
@@ -341,6 +370,10 @@ export default async function MessagesPage({ searchParams }: Props) {
                         <p className="mt-1 truncate text-xs text-zinc-500">
                           {last?.text || "Conversación sincronizada"}
                         </p>
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {isFanOnlineNow(item.fan.isOnline, item.fan.presenceChangedAt) ? <span className="rounded-full bg-emerald-400/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-300">En línea</span> : null}
+                          {item.fan.isSubscriber || item.fan.isFreeTrialSubscriber ? <span className="rounded-full bg-violet-400/10 px-1.5 py-0.5 text-[9px] font-medium text-violet-300">{item.fan.isFreeTrialSubscriber ? "Prueba" : "Suscriptor"}</span> : item.fan.isFollower ? <span className="rounded-full bg-sky-400/10 px-1.5 py-0.5 text-[9px] font-medium text-sky-300">Seguidor</span> : null}
+                        </div>
                         <p className="mt-1 text-[10px] text-zinc-700">
                           {item.lastMessageAt?.toLocaleString("es-MX") ??
                             "Sin fecha"}

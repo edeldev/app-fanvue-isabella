@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Expand } from "lucide-react";
 import { ExpandableImage } from "@/components/expandable-image";
+import { MediaGalleryLightbox, type LightboxMedia } from "@/components/media-lightbox";
 
 type Media = {
   uuid: string;
@@ -37,7 +38,20 @@ export function ChatMediaCarousel({
     ];
   }, [media, previewUuid]);
   const [index, setIndex] = useState(0);
+  const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
   const item = orderedMedia[index];
+  const galleryItems = useMemo(
+    () => orderedMedia.flatMap<LightboxMedia>((entry) =>
+      entry.url && (entry.mediaType === "image" || entry.mediaType === "video")
+        ? [{ id: entry.uuid, src: entry.url, type: entry.mediaType, name: entry.name || (entry.mediaType === "video" ? "Video del mensaje" : "Imagen del mensaje") }]
+        : [],
+    ),
+    [orderedMedia],
+  );
+  const openGallery = (uuid: string) => {
+    const position = galleryItems.findIndex((entry) => entry.id === uuid);
+    if (position >= 0) setGalleryIndex(position);
+  };
   const isPreview =
     previewUuid === item.uuid || item.variantUuids.includes(previewUuid ?? "");
   const previous = () =>
@@ -55,14 +69,10 @@ export function ChatMediaCarousel({
             src={item.url}
             alt={item.name || "Imagen del mensaje"}
             className="max-h-[420px] w-full object-contain"
+            onExpand={() => openGallery(item.uuid)}
           />
         ) : item.mediaType === "video" && item.url ? (
-          <video
-            src={item.url}
-            controls
-            preload="metadata"
-            className="max-h-[420px] w-full bg-black"
-          />
+          <div className="group relative w-full"><video src={item.url} controls preload="metadata" className="max-h-[420px] w-full bg-black object-contain" /><button type="button" onClick={() => openGallery(item.uuid)} aria-label={`Ampliar ${item.name || "video del mensaje"}`} className="absolute left-3 top-3 z-10 grid size-9 place-items-center rounded-full border border-white/10 bg-black/70 text-white backdrop-blur hover:bg-violet-500"><Expand className="size-4" /></button></div>
         ) : item.mediaType === "audio" && item.url ? (
           <audio
             src={item.url}
@@ -135,6 +145,7 @@ export function ChatMediaCarousel({
           ))}
         </div>
       ) : null}
+      {galleryIndex !== null ? <MediaGalleryLightbox items={galleryItems} initialIndex={galleryIndex} onClose={() => setGalleryIndex(null)} /> : null}
     </div>
   );
 }

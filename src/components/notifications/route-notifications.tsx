@@ -69,6 +69,19 @@ export function RouteNotifications() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const handled = useRef("");
+  const messageSent = pathname === "/messages" && searchParams.has("sent");
+
+  useEffect(() => {
+    if (!messageSent) return;
+    const timeout = window.setTimeout(() => {
+      const clean = new URLSearchParams(searchParams);
+      clean.delete("sent");
+      router.replace(clean.size ? `${pathname}?${clean}` : pathname, {
+        scroll: false,
+      });
+    }, 900);
+    return () => window.clearTimeout(timeout);
+  }, [messageSent, pathname, router, searchParams]);
 
   useEffect(() => {
     const serialized = searchParams.toString();
@@ -79,11 +92,12 @@ export function RouteNotifications() {
     const sync = searchParams.get("sync");
     if (fanvue && fanvueNotices[fanvue]) notices.push(fanvueNotices[fanvue]);
     if (sync && syncNotices[sync]) notices.push(syncNotices[sync]);
-    if (pathname === "/messages" && searchParams.has("sent"))
+    if (pathname === "/messages" && searchParams.has("sent")) {
       notices.push({
         message: "Mensaje enviado correctamente.",
         variant: "success",
       });
+    }
     const error = searchParams.get("error");
     if (pathname === "/messages" && error)
       notices.push({
@@ -120,10 +134,10 @@ export function RouteNotifications() {
       "error",
       "retryAfter",
     ].forEach((name) => clean.delete(name));
-    router.replace(clean.size ? `${pathname}?${clean}` : pathname, {
-      scroll: false,
-    });
-  }, [pathname, router, searchParams]);
+    if (messageSent) return;
+    const cleanUrl = clean.size ? `${pathname}?${clean}` : pathname;
+    router.replace(cleanUrl, { scroll: false });
+  }, [messageSent, pathname, router, searchParams]);
 
   return null;
 }
