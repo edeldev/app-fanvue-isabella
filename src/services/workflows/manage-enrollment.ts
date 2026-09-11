@@ -109,7 +109,11 @@ export async function pauseEnrollmentsOnFanReply(creatorId: string, fanId: strin
   let paused = 0;
   await prisma.$transaction(async (transaction) => {
     for (const enrollment of enrollments) {
-      const remainingSeconds = enrollment.status === "WAITING" || (enrollment.status === "PAUSED" && enrollment.pausedFromStatus === "WAITING") ? 0 : null;
+      const remainingSeconds = enrollment.status === "WAITING"
+        ? remainingWaitSeconds(enrollment.nextRunAt, repliedAt)
+        : enrollment.pausedFromStatus === "WAITING"
+          ? enrollment.pausedRemainingSeconds
+          : null;
       const pausedFromStatus = enrollment.status === "PAUSED" ? enrollment.pausedFromStatus : enrollment.status;
       const autoResumeAt = new Date(repliedAt.getTime() + enrollment.workflow.replySilenceMinutes * 60_000);
       const updated = await transaction.workflowEnrollment.updateMany({
