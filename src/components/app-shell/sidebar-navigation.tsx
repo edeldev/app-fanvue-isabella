@@ -24,7 +24,7 @@ const navigation = [
   ["Configuración", "/settings", Settings],
 ] as const;
 
-export function SidebarNavigation() {
+export function SidebarNavigation({ onNavigate }: { onNavigate?: () => void } = {}) {
   const pathname = usePathname();
 
   return (
@@ -39,6 +39,7 @@ export function SidebarNavigation() {
             key={href}
             href={href}
             aria-current={active ? "page" : undefined}
+            onClick={onNavigate}
             className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${active ? "bg-white/8 font-medium text-white" : "text-zinc-400 hover:bg-white/5 hover:text-zinc-100"}`}
           >
             <Icon className={`size-4 ${active ? "text-violet-400" : ""}`} />

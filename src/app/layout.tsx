@@ -22,6 +22,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="es" className="h-full antialiased">
       <body className="min-h-full">
+        <a href="#main-content" className="fixed left-4 top-4 z-[200] -translate-y-24 rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white shadow-xl transition focus:translate-y-0">Saltar al contenido principal</a>
         {creatorId ? (
           <>
             <WorkflowAutoRunner />

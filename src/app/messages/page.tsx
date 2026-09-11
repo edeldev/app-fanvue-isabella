@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
-import { MessageCircle, Search } from "lucide-react";
+import { ArrowLeft, MessageCircle, Search } from "lucide-react";
 import { Sidebar } from "@/components/app-shell/sidebar";
 import { Topbar } from "@/components/app-shell/topbar";
 import { LiveRefresh } from "@/components/live-refresh";
@@ -255,6 +255,11 @@ export default async function MessagesPage({ searchParams }: Props) {
     if (unreadOnly) next.set("filter", "unread");
     return `/messages?${next}`;
   };
+  const inboxParams = new URLSearchParams();
+  if (query) inboxParams.set("q", query);
+  if (unreadOnly) inboxParams.set("filter", "unread");
+  const inboxHref = inboxParams.size ? `/messages?${inboxParams}` : "/messages";
+  const conversationIsOpen = Boolean(params.fan);
 
   return (
     <div className="flex min-h-screen bg-[#101218] text-zinc-100 md:h-dvh md:overflow-hidden">
@@ -265,7 +270,7 @@ export default async function MessagesPage({ searchParams }: Props) {
       <Sidebar />
       <div className="min-w-0 flex-1 md:flex md:h-dvh md:flex-col md:overflow-hidden">
         <Topbar />
-        <main className="mx-auto flex w-full max-w-[1500px] flex-1 flex-col px-5 py-5 md:min-h-0 md:px-8">
+        <main id="main-content" tabIndex={-1} className="mx-auto flex w-full max-w-[1500px] flex-1 flex-col px-3 py-4 sm:px-5 sm:py-5 md:min-h-0 md:px-8">
           <div className="mb-4 shrink-0">
             <p className="mb-1 text-xs font-medium uppercase tracking-[.18em] text-violet-400">
               Bandeja de entrada
@@ -288,7 +293,7 @@ export default async function MessagesPage({ searchParams }: Props) {
             </p>
           ) : null}
           <div className="grid min-h-[620px] flex-1 overflow-hidden rounded-2xl border border-white/8 bg-white/[.025] md:min-h-0 md:grid-cols-[340px_minmax(0,1fr)]">
-            <section className="flex min-h-0 flex-col border-b border-white/8 md:border-b-0 md:border-r">
+            <section className={`${conversationIsOpen ? "hidden md:flex" : "flex"} min-h-0 flex-col border-b border-white/8 md:border-b-0 md:border-r`}>
               <div className="shrink-0 border-b border-white/8 p-4">
                 <form className="flex items-center gap-2 rounded-xl border border-white/8 bg-black/20 px-3 py-2.5">
                   <Search className="size-4 text-zinc-600" />
@@ -369,18 +374,19 @@ export default async function MessagesPage({ searchParams }: Props) {
                 ) : null}
               </div>
             </section>
-            <section className="flex min-h-0 min-w-0 flex-col">
+            <section className={`${conversationIsOpen ? "flex" : "hidden md:flex"} min-h-0 min-w-0 flex-col`}>
               {selected ? (
                 <>
-                  <header className="shrink-0 border-b border-white/8 px-5 py-3">
-                    <p className="font-medium text-zinc-200">
+                  <header className="flex shrink-0 items-center gap-3 border-b border-white/8 px-4 py-3 md:px-5">
+                    <Link href={inboxHref} aria-label="Volver a conversaciones" className="grid size-9 shrink-0 place-items-center rounded-lg border border-white/8 text-zinc-400 hover:bg-white/5 hover:text-white md:hidden"><ArrowLeft className="size-4" /></Link>
+                    <div className="min-w-0"><p className="truncate font-medium text-zinc-200">
                       {selected.fan.displayName ||
                         selected.fan.username ||
                         "Fan"}
                     </p>
-                    <p className="text-xs text-zinc-600">
+                    <p className="truncate text-xs text-zinc-600">
                       @{selected.fan.username || "sin-usuario"}
-                    </p>
+                    </p></div>
                   </header>
                   <MessageHistory conversationKey={selected.id}>
                     {historyError ? (

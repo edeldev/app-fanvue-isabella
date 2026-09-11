@@ -6,6 +6,7 @@ import {
   readCreatorSession,
 } from "@/lib/session/creator-session";
 import { WorkflowAlertsMenu } from "./workflow-alerts-menu";
+import { MobileNavigation } from "./mobile-navigation";
 
 export async function Topbar() {
   const cookieStore = await cookies();
@@ -51,7 +52,8 @@ export async function Topbar() {
 
   return (
     <header className="relative z-30 flex h-16 items-center justify-between border-b border-white/8 bg-[#101218]/85 px-5 md:px-8">
-      <div className="flex items-center gap-3 text-zinc-500">
+      <div className="flex min-w-0 items-center gap-3 text-zinc-500">
+        <MobileNavigation />
         <Search className="size-4" />
         <span className="hidden text-sm sm:inline">
           Buscar fans, mensajes y workflows…
@@ -76,7 +78,7 @@ export async function Topbar() {
                 initials
               )}
             </summary>
-            <div className="absolute right-0 mt-3 w-80 overflow-hidden rounded-2xl border border-white/10 bg-[#181a21] p-4 shadow-2xl shadow-black/50">
+            <div className="absolute right-0 mt-3 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-[#181a21] p-4 shadow-2xl shadow-black/50">
               <div className="flex items-center gap-3">
                 <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-violet-400 to-fuchsia-600 text-sm font-semibold text-white">
                   {creator.avatarUrl ? (

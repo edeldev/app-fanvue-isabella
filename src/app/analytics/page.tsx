@@ -81,7 +81,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
   const templateRows = [...templateMap.values()].sort((left, right) => right.revenueMinor - left.revenueMinor || right.sends - left.sends);
   const timeline = buildTimeline(range.from, range.to, purchases, allLogs);
 
-  return <div className="flex min-h-screen bg-[#101218] text-zinc-100"><Sidebar /><div className="min-w-0 flex-1"><Topbar /><main className="mx-auto max-w-375 px-5 py-8 md:px-8">
+  return <div className="flex min-h-screen bg-[#101218] text-zinc-100"><Sidebar /><div className="min-w-0 flex-1"><Topbar /><main id="main-content" tabIndex={-1} className="mx-auto max-w-375 px-4 py-6 sm:px-5 sm:py-8 md:px-8">
     <div className="flex flex-wrap items-end justify-between gap-5"><div><p className="mb-2 text-xs font-medium uppercase tracking-[.18em] text-violet-400">Resultados</p><h1 className="text-3xl font-semibold tracking-tight text-white">Analítica real</h1><p className="mt-2 max-w-2xl text-sm text-zinc-500">Ingresos confirmados por Fanvue y resultados atribuibles a tus workflows.</p></div><RangeFilter range={range} /></div>
     {!creatorId ? <div className="mt-8 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-6 text-amber-200">Conecta Fanvue para consultar tus resultados.</div> : <>
       <section className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

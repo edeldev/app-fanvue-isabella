@@ -19,7 +19,25 @@ body {
 }
 
 * { box-sizing: border-box; }
-button, a { outline-offset: 3px; }
+html { min-width: 320px; }
+button, a, input, select, textarea, summary { outline-offset: 3px; }
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+summary,
+select:not(:disabled) { cursor: pointer; }
+button:disabled,
+[role="button"][aria-disabled="true"],
+select:disabled { cursor: not-allowed; }
+:focus-visible { outline: 2px solid #a78bfa; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 
 /* El editor contiene selects con etiquetas largas y filas de condiciones
    dinámicas. Permitir que sus hijos reduzcan su ancho evita que el grid

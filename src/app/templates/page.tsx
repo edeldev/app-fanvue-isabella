@@ -62,7 +62,7 @@ export default async function TemplatesPage({ searchParams }: Props) {
       <Sidebar />
       <div className="min-w-0 flex-1">
         <Topbar />
-        <main className="mx-auto max-w-[1300px] px-5 py-8 md:px-8">
+        <main id="main-content" tabIndex={-1} className="mx-auto max-w-[1300px] px-4 py-6 sm:px-5 sm:py-8 md:px-8">
           <div className="mb-7">
             <p className="mb-2 text-xs font-medium uppercase tracking-[.18em] text-violet-400">
               Biblioteca
