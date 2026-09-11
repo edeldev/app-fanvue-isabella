@@ -2,6 +2,7 @@ import { chatsPageSchema } from "@/lib/fanvue/sync-schemas";
 import { fetchAllCursorPages } from "@/lib/fanvue/pagination";
 import { prisma } from "@/lib/prisma";
 import { getValidFanvueAccessToken } from "./get-access-token";
+import { isFreshFanvueOnline } from "@/domain/fans/filters";
 
 export async function reconcileFanvuePresence(creatorId: string) {
   const observedAt = new Date();
@@ -13,8 +14,10 @@ export async function reconcileFanvuePresence(creatorId: string) {
   });
   const creatorIds = new Set(creatorAccounts.map((account) => account.fanvueUserId));
   const actualFans = chats.filter((chat) => chat.isCreator !== true && !creatorIds.has(chat.user.uuid));
-  const onlineIds = actualFans.filter((chat) => chat.online === true).map((chat) => chat.user.uuid);
-  const offlineIds = actualFans.filter((chat) => chat.online === false).map((chat) => chat.user.uuid);
+  const isFreshOnline = (chat: (typeof actualFans)[number]) =>
+    isFreshFanvueOnline(chat.online, chat.lastSeenAt, observedAt);
+  const onlineIds = actualFans.filter(isFreshOnline).map((chat) => chat.user.uuid);
+  const offlineIds = actualFans.filter((chat) => chat.online === false || (chat.online === true && !isFreshOnline(chat))).map((chat) => chat.user.uuid);
 
   const [markedOffline, refreshedOnline] = await prisma.$transaction([
     prisma.fan.updateMany({

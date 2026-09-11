@@ -67,6 +67,18 @@ export function isFanOnlineNow(isOnline: boolean, presenceChangedAt: Date | null
     && presenceChangedAt.getTime() >= now.getTime() - ONLINE_PRESENCE_TTL_MS;
 }
 
+export function isFreshFanvueOnline(
+  online: boolean | undefined,
+  lastSeenAt: string | null | undefined,
+  now = new Date(),
+) {
+  if (online !== true) return false;
+  if (!lastSeenAt) return true;
+  const lastSeenTime = new Date(lastSeenAt).getTime();
+  return Number.isFinite(lastSeenTime)
+    && lastSeenTime >= now.getTime() - ONLINE_PRESENCE_TTL_MS;
+}
+
 export function isConfirmedVip(isTopSpender: boolean, totalSpentMinor: number) {
   return isTopSpender && totalSpentMinor > 0;
 }

@@ -4,6 +4,7 @@ import { ArrowLeft, MessageCircle, Search } from "lucide-react";
 import { Sidebar } from "@/components/app-shell/sidebar";
 import { Topbar } from "@/components/app-shell/topbar";
 import { LiveRefresh } from "@/components/live-refresh";
+import { FanPresenceReconciler } from "@/components/fan-presence-reconciler";
 import { MarkConversationRead } from "@/components/mark-conversation-read";
 import { MessageHistory } from "@/components/message-history";
 import { MessageComposer } from "@/components/message-composer";
@@ -151,7 +152,7 @@ export default async function MessagesPage({ searchParams }: Props) {
           },
           include: { fan: true },
         })
-      : (conversations[0] ?? null);
+      : null;
   let messages: Array<{
     uuid: string;
     text: string | null;
@@ -294,6 +295,7 @@ export default async function MessagesPage({ searchParams }: Props) {
   return (
     <div className="flex min-h-screen bg-[#101218] text-zinc-100 md:h-dvh md:overflow-hidden">
       <LiveRefresh />
+      <FanPresenceReconciler />
       {selected && selected.unreadMessagesCount > 0 ? (
         <MarkConversationRead fanUuid={selected.fan.fanvueUserId} />
       ) : null}
@@ -520,13 +522,13 @@ export default async function MessagesPage({ searchParams }: Props) {
                 </>
               ) : (
                 <div className="grid flex-1 place-items-center text-center">
-                  <div>
-                    <MessageCircle className="mx-auto mb-4 size-8 text-zinc-700" />
-                    <p className="text-sm text-zinc-300">
-                      Selecciona una conversación
+                  <div className="max-w-sm px-6">
+                    <span className="mx-auto mb-5 grid size-14 place-items-center rounded-2xl border border-violet-400/15 bg-violet-400/[.06] text-violet-300 shadow-xl shadow-black/20"><MessageCircle className="size-6" /></span>
+                    <p className="text-lg font-semibold text-zinc-200">
+                      Bienvenido a chats
                     </p>
-                    <p className="mt-1 text-xs text-zinc-600">
-                      Aquí verás el historial completo.
+                    <p className="mt-2 text-sm leading-6 text-zinc-500">
+                      Selecciona un contacto de la lista ¡y diviértete!
                     </p>
                   </div>
                 </div>

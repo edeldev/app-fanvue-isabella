@@ -5,6 +5,7 @@ import { fanvueRequest } from "@/lib/fanvue/client";
 import { fanvueCurrentUserSchema } from "@/lib/fanvue/schemas";
 import { prisma } from "@/lib/prisma";
 import { getValidFanvueAccessToken } from "./get-access-token";
+import { isFreshFanvueOnline } from "@/domain/fans/filters";
 
 export interface InitialSyncResult {
   followers: number;
@@ -126,10 +127,11 @@ export async function runInitialFanvueSync(creatorId: string): Promise<InitialSy
 
   await prisma.fan.updateMany({ where: { creatorId }, data: { isCreatorAccount: false } });
   await processInBatches(chats, async (chat) => {
+      const isOnline = isFreshFanvueOnline(chat.online, chat.lastSeenAt, presenceObservedAt);
       const fan = await prisma.fan.upsert({
         where: { creatorId_fanvueUserId: { creatorId, fanvueUserId: chat.user.uuid } },
-        update: { username: chat.user.handle, displayName: chat.user.displayName, avatarUrl: chat.user.avatarUrl, isCreatorAccount: chat.isCreator ?? false, isTopSpender: chat.user.isTopSpender, isOnline: chat.online, presenceChangedAt: typeof chat.online === "boolean" ? presenceObservedAt : undefined, isMuted: chat.isMuted, lastActivityAt: chat.lastMessageAt ? new Date(chat.lastMessageAt) : undefined },
-        create: { creatorId, fanvueUserId: chat.user.uuid, username: chat.user.handle, displayName: chat.user.displayName, avatarUrl: chat.user.avatarUrl, isCreatorAccount: chat.isCreator ?? false, isTopSpender: chat.user.isTopSpender, isOnline: chat.online ?? false, presenceChangedAt: typeof chat.online === "boolean" ? presenceObservedAt : null, isMuted: chat.isMuted, lastActivityAt: chat.lastMessageAt ? new Date(chat.lastMessageAt) : undefined },
+        update: { username: chat.user.handle, displayName: chat.user.displayName, avatarUrl: chat.user.avatarUrl, isCreatorAccount: chat.isCreator ?? false, isTopSpender: chat.user.isTopSpender, isOnline, presenceChangedAt: typeof chat.online === "boolean" ? presenceObservedAt : undefined, isMuted: chat.isMuted, lastActivityAt: chat.lastMessageAt ? new Date(chat.lastMessageAt) : undefined },
+        create: { creatorId, fanvueUserId: chat.user.uuid, username: chat.user.handle, displayName: chat.user.displayName, avatarUrl: chat.user.avatarUrl, isCreatorAccount: chat.isCreator ?? false, isTopSpender: chat.user.isTopSpender, isOnline, presenceChangedAt: typeof chat.online === "boolean" ? presenceObservedAt : null, isMuted: chat.isMuted, lastActivityAt: chat.lastMessageAt ? new Date(chat.lastMessageAt) : undefined },
       });
       const conversation = await prisma.conversation.upsert({
         where: { creatorId_fanId: { creatorId, fanId: fan.id } },
