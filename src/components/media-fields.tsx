@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Eye, FolderOpen, ImagePlus, LoaderCircle, LockKeyhole, X } from "lucide-react";
+import { Eye, FolderOpen, ImageOff, ImagePlus, LoaderCircle, LockKeyhole, X } from "lucide-react";
 import { ExpandableImage } from "@/components/expandable-image";
 import { enqueueSnackbar } from "notistack";
 import { VaultMediaPicker } from "@/components/vault-media-picker";
@@ -29,6 +29,7 @@ export function MediaFields({
   const [previewUuid, setPreviewUuid] = useState(initialPreviewUuid ?? "");
   const [uploading, setUploading] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
+  const [resolvingMedia, setResolvingMedia] = useState(initialMedia.some((item) => !item.localUrl));
   const objectUrls = useRef(new Set<string>());
 
   useEffect(() => {
@@ -61,7 +62,8 @@ export function MediaFields({
           })),
         );
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => { if (!controller.signal.aborted) setResolvingMedia(false); });
     return () => controller.abort();
   }, [initialMedia]);
 
@@ -169,8 +171,8 @@ export function MediaFields({
                     className="h-28 w-full object-cover"
                   />
                 ) : (
-                  <div className="grid h-28 place-items-center px-2 text-center text-[10px] text-zinc-500">
-                    {item.name}
+                  <div className={`grid h-28 place-items-center px-2 text-center text-[10px] ${resolvingMedia ? "animate-pulse bg-gradient-to-br from-white/[.06] via-white/[.025] to-transparent text-zinc-500" : "text-zinc-600"}`}>
+                    <span>{resolvingMedia ? <LoaderCircle className="mx-auto mb-2 size-5 animate-spin" /> : <ImageOff className="mx-auto mb-2 size-5" />}{resolvingMedia ? "Cargando vista previa…" : "Vista previa no disponible"}</span>
                   </div>
                 )}
                 <button
