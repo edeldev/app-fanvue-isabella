@@ -9,8 +9,6 @@ const RECONCILIATION_INTERVAL_MS = 15 * 60 * 1_000;
 export async function POST() {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
   if (!creatorId) return Response.json({ error: "Sesión no autorizada." }, { status: 401 });
-  const rateLimit = await consumeRateLimit(creatorId, rateLimitPolicies.fanvueSync);
-  if (!rateLimit.allowed) return rateLimitedResponse(rateLimit);
   const latest = await prisma.automationLog.findFirst({
     where: { creatorId, eventType: "INITIAL_SYNC_COMPLETED" },
     orderBy: { occurredAt: "desc" },
@@ -19,6 +17,8 @@ export async function POST() {
   if (latest && Date.now() - latest.occurredAt.getTime() < RECONCILIATION_INTERVAL_MS) {
     return Response.json({ reconciled: false, nextAt: new Date(latest.occurredAt.getTime() + RECONCILIATION_INTERVAL_MS).toISOString() });
   }
+  const rateLimit = await consumeRateLimit(creatorId, rateLimitPolicies.fanvueReconciliation);
+  if (!rateLimit.allowed) return rateLimitedResponse(rateLimit);
   await runInitialFanvueSync(creatorId);
   return Response.json({ reconciled: true });
 }

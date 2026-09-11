@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Filter, Search, Users, X } from "lucide-reac
 import { Sidebar } from "@/components/app-shell/sidebar";
 import { Topbar } from "@/components/app-shell/topbar";
 import { LiveRefresh } from "@/components/live-refresh";
+import { FanPresenceReconciler } from "@/components/fan-presence-reconciler";
 import { StatusTooltips } from "@/components/status-tooltips";
 import { buildFansWhere, fanFilterOptions, isConfirmedVip, isFanOnlineNow, parseFanFilter, type FanFilter } from "@/domain/fans/filters";
 import { prisma } from "@/lib/prisma";
@@ -47,7 +48,7 @@ export default async function FansPage({ searchParams }: { searchParams: SearchP
   const activeFilter = fanFilterOptions.find((option) => option.value === filter)!;
 
   return <div className="flex min-h-screen bg-[#101218] text-zinc-100">
-    <LiveRefresh /><StatusTooltips /><Sidebar />
+    <LiveRefresh /><FanPresenceReconciler /><StatusTooltips /><Sidebar />
     <div className="min-w-0 flex-1"><Topbar />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-[1500px] px-4 py-6 sm:px-5 sm:py-8 md:px-8">
         <div className="mb-7 flex flex-wrap items-end justify-between gap-4">

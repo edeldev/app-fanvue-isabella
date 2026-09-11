@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
   const creatorId = readCreatorSession(cookieStore.get(CREATOR_SESSION_COOKIE)?.value);
   if (!creatorId) return NextResponse.redirect(new URL("/?sync=unauthorized", request.url), 303);
-  const rateLimit = await consumeRateLimit(creatorId, rateLimitPolicies.fanvueSync);
+  const rateLimit = await consumeRateLimit(creatorId, rateLimitPolicies.fanvueManualSync);
   if (!rateLimit.allowed) return NextResponse.redirect(new URL(`/?sync=rate_limited&retryAfter=${rateLimit.retryAfterSeconds}`, request.url), 303);
   try {
     const result = await runInitialFanvueSync(creatorId);
