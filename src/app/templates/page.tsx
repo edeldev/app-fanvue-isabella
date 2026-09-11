@@ -9,9 +9,6 @@ import {
   readCreatorSession,
 } from "@/lib/session/creator-session";
 
-type Props = {
-  searchParams: Promise<{ saved?: string; deleted?: string; error?: string }>;
-};
 const labels: Record<string, string> = {
   WELCOME: "Bienvenida",
   FOLLOW_UP: "Seguimiento",
@@ -46,8 +43,7 @@ function templateMetadata(value: unknown) {
   };
 }
 
-export default async function TemplatesPage({ searchParams }: Props) {
-  const params = await searchParams;
+export default async function TemplatesPage() {
   const creatorId = readCreatorSession(
     (await cookies()).get(CREATOR_SESSION_COOKIE)?.value,
   );
@@ -74,20 +70,6 @@ export default async function TemplatesPage({ searchParams }: Props) {
               Texto, medios y PPV reutilizables en chats y workflows.
             </p>
           </div>
-          {params.saved || params.deleted ? (
-            <p className="mb-4 rounded-xl border border-emerald-400/20 bg-emerald-400/8 px-4 py-3 text-sm text-emerald-300">
-              {params.deleted ? "Plantilla eliminada." : "Plantilla guardada."}
-            </p>
-          ) : null}
-          {params.error ? (
-            <p className="mb-4 rounded-xl border border-red-400/20 bg-red-400/8 px-4 py-3 text-sm text-red-300">
-              {params.error === "duplicate"
-                ? "Ya existe una plantilla con ese nombre."
-                : params.error === "in_use"
-                  ? "Un workflow está usando esta plantilla."
-                  : "No se pudo completar la operación."}
-            </p>
-          ) : null}
           <div className="grid gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
             <section className="h-fit rounded-2xl border border-white/8 bg-white/[.025] p-5">
               <div className="mb-5 flex items-center gap-2">

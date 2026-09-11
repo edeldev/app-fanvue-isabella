@@ -7,6 +7,7 @@ import type { AutomationLogView, EnrollmentProgressView, EnrollmentView, FanOpti
 import { ActivityDeleteDialog, type ActivityDeleteScope } from "./activity-delete-dialog";
 import { WorkflowHistoryBrowser } from "./workflow-history-browser";
 import type { AudienceSegment } from "@/domain/workflows/audience";
+import { enqueueSnackbar } from "notistack";
 
 type AudienceOption = { id: AudienceSegment; label: string; count: number };
 
@@ -19,15 +20,13 @@ export function EnrollmentPanel({ fans, audiences, workflows, enrollments, unsta
   const [excluded, setExcluded] = useState<AudienceSegment[]>([]);
   const [excludedFanIds, setExcludedFanIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [readyEnrollmentIds, setReadyEnrollmentIds] = useState<string[]>(unstartedEnrollmentIds);
   const [preview, setPreview] = useState<{ key: string; matched: number; newAssignments: number; alreadyReady: number; alreadyActive: number; skipped: number; limited: boolean } | null>(null);
   const [deleteScope, setDeleteScope] = useState<ActivityDeleteScope | null>(null);
   const audienceKey = JSON.stringify({ included, excluded, excludedFanIds, workflowId });
 
   async function request(url: string, options: RequestInit) {
-    setBusy(true); setError(null); setNotice(null);
+    setBusy(true);
     try {
       const response = await fetch(url, options);
       const body = await response.json();
@@ -35,7 +34,7 @@ export function EnrollmentPanel({ fans, audiences, workflows, enrollments, unsta
       router.refresh();
       return body;
     } catch (caught) {
-      setError(translate(caught instanceof Error ? caught.message : "Error inesperado."));
+      enqueueSnackbar(translate(caught instanceof Error ? caught.message : "Error inesperado."), { variant: "error" });
       return null;
     } finally { setBusy(false); }
   }
@@ -50,9 +49,9 @@ export function EnrollmentPanel({ fans, audiences, workflows, enrollments, unsta
       setExcludedFanIds([]);
       if (assigned.audience) {
         setReadyEnrollmentIds(assigned.audience.enrollmentIds);
-        setNotice(`${assigned.audience.matched} fans coincidieron: ${assigned.audience.ready} workflows están listos para iniciar y ${assigned.audience.unchanged} ya estaban activos.`);
+        enqueueSnackbar(`${assigned.audience.matched} fans coincidieron: ${assigned.audience.ready} workflows listos y ${assigned.audience.unchanged} ya activos.`, { variant: "success" });
       }
-      else setNotice("Fan asignado correctamente.");
+      else enqueueSnackbar("Fan asignado correctamente.", { variant: "success" });
     }
   }
 
@@ -65,27 +64,28 @@ export function EnrollmentPanel({ fans, audiences, workflows, enrollments, unsta
     const result = await request("/api/enrollments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "start", enrollmentIds: readyEnrollmentIds }) });
     if (!result?.start) return;
     setReadyEnrollmentIds([]);
-    setNotice(`${result.start.started} workflows iniciados${result.start.failed ? `; ${result.start.failed} quedaron programados para reintento` : ""}.`);
+    enqueueSnackbar(`${result.start.started} workflows iniciados${result.start.failed ? `; ${result.start.failed} quedaron programados para reintento` : ""}.`, { variant: result.start.failed ? "warning" : "success" });
   }
 
   async function cancelAudience() {
     const result = await request("/api/enrollments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "cancel_unstarted", enrollmentIds: readyEnrollmentIds }) });
     if (!result?.cancellation) return;
     setReadyEnrollmentIds([]);
-    setNotice(`${result.cancellation.cancelled} workflows sin iniciar fueron cancelados.`);
+    enqueueSnackbar(`${result.cancellation.cancelled} workflows sin iniciar fueron cancelados.`, { variant: "success" });
   }
 
   async function clearActivity() {
     if (!deleteScope) return;
     const cleared = await request("/api/workflow-activity", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: deleteScope }) });
-    if (cleared) setDeleteScope(null);
+    if (cleared) {
+      setDeleteScope(null);
+      enqueueSnackbar("Historial de actividad eliminado correctamente.", { variant: "success" });
+    }
   }
 
   return <section className="mt-8 rounded-2xl border border-white/8 bg-white/[.025] p-5"><div className="flex flex-col gap-4"><div><p className="text-xs font-medium uppercase tracking-[.16em] text-violet-400">Enrollments</p><h2 className="mt-1 text-xl font-semibold text-white">Asignaciones activas</h2><p className="mt-1 text-xs text-zinc-500">Asigna a un fan o construye una audiencia combinando inclusiones y exclusiones.</p></div><div className="inline-flex w-fit rounded-xl border border-white/10 bg-black/20 p-1"><button type="button" onClick={() => setDestination("fan")} className={`rounded-lg px-4 py-2 text-xs font-semibold ${destination === "fan" ? "bg-violet-500 text-white" : "text-zinc-500"}`}>Un fan</button><button type="button" onClick={() => setDestination("audience")} className={`rounded-lg px-4 py-2 text-xs font-semibold ${destination === "audience" ? "bg-violet-500 text-white" : "text-zinc-500"}`}>Una audiencia</button></div>{destination === "fan" ? <select value={fanId} onChange={(event) => setFanId(event.target.value)} className="max-w-md rounded-xl border border-white/10 bg-[#1b1d25] px-3 py-2.5 text-sm text-zinc-300"><option value="">Selecciona un fan</option>{fans.map((fan) => <option key={fan.id} value={fan.id}>{fan.name}{fan.username ? ` (@${fan.username})` : ""}</option>)}</select> : <AudiencePicker audiences={audiences} included={included} excluded={excluded} onInclude={setIncluded} onExclude={setExcluded} />}<div className="flex flex-col gap-2 sm:flex-row"><select value={workflowId} onChange={(event) => setWorkflowId(event.target.value)} className="min-w-64 rounded-xl border border-white/10 bg-[#1b1d25] px-3 py-2.5 text-sm text-zinc-300"><option value="">Selecciona un flujo</option>{workflows.map((workflow) => <option key={workflow.id} value={workflow.id}>{workflow.name}</option>)}</select><button disabled={busy || !workflowId || (destination === "fan" ? !fanId : included.length === 0)} onClick={assign} className="flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40"><UserPlus className="size-4" />{busy ? "Asignando…" : destination === "fan" ? "Asignar fan" : "Asignar audiencia"}</button></div></div>
     {destination === "audience" ? <><FanExclusionPicker fans={fans} selected={excludedFanIds} onChange={setExcludedFanIds} /><div className="mt-4 rounded-xl border border-white/8 bg-black/15 p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><p className="text-sm font-medium text-zinc-200">Vista previa de destinatarios</p><p className="mt-1 text-[11px] text-zinc-600">Calcula la audiencia después de aplicar exclusiones y reglas de reingreso.</p></div><button type="button" disabled={busy || !workflowId || included.length === 0} onClick={previewAudience} className="flex items-center justify-center gap-2 rounded-xl border border-violet-400/20 px-4 py-2.5 text-sm font-semibold text-violet-300 hover:bg-violet-400/8 disabled:opacity-40"><Eye className="size-4" />Calcular audiencia</button></div>{preview?.key === audienceKey ? <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5"><PreviewMetric label="Coinciden" value={preview.matched} /><PreviewMetric label="Nuevos" value={preview.newAssignments} /><PreviewMetric label="Ya asignados" value={preview.alreadyReady} /><PreviewMetric label="Ya activos" value={preview.alreadyActive} /><PreviewMetric label="Omitidos" value={preview.skipped} />{preview.limited ? <p className="col-span-full mt-1 text-xs text-amber-300">La vista previa alcanzó el límite de 2,000 contactos.</p> : null}</div> : null}</div></> : null}
     {readyEnrollmentIds.length ? <div className="mt-4 flex flex-col justify-between gap-3 rounded-xl border border-violet-400/20 bg-violet-400/8 p-4 sm:flex-row sm:items-center"><div><p className="text-sm font-medium text-violet-100">Audiencia asignada, todavía sin iniciar</p><p className="mt-1 text-xs text-violet-200/60">Revisa el resultado y decide qué hacer con los {readyEnrollmentIds.length} workflows.</p></div><div className="flex shrink-0 flex-col gap-2 sm:flex-row"><button type="button" disabled={busy} onClick={cancelAudience} className="flex items-center justify-center gap-2 rounded-xl border border-red-400/20 px-4 py-2.5 text-sm font-semibold text-red-200 hover:bg-red-400/10 disabled:opacity-40"><XCircle className="size-4" />Cancelar todos</button><button type="button" disabled={busy} onClick={startAudience} className="flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-400 disabled:opacity-40"><Play className="size-4" />{busy ? "Procesando…" : "Iniciar todos"}</button></div></div> : null}
-    {error ? <p className="mt-4 rounded-xl border border-red-400/20 bg-red-400/8 px-4 py-3 text-sm text-red-200">{error}</p> : null}
-    {notice ? <p className="mt-4 rounded-xl border border-emerald-400/20 bg-emerald-400/8 px-4 py-3 text-sm text-emerald-200">{notice}</p> : null}
     <div className="mt-5 rounded-xl border border-white/8 bg-black/15 p-4"><div><p className="text-sm font-medium text-zinc-200">Progreso general</p><p className="mt-1 text-[11px] text-zinc-600">Estado de todas las asignaciones de workflows.</p></div><div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7"><ProgressMetric label="Asignados" value={enrollmentProgress.assigned} /><ProgressMetric label="Activos" value={enrollmentProgress.active} /><ProgressMetric label="Esperando" value={enrollmentProgress.waiting} /><ProgressMetric label="Pausados" value={enrollmentProgress.paused} /><ProgressMetric label="Completados" value={enrollmentProgress.completed} /><ProgressMetric label="Cancelados" value={enrollmentProgress.cancelled} /><ProgressMetric label="Fallidos" value={enrollmentProgress.failed} danger={enrollmentProgress.failed > 0} /></div></div>
     <div className="mt-5 grid gap-3 lg:grid-cols-2">{enrollments.map((enrollment) => <article key={enrollment.id} className="rounded-xl border border-white/8 bg-black/15 p-4"><div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><h3 className="font-medium text-white">{enrollment.fanName}</h3><Status status={enrollment.status} hasStarted={enrollment.hasStarted} /></div><p className="mt-1 text-xs text-zinc-600">{enrollment.fanUsername ? `@${enrollment.fanUsername} · ` : ""}{enrollment.workflowName}</p></div><div className="flex flex-wrap items-center justify-end gap-1">{!enrollment.hasStarted ? <button type="button" disabled={busy} onClick={() => execute(enrollment.id)} className="flex items-center gap-1.5 rounded-lg bg-violet-500/12 px-3 py-2 text-xs font-semibold text-violet-300 hover:bg-violet-500/20 disabled:opacity-40"><Zap className="size-3.5" />Iniciar workflow</button> : enrollment.status === "PAUSED" ? null : <span className="flex items-center gap-1.5 rounded-lg border border-white/8 bg-white/[.025] px-3 py-2 text-xs text-zinc-500"><Zap className={`size-3.5 ${enrollment.status === "ACTIVE" ? "animate-pulse text-emerald-400" : "text-sky-400"}`} />{enrollment.status === "WAITING" ? "Continuación automática" : "Procesando…"}</span>}{enrollment.hasStarted ? enrollment.status === "PAUSED" ? <Action icon={RotateCcw} label="Reanudar" disabled={busy} onClick={() => change(enrollment.id, "resume")} /> : <Action icon={Pause} label="Pausar" disabled={busy} onClick={() => change(enrollment.id, "pause")} /> : null}<Action icon={XCircle} label="Cancelar" disabled={busy} danger onClick={() => change(enrollment.id, "cancel")} /></div></div><div className="mt-3 rounded-lg bg-white/[.025] px-3 py-2 text-xs text-zinc-500"><span className="text-zinc-300">Paso actual:</span> {enrollment.currentStepName || "Sin paso"}{enrollment.nextRunAt ? ` · ${enrollment.status === "WAITING" ? "Espera hasta" : "Listo desde"} ${new Date(enrollment.nextRunAt).toLocaleString("es-MX")}` : !enrollment.hasStarted ? " · Todavía no iniciado" : enrollment.status === "PAUSED" && enrollment.pausedRemainingSeconds !== null ? ` · Quedaban ${formatRemaining(enrollment.pausedRemainingSeconds)}` : ""}{enrollment.pauseReason ? <p className="mt-1 text-amber-300/70">{enrollment.pauseReason}</p> : null}</div></article>)}{!enrollments.length ? <p className="col-span-full py-8 text-center text-sm text-zinc-600">No hay enrollments activos o pausados.</p> : null}</div>
     <WorkflowHistoryBrowser workflows={workflows} />
@@ -93,12 +93,14 @@ export function EnrollmentPanel({ fans, audiences, workflows, enrollments, unsta
     {deleteScope ? <ActivityDeleteDialog counts={activityCounts} scope={deleteScope} busy={busy} onScopeChange={setDeleteScope} onCancel={() => setDeleteScope(null)} onConfirm={clearActivity} /> : null}
   </section>;
 
-  function change(id: string, action: "pause" | "resume" | "cancel") {
-    return request(`/api/enrollments/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
+  async function change(id: string, action: "pause" | "resume" | "cancel") {
+    const result = await request(`/api/enrollments/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
+    if (result) enqueueSnackbar(action === "pause" ? "Workflow pausado correctamente." : action === "resume" ? "Workflow reanudado correctamente." : "Workflow cancelado correctamente.", { variant: "success" });
   }
 
-  function execute(id: string) {
-    return request(`/api/enrollments/${id}/execute`, { method: "POST" });
+  async function execute(id: string) {
+    const result = await request(`/api/enrollments/${id}/execute`, { method: "POST" });
+    if (result) enqueueSnackbar("Workflow iniciado correctamente.", { variant: "success" });
   }
 }
 

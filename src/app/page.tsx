@@ -17,41 +17,6 @@ import {
 } from "@/lib/session/creator-session";
 import { SyncFanvueButton } from "@/components/sync-fanvue-button";
 
-const messages: Readonly<Record<string, { tone: string; text: string }>> = {
-  connected: {
-    tone: "border-emerald-400/20 bg-emerald-400/8 text-emerald-200",
-    text: "Fanvue se conectó correctamente. Las credenciales están cifradas.",
-  },
-  denied: {
-    tone: "border-amber-400/20 bg-amber-400/8 text-amber-200",
-    text: "La autorización de Fanvue fue cancelada.",
-  },
-  invalid_state: {
-    tone: "border-red-400/20 bg-red-400/8 text-red-200",
-    text: "La sesión OAuth expiró o no superó la validación CSRF.",
-  },
-  connection_failed: {
-    tone: "border-red-400/20 bg-red-400/8 text-red-200",
-    text: "La conexión con Fanvue falló de forma segura.",
-  },
-  signed_out: {
-    tone: "border-zinc-400/20 bg-zinc-400/8 text-zinc-300",
-    text: "Sesión cerrada correctamente.",
-  },
-  completed: {
-    tone: "border-emerald-400/20 bg-emerald-400/8 text-emerald-200",
-    text: "Sincronización de Fanvue completada.",
-  },
-  failed: {
-    tone: "border-red-400/20 bg-red-400/8 text-red-200",
-    text: "La sincronización falló. Consulta el registro sanitizado del servidor.",
-  },
-  unauthorized: {
-    tone: "border-amber-400/20 bg-amber-400/8 text-amber-200",
-    text: "Vuelve a conectar Fanvue antes de sincronizar.",
-  },
-};
-
 async function dashboardData(creatorId: string | null) {
   if (!creatorId) return null;
   const [
@@ -140,20 +105,12 @@ async function dashboardData(creatorId: string | null) {
   };
 }
 
-export default async function Home({ searchParams }: PageProps<"/">) {
-  const query = await searchParams;
+export default async function Home() {
   const cookieStore = await cookies();
   const creatorId = readCreatorSession(
     cookieStore.get(CREATOR_SESSION_COOKIE)?.value,
   );
   const data = await dashboardData(creatorId);
-  const statusKey =
-    typeof query.sync === "string"
-      ? query.sync
-      : typeof query.fanvue === "string"
-        ? query.fanvue
-        : "";
-  const message = messages[statusKey];
   const money = new Intl.NumberFormat("es-MX", {
     style: "currency",
     currency: "USD",
@@ -166,14 +123,6 @@ export default async function Home({ searchParams }: PageProps<"/">) {
       <div className="min-w-0 flex-1">
         <Topbar />
         <main id="main-content" tabIndex={-1} className="mx-auto max-w-375 px-4 py-6 sm:px-5 sm:py-8 md:px-8">
-          {message ? (
-            <div
-              role="status"
-              className={`mb-6 rounded-xl border px-4 py-3 text-sm ${message.tone}`}
-            >
-              {message.text}
-            </div>
-          ) : null}
           <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
             <div>
               <p className="mb-2 text-xs font-medium uppercase tracking-[.18em] text-violet-400">

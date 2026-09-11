@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
+import { Suspense } from "react";
 import "./globals.css";
 import { WorkflowAutoRunner } from "@/components/workflow-auto-runner";
 import { FanvueReconciler } from "@/components/fanvue-reconciler";
@@ -7,6 +8,8 @@ import {
   CREATOR_SESSION_COOKIE,
   readCreatorSession,
 } from "@/lib/session/creator-session";
+import { NotificationProvider } from "@/components/notifications/notification-provider";
+import { RouteNotifications } from "@/components/notifications/route-notifications";
 
 export const metadata: Metadata = {
   title: "Fanvue CRM & Automation",
@@ -23,13 +26,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="es" className="h-full antialiased">
       <body className="min-h-full">
         <a href="#main-content" className="fixed left-4 top-4 z-[200] -translate-y-24 rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white shadow-xl transition focus:translate-y-0">Saltar al contenido principal</a>
-        {creatorId ? (
-          <>
-            <WorkflowAutoRunner />
-            <FanvueReconciler />
-          </>
-        ) : null}
-        {children}
+        <NotificationProvider>
+          <Suspense fallback={null}><RouteNotifications /></Suspense>
+          {creatorId ? <><WorkflowAutoRunner /><FanvueReconciler /></> : null}
+          {children}
+        </NotificationProvider>
       </body>
     </html>
   );

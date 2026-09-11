@@ -282,16 +282,6 @@ export default async function MessagesPage({ searchParams }: Props) {
               Conversaciones con fans y suscriptores sincronizadas con Fanvue.
             </p>
           </div>
-          {params.sent ? (
-            <p className="mb-4 rounded-xl border border-emerald-400/20 bg-emerald-400/8 px-4 py-3 text-sm text-emerald-300">
-              Mensaje enviado correctamente.
-            </p>
-          ) : null}
-          {params.error ? (
-            <p className="mb-4 rounded-xl border border-red-400/20 bg-red-400/8 px-4 py-3 text-sm text-red-300">
-              No se pudo enviar el mensaje. Inténtalo nuevamente.
-            </p>
-          ) : null}
           <div className="grid min-h-[620px] flex-1 overflow-hidden rounded-2xl border border-white/8 bg-white/[.025] md:min-h-0 md:grid-cols-[340px_minmax(0,1fr)]">
             <section className={`${conversationIsOpen ? "hidden md:flex" : "flex"} min-h-0 flex-col border-b border-white/8 md:border-b-0 md:border-r`}>
               <div className="shrink-0 border-b border-white/8 p-4">

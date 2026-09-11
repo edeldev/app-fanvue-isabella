@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Eye, ImagePlus, LoaderCircle, LockKeyhole, X } from "lucide-react";
 import { ExpandableImage } from "@/components/expandable-image";
+import { enqueueSnackbar } from "notistack";
 
 export type AttachedMedia = {
   uuid: string;
@@ -26,7 +27,6 @@ export function MediaFields({
   );
   const [previewUuid, setPreviewUuid] = useState(initialPreviewUuid ?? "");
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
   const objectUrls = useRef(new Set<string>());
 
   useEffect(() => {
@@ -66,7 +66,6 @@ export function MediaFields({
   async function upload(files: FileList | null) {
     if (!files?.length) return;
     setUploading(true);
-    setError("");
     const form = new FormData();
     Array.from(files)
       .slice(0, 10 - media.length)
@@ -93,12 +92,9 @@ export function MediaFields({
         );
         return [...unique.values()].slice(0, 10);
       });
+      enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo subido" : "archivos subidos"} correctamente.`, { variant: "success" });
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "No se pudieron subir los archivos.",
-      );
+      enqueueSnackbar(caught instanceof Error ? caught.message : "No se pudieron subir los archivos.", { variant: "error" });
     } finally {
       setUploading(false);
     }
@@ -148,7 +144,6 @@ export function MediaFields({
           </span>
         )}
       </div>
-      {error ? <p className="text-xs text-red-400">{error}</p> : null}
       {media.length > 0 ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {media.map((item, index) => {
