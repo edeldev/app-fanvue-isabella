@@ -19,10 +19,11 @@ export async function GET(request: Request) {
     const result = await fanvueRequest(`/v1/media/bulk?mediaUuids=${encodeURIComponent(ids.data.join(","))}&variants=main,thumbnail`, token, mediaBulkSchema);
     const media = Object.values(result.results).flatMap(item => {
       if (!item || item.status !== "ready") return [];
-      const variant = item.variants.find(value => value.variantType === "main" && value.url)
-        ?? item.variants.find(value => value.variantType === "thumbnail" && value.url)
+      const main = item.variants.find(value => value.variantType === "main" && value.url)
         ?? item.variants.find(value => value.url);
-      return variant?.url ? [{ uuid: item.uuid, url: variant.url }] : [];
+      const thumbnail = item.variants.find(value => value.variantType === "thumbnail" && value.url)
+        ?? item.variants.find(value => value.variantType === "thumbnail_gallery" && value.url);
+      return main?.url || thumbnail?.url ? [{ uuid: item.uuid, url: main?.url ?? thumbnail?.url, thumbnailUrl: thumbnail?.url }] : [];
     });
     return NextResponse.json({ media });
   } catch {

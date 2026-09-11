@@ -25,10 +25,11 @@ export async function GET(request: Request) {
     const result = await fanvueRequest(`/v1/media?${params}` as `/v1/${string}`, token, vaultMediaPageSchema);
     const media = result.data.flatMap((item) => {
       if (item.status !== "ready" || (item.mediaType !== "image" && item.mediaType !== "video")) return [];
-      const variant = item.variants.find((value) => value.variantType === "thumbnail" && value.url)
-        ?? item.variants.find((value) => value.variantType === "main" && value.url)
+      const thumbnail = item.variants.find((value) => value.variantType === "thumbnail" && value.url)
+        ?? item.variants.find((value) => value.variantType === "thumbnail_gallery" && value.url);
+      const main = item.variants.find((value) => value.variantType === "main" && value.url)
         ?? item.variants.find((value) => value.url);
-      return [{ uuid: item.uuid, name: item.name || `Archivo ${item.uuid.slice(0, 8)}`, mediaType: item.mediaType, localUrl: variant?.url, createdAt: item.createdAt ?? null }];
+      return [{ uuid: item.uuid, name: item.name || `Archivo ${item.uuid.slice(0, 8)}`, mediaType: item.mediaType, localUrl: main?.url ?? thumbnail?.url, thumbnailUrl: thumbnail?.url, createdAt: item.createdAt ?? null }];
     });
     return NextResponse.json({ media, nextCursor: result.nextCursor });
   } catch (error) {

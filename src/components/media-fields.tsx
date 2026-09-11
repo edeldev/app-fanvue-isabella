@@ -11,6 +11,7 @@ export type AttachedMedia = {
   name: string;
   mediaType: string;
   localUrl?: string;
+  thumbnailUrl?: string;
 };
 
 export function MediaFields({
@@ -50,7 +51,7 @@ export function MediaFields({
       .then(async (response) => {
         if (!response.ok) throw new Error("Media preview failed");
         return response.json() as Promise<{
-          media: Array<{ uuid: string; url: string }>;
+          media: Array<{ uuid: string; url: string; thumbnailUrl?: string }>;
         }>;
       })
       .then((result) => {
@@ -59,6 +60,7 @@ export function MediaFields({
           current.map((item) => ({
             ...item,
             localUrl: item.localUrl ?? urls.get(item.uuid),
+            thumbnailUrl: item.thumbnailUrl ?? result.media.find((value) => value.uuid === item.uuid)?.thumbnailUrl,
           })),
         );
       })
@@ -165,11 +167,7 @@ export function MediaFields({
                     className="h-28 w-full object-cover"
                   />
                 ) : item.localUrl && item.mediaType === "video" ? (
-                  <video
-                    src={item.localUrl}
-                    controls
-                    className="h-28 w-full object-cover"
-                  />
+                  <VideoPreview src={item.localUrl} poster={item.thumbnailUrl} name={item.name} />
                 ) : (
                   <div className={`grid h-28 place-items-center px-2 text-center text-[10px] ${resolvingMedia ? "animate-pulse bg-gradient-to-br from-white/[.06] via-white/[.025] to-transparent text-zinc-500" : "text-zinc-600"}`}>
                     <span>{resolvingMedia ? <LoaderCircle className="mx-auto mb-2 size-5 animate-spin" /> : <ImageOff className="mx-auto mb-2 size-5" />}{resolvingMedia ? "Cargando vista previa…" : "Vista previa no disponible"}</span>
@@ -234,4 +232,10 @@ export function MediaFields({
       {vaultOpen ? <VaultMediaPicker selectedUuids={media.map((item) => item.uuid)} remaining={10 - media.length} onClose={() => setVaultOpen(false)} onAdd={(incoming) => { setMedia((current) => [...current, ...incoming].slice(0, 10)); setVaultOpen(false); enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo agregado" : "archivos agregados"} desde la bóveda.`, { variant: "success" }); }} /> : null}
     </div>
   );
+}
+
+function VideoPreview({ src, poster, name }: { src: string; poster?: string; name: string }) {
+  const [state, setState] = useState<{ src: string; status: "loading" | "loaded" | "error" }>({ src, status: "loading" });
+  const status = state.src === src ? state.status : "loading";
+  return <div className="relative h-28 overflow-hidden bg-white/[.035]">{status === "loading" ? <span className="absolute inset-0 z-10 grid animate-pulse place-items-center bg-gradient-to-br from-white/[.06] via-white/[.025] to-transparent text-zinc-500"><span className="text-center"><LoaderCircle className="mx-auto mb-2 size-5 animate-spin" /><span className="text-[10px]">Cargando video…</span></span></span> : null}{status === "error" ? <span className="absolute inset-0 z-10 grid place-items-center text-zinc-600"><span className="text-center"><ImageOff className="mx-auto mb-2 size-5" /><span className="text-[10px]">Vista previa no disponible</span></span></span> : null}<video src={src} poster={poster} controls preload="metadata" aria-label={name} onLoadedData={() => setState({ src, status: "loaded" })} onError={() => setState({ src, status: "error" })} className={`h-28 w-full object-cover transition-opacity duration-300 ${status === "loaded" ? "opacity-100" : "opacity-0"}`} /></div>;
 }
