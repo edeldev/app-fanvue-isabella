@@ -18,11 +18,12 @@ export default async function TemplatesPage() {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
   const records = creatorId ? await prisma.messageTemplate.findMany({ where: { creatorId }, orderBy: { updatedAt: "desc" } }) : [];
   const templates: TemplateLibraryItem[] = records.map((template) => ({ id: template.id, name: template.name, text: template.text, type: template.type, category: template.category, status: template.status, updatedAt: template.updatedAt.toISOString(), ...templateMetadata(template.metadata) }));
-  const mediaCount = templates.filter((template) => template.media.length > 0).length;
   const ppvCount = templates.filter((template) => Boolean(template.priceMinor)).length;
+  const mediaCount = templates.filter((template) => template.media.length > 0 && !template.priceMinor).length;
+  const textCount = templates.filter((template) => template.media.length === 0 && !template.priceMinor).length;
   const stats = [
     { label: "Total", value: templates.length, detail: "plantillas guardadas", icon: FileText, tone: "text-violet-300 bg-violet-400/10" },
-    { label: "Solo texto", value: templates.length - mediaCount, detail: "listas para conversar", icon: FileImage, tone: "text-sky-300 bg-sky-400/10" },
+    { label: "Solo texto", value: textCount, detail: "listas para conversar", icon: FileImage, tone: "text-sky-300 bg-sky-400/10" },
     { label: "Multimedia", value: mediaCount, detail: "con fotos o videos", icon: Images, tone: "text-fuchsia-300 bg-fuchsia-400/10" },
     { label: "PPV", value: ppvCount, detail: "contenido de pago", icon: LockKeyhole, tone: "text-amber-300 bg-amber-400/10" },
   ];

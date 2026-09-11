@@ -4,8 +4,12 @@ import { matchesTemplateKind } from "./filters";
 const template = (mediaType?: "image" | "video", text = "Hola", priceMinor: number | null = null) => ({ text, priceMinor, media: mediaType ? [{ mediaType }] : [] });
 
 describe("filtros de plantillas", () => {
-  it("incluye fotos con texto y PPV dentro de multimedia", () => {
-    expect(matchesTemplateKind(template("image", "Mensaje", 500), "MEDIA")).toBe(true);
+  it("mantiene PPV separado de los filtros multimedia", () => {
+    const ppv = template("image", "Mensaje", 500);
+    expect(matchesTemplateKind(ppv, "PPV")).toBe(true);
+    expect(matchesTemplateKind(ppv, "MEDIA")).toBe(false);
+    expect(matchesTemplateKind(ppv, "IMAGE")).toBe(false);
+    expect(matchesTemplateKind(ppv, "MEDIA_ONLY")).toBe(false);
   });
 
   it("distingue fotos, videos, solo archivos y solo texto", () => {
