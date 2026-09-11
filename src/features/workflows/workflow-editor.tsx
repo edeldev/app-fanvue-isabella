@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, ArrowUp, Save, Trash2, X } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { ArrowDown, ArrowUp, Flag, GitBranch, GripVertical, ImageIcon, MessageSquare, Repeat2, Save, Timer, Trash2, X, Zap } from "lucide-react";
+import { useState, type DragEvent, type FormEvent } from "react";
 import { editableStepTypes, stepTypeLabels, type WorkflowDefinitionInput } from "@/domain/workflows/definition";
 import type { TemplateOption, WorkflowDefaultsView, WorkflowView } from "./types";
 import { workflowTriggerLabels, workflowTriggers } from "@/domain/workflows/triggers";
 import { workflowConditionLabels, workflowConditions, type WorkflowCondition, type WorkflowConditionOperator, type WorkflowConditionRule } from "@/domain/workflows/evaluate-condition";
 import { workflowReentryPolicies, workflowReentryPolicyLabels, type WorkflowReentryPolicy } from "@/domain/workflows/reentry-policy";
 import { workflowGoalLabels, workflowGoalTypes, type WorkflowGoalType } from "@/domain/workflows/conversion-goal";
+import { clearBackwardWorkflowConnections, reorderWorkflowSteps } from "@/domain/workflows/visual-builder";
 
 interface Props {
   value: WorkflowView | null;
@@ -90,7 +91,10 @@ export function WorkflowEditor({ value, defaults, templates, publishedWorkflows,
     <label className="mt-4 block text-xs text-zinc-500">Cómo inicia este workflow<select name="triggerEvent" defaultValue={form.triggerEvent} className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-zinc-200 outline-none focus:border-violet-400/50">{workflowTriggers.map((trigger) => <option key={trigger} value={trigger}>{workflowTriggerLabels[trigger]}</option>)}</select><span className="mt-1.5 block text-[11px] text-zinc-600">Los disparadores automáticos solo funcionan después de publicar el workflow.</span></label>
     <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]"><label className="text-xs text-zinc-500">Reingreso del fan<select name="reentryPolicy" value={reentryPolicy} onChange={(event) => setReentryPolicy(event.target.value as WorkflowReentryPolicy)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-zinc-200 outline-none focus:border-violet-400/50">{workflowReentryPolicies.map((policy) => <option key={policy} value={policy}>{workflowReentryPolicyLabels[policy]}</option>)}</select></label>{reentryPolicy === "AFTER_DELAY" ? <label className="text-xs text-zinc-500">Días<input name="reentryDelayDays" type="number" required min={1} max={365} defaultValue={form.reentryDelayDays ?? 7} className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400/50" /></label> : null}</div>
     <p className="mt-1.5 text-[11px] text-zinc-600">Nunca se crea otra ejecución del mismo workflow mientras el fan ya tenga una activa.</p>
-    <div className="mt-4 flex flex-col justify-between gap-3 rounded-xl border border-violet-400/15 bg-violet-400/[.035] px-4 py-3 sm:flex-row sm:items-center">
+    <details className="group mt-5 overflow-hidden rounded-2xl border border-white/8 bg-black/10">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 text-sm font-medium text-zinc-300 transition hover:bg-white/[.025] [&::-webkit-details-marker]:hidden"><span>Configuración avanzada <span className="ml-2 text-xs font-normal text-zinc-600">Horarios, límites, respuestas y conversión</span></span><span className="text-xs text-violet-400 group-open:hidden">Abrir ↓</span><span className="hidden text-xs text-violet-400 group-open:block">Cerrar ↑</span></summary>
+      <div className="border-t border-white/8 p-4">
+    <div className="flex flex-col justify-between gap-3 rounded-xl border border-violet-400/15 bg-violet-400/[.035] px-4 py-3 sm:flex-row sm:items-center">
       <div><p className="text-xs font-medium text-violet-200">{value ? "Configuración propia de este workflow" : "Valores tomados de Configuración global"}</p><p className="mt-1 text-[11px] leading-4 text-zinc-500">{value ? "Los cambios siguientes solo afectarán este borrador. Las versiones publicadas permanecen intactas." : "Puedes personalizarlos aquí sin modificar los demás workflows."}</p></div>
       <Link href="/settings" className="shrink-0 text-[11px] font-medium text-violet-300 hover:text-violet-200">Editar valores globales →</Link>
     </div>
@@ -98,6 +102,8 @@ export function WorkflowEditor({ value, defaults, templates, publishedWorkflows,
     <section className="mt-4 rounded-xl border border-white/8 bg-black/15 p-4"><label className="flex items-center gap-2 text-sm text-zinc-300"><input type="checkbox" checked={sendLimitsEnabled} onChange={(event) => setSendLimitsEnabled(event.target.checked)} className="size-4 accent-violet-500" />Activar límites de seguridad</label><p className="mt-1 text-[11px] text-zinc-600">Al alcanzar un límite, el mensaje espera automáticamente; nunca se descarta.</p><div className={`mt-3 grid gap-3 sm:grid-cols-3 ${sendLimitsEnabled ? "" : "pointer-events-none opacity-40"}`}><label className="text-xs text-zinc-500">Máximo por hora<input name="maxMessagesPerHour" type="number" required min={1} max={1000} defaultValue={form.maxMessagesPerHour} className="mt-1.5 w-full rounded-lg border border-white/10 bg-[#20222b] px-3 py-2 text-zinc-200" /></label><label className="text-xs text-zinc-500">Máximo por 24 horas<input name="maxMessagesPerDay" type="number" required min={1} max={10000} defaultValue={form.maxMessagesPerDay} className="mt-1.5 w-full rounded-lg border border-white/10 bg-[#20222b] px-3 py-2 text-zinc-200" /></label><label className="text-xs text-zinc-500">Minutos entre mensajes al mismo fan<input name="minMinutesBetweenFanMessages" type="number" required min={0} max={43200} defaultValue={form.minMinutesBetweenFanMessages} className="mt-1.5 w-full rounded-lg border border-white/10 bg-[#20222b] px-3 py-2 text-zinc-200" /></label></div></section>
     <section className="mt-4 rounded-xl border border-white/8 bg-black/15 p-4"><label className="flex items-start gap-3"><input type="checkbox" checked={pauseOnFanReply} onChange={(event) => setPauseOnFanReply(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-violet-500" /><span><span className="block text-sm text-zinc-300">Pausar cuando el fan responda</span><span className="mt-1 block text-[11px] leading-5 text-zinc-600">Cada respuesta reinicia el tiempo de silencio. Después, el workflow continúa donde se quedó.</span></span></label><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className={`block text-xs text-zinc-500 ${pauseOnFanReply ? "" : "pointer-events-none opacity-40"}`}>Reanudar después de minutos sin respuesta<input name="replySilenceMinutes" type="number" required min={1} max={43200} defaultValue={form.replySilenceMinutes} className="mt-1.5 w-full rounded-lg border border-white/10 bg-[#20222b] px-3 py-2 text-zinc-200" /></label><label className="block text-xs text-zinc-500">Contar respuestas después de finalizar (horas)<input name="replyAttributionHours" type="number" required min={1} max={720} defaultValue={form.replyAttributionHours} className="mt-1.5 w-full rounded-lg border border-white/10 bg-[#20222b] px-3 py-2 text-zinc-200" /><span className="mt-1.5 block text-[11px] leading-4 text-zinc-600">Se mide desde el último mensaje automático. Recomendado: 24 horas.</span></label></div></section>
     <section className="mt-4 rounded-xl border border-emerald-400/15 bg-emerald-400/[.03] p-4"><p className="text-sm text-zinc-300">Objetivo de conversión</p><p className="mt-1 text-[11px] leading-5 text-zinc-600">Cuando el fan cumpla este objetivo, el workflow termina y ya no envía los mensajes restantes.</p><div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]"><label className="text-xs text-zinc-500">Objetivo<select value={goalType} onChange={(event) => setGoalType(event.target.value as WorkflowGoalType)} className="mt-1.5 w-full rounded-lg border border-white/10 bg-[#20222b] px-3 py-2 text-zinc-200">{workflowGoalTypes.map((goal) => <option key={goal} value={goal}>{workflowGoalLabels[goal]}</option>)}</select></label>{goalType === "SPEND_AMOUNT" ? <label className="text-xs text-zinc-500">Cantidad en USD<input name="goalAmount" type="number" required min="0.01" step="0.01" defaultValue={(form.goalAmountMinor ?? 5_000) / 100} className="mt-1.5 w-full rounded-lg border border-white/10 bg-[#20222b] px-3 py-2 text-zinc-200" /></label> : null}</div></section>
+      </div>
+    </details>
     <StepList initialSteps={form.steps} templates={templates} publishedWorkflows={publishedWorkflows} />
     <div className="mt-5 flex justify-end"><button disabled={busy} className="flex items-center gap-2 rounded-xl bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-400 disabled:opacity-50"><Save className="size-4" />{busy ? "Guardando…" : "Guardar borrador"}</button></div>
   </form>;
@@ -105,12 +111,60 @@ export function WorkflowEditor({ value, defaults, templates, publishedWorkflows,
 
 function StepList({ initialSteps, templates, publishedWorkflows }: { initialSteps: WorkflowDefinitionInput["steps"]; templates: TemplateOption[]; publishedWorkflows: Pick<WorkflowView, "id" | "name">[] }) {
   const [steps, setSteps] = useState(initialSteps);
+  const [dragging, setDragging] = useState<string | null>(null);
   const update = (index: number, patch: Partial<(typeof steps)[number]>) => setSteps((current) => current.map((step, position) => position === index ? { ...step, ...patch } : step));
-  const move = (index: number, offset: number) => setSteps((current) => { const next = [...current]; [next[index], next[index + offset]] = [next[index + offset], next[index]]; return next; });
+  const move = (index: number, offset: number) => setSteps((current) => reorderWorkflowSteps(current, index, index + offset));
+  const addStep = (type: (typeof editableStepTypes)[number], at?: number) => setSteps((current) => {
+    const next = [...current];
+    const endIndex = next.findIndex((step) => step.type === "END");
+    next.splice(Math.min(at ?? endIndex, endIndex), 0, newStep(type));
+    return next;
+  });
+  const dropAt = (event: DragEvent, at: number) => {
+    event.preventDefault();
+    const payload = event.dataTransfer.getData("text/workflow-step");
+    if (payload.startsWith("new:")) addStep(payload.slice(4) as (typeof editableStepTypes)[number], at);
+    if (payload.startsWith("step:")) {
+      const from = Number(payload.slice(5));
+      setSteps((current) => reorderWorkflowSteps(current, from, from < at ? at - 1 : at));
+    }
+    setDragging(null);
+  };
 
-  return <div className="mt-6"><input type="hidden" name="steps" value={JSON.stringify(steps)} /><div className="mb-3 flex items-center justify-between"><div><h3 className="text-sm font-medium text-white">Pasos</h3><p className="mt-0.5 text-xs text-zinc-600">Se ejecutan en este orden y siempre se validan antes de actuar.</p></div><select aria-label="Agregar paso" value="" onChange={(event) => { if (event.target.value) setSteps((current) => [...current.filter((step) => step.type !== "END"), newStep(event.target.value as (typeof editableStepTypes)[number]), ...current.filter((step) => step.type === "END")]); }} className="rounded-lg border border-white/10 bg-[#20222b] px-3 py-2 text-xs text-zinc-300"><option value="">+ Agregar paso</option>{editableStepTypes.filter((type) => type !== "END").map((type) => <option key={type} value={type}>{stepTypeLabels[type]}</option>)}</select></div>
-    <div className="space-y-3">{steps.map((step, index) => <div key={String(step.config.stepKey)} className="rounded-xl border border-white/8 bg-black/15 p-3"><div className="flex items-center gap-2"><span className="grid size-7 shrink-0 place-items-center rounded-full bg-violet-400/10 text-xs font-semibold text-violet-300">{index + 1}</span><input value={step.name} onChange={(event) => update(index, { name: event.target.value })} aria-label={`Nombre del paso ${index + 1}`} className="min-w-0 flex-1 bg-transparent text-sm font-medium text-zinc-200 outline-none" /><span className="rounded-md bg-white/5 px-2 py-1 text-[10px] text-zinc-500">{stepTypeLabels[step.type]}</span><button type="button" disabled={index === 0 || step.type === "END"} onClick={() => move(index, -1)} className="text-zinc-600 hover:text-white disabled:opacity-20"><ArrowUp className="size-4" /></button><button type="button" disabled={index >= steps.length - 2 || step.type === "END"} onClick={() => move(index, 1)} className="text-zinc-600 hover:text-white disabled:opacity-20"><ArrowDown className="size-4" /></button><button type="button" disabled={step.type === "END"} onClick={() => setSteps((current) => current.filter((_, position) => position !== index))} className="text-zinc-600 hover:text-red-300 disabled:opacity-20"><Trash2 className="size-4" /></button></div><StepConfig step={step} stepIndex={index} steps={steps} templates={templates} publishedWorkflows={publishedWorkflows} onChange={(patch) => update(index, patch)} />{step.type !== "CONDITION" && step.type !== "END" ? <NextStepSelect step={step} targets={steps.slice(index + 1)} onChange={(value) => update(index, { config: { ...step.config, nextTargetKey: value || undefined } })} /> : null}</div>)}</div>
-  </div>;
+  return <section className="mt-6 overflow-hidden rounded-2xl border border-white/8 bg-[#101218]"><input type="hidden" name="steps" value={JSON.stringify(steps)} />
+    <div className="border-b border-white/8 p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-sm font-medium text-white">Diagrama del flujo</h3><p className="mt-1 text-xs text-zinc-600">Arrastra un bloque al lienzo o toma el asa de un paso para cambiar su orden.</p></div><span className="rounded-full bg-white/5 px-3 py-1.5 text-[11px] text-zinc-500">{steps.length} bloques</span></div>
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">{editableStepTypes.filter((type) => type !== "END").map((type) => <button key={type} type="button" draggable onDragStart={(event) => { event.dataTransfer.setData("text/workflow-step", `new:${type}`); event.dataTransfer.effectAllowed = "copy"; setDragging(`new:${type}`); }} onDragEnd={() => setDragging(null)} onClick={() => addStep(type)} className="group flex cursor-grab items-center gap-2 rounded-xl border border-white/8 bg-white/[.025] px-3 py-2.5 text-left text-[11px] text-zinc-400 transition hover:border-violet-400/30 hover:bg-violet-400/8 hover:text-white active:cursor-grabbing"><StepIcon type={type} /><span>{stepTypeLabels[type]}</span></button>)}</div>
+    </div>
+    <div className="relative mx-auto max-w-3xl px-3 py-5 sm:px-6">
+      <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/8 px-4 py-2 text-xs font-medium text-emerald-300"><Zap className="size-3.5" />Inicio</div>
+      <DropConnector active={dragging !== null} onDrop={(event) => dropAt(event, 0)} />
+      {steps.map((step, index) => <div key={String(step.config.stepKey)}>
+        <article className={`relative rounded-2xl border bg-[#181a21] shadow-lg shadow-black/15 transition ${dragging === `step:${index}` ? "scale-[.99] border-violet-400/50 opacity-45" : step.type === "CONDITION" ? "border-amber-400/20" : step.type === "END" ? "border-emerald-400/20" : "border-white/10"}`}>
+          <div className="flex items-center gap-3 border-b border-white/7 px-3 py-3 sm:px-4">
+            {step.type !== "END" ? <button type="button" draggable onDragStart={(event) => { event.stopPropagation(); event.dataTransfer.setData("text/workflow-step", `step:${index}`); event.dataTransfer.effectAllowed = "move"; setDragging(`step:${index}`); }} onDragEnd={() => setDragging(null)} aria-label={`Arrastrar paso ${index + 1}`} title="Arrastra para cambiar la posición" className="cursor-grab rounded-lg p-1.5 text-zinc-600 hover:bg-white/5 hover:text-zinc-300 active:cursor-grabbing"><GripVertical className="size-4" /></button> : <span className="w-7" />}
+            <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-white/5 text-violet-300"><StepIcon type={step.type} /></span>
+            <span className="grid size-6 shrink-0 place-items-center rounded-full bg-violet-400/10 text-[10px] font-semibold text-violet-300">{index + 1}</span>
+            <input value={step.name} onChange={(event) => update(index, { name: event.target.value })} aria-label={`Nombre del paso ${index + 1}`} className="min-w-0 flex-1 bg-transparent text-sm font-medium text-zinc-100 outline-none focus:text-white" />
+            <span className="hidden rounded-md bg-white/5 px-2 py-1 text-[10px] text-zinc-500 sm:block">{stepTypeLabels[step.type]}</span>
+            <button type="button" disabled={index === 0 || step.type === "END"} onClick={() => move(index, -1)} aria-label="Mover arriba" className="rounded-md p-1 text-zinc-600 hover:bg-white/5 hover:text-white disabled:opacity-20"><ArrowUp className="size-4" /></button>
+            <button type="button" disabled={index >= steps.length - 2 || step.type === "END"} onClick={() => move(index, 1)} aria-label="Mover abajo" className="rounded-md p-1 text-zinc-600 hover:bg-white/5 hover:text-white disabled:opacity-20"><ArrowDown className="size-4" /></button>
+            <button type="button" disabled={step.type === "END"} onClick={() => setSteps((current) => clearBackwardWorkflowConnections(current.filter((_, position) => position !== index)))} aria-label="Eliminar paso" className="rounded-md p-1 text-zinc-600 hover:bg-red-400/8 hover:text-red-300 disabled:opacity-20"><Trash2 className="size-4" /></button>
+          </div>
+          <div className="p-3 sm:p-4"><StepConfig step={step} stepIndex={index} steps={steps} templates={templates} publishedWorkflows={publishedWorkflows} onChange={(patch) => update(index, patch)} />{step.type !== "CONDITION" && step.type !== "END" ? <NextStepSelect step={step} targets={steps.slice(index + 1)} onChange={(value) => update(index, { config: { ...step.config, nextTargetKey: value || undefined } })} /> : null}</div>
+        </article>
+        {index < steps.length - 1 ? <DropConnector active={dragging !== null} onDrop={(event) => dropAt(event, index + 1)} condition={step.type === "CONDITION"} /> : null}
+      </div>)}
+    </div>
+  </section>;
+}
+
+function DropConnector({ active, condition = false, onDrop }: { active: boolean; condition?: boolean; onDrop: (event: DragEvent) => void }) {
+  return <div onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={onDrop} className={`group relative mx-auto flex h-12 w-full max-w-xl items-center justify-center transition ${active ? "my-1 rounded-xl border border-dashed border-violet-400/30 bg-violet-400/[.035]" : ""}`}><span className={`h-full w-px ${condition ? "bg-gradient-to-b from-amber-400/50 to-violet-400/40" : "bg-white/12"}`} /><span className={`absolute rounded-full border bg-[#181a21] px-2 py-0.5 text-[9px] transition ${active ? "border-violet-400/30 text-violet-300" : "border-white/8 text-zinc-700"}`}>{active ? "Soltar aquí" : condition ? "ramifica" : "continúa"}</span></div>;
+}
+
+function StepIcon({ type }: { type: WorkflowDefinitionInput["steps"][number]["type"] }) {
+  const Icon = type === "SEND_MESSAGE" ? MessageSquare : type === "WAIT" ? Timer : type === "SEND_PPV" ? ImageIcon : type === "CONDITION" ? GitBranch : type === "CHANGE_WORKFLOW" ? Repeat2 : Flag;
+  return <Icon className="size-3.5" />;
 }
 
 function StepConfig({ step, stepIndex, steps, templates, publishedWorkflows, onChange }: { step: WorkflowDefinitionInput["steps"][number]; stepIndex: number; steps: WorkflowDefinitionInput["steps"]; templates: TemplateOption[]; publishedWorkflows: Pick<WorkflowView, "id" | "name">[]; onChange: (patch: Partial<typeof step>) => void }) {
@@ -133,7 +187,8 @@ function ConditionConfig({ step, targets, onChange }: { step: WorkflowDefinition
 }
 
 function BranchSelect({ label, value, targets, onChange }: { label: string; value: string; targets: WorkflowDefinitionInput["steps"]; onChange: (value: string) => void }) {
-  return <label className="text-[11px] text-zinc-500">{label}<select value={value} required onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded-lg border border-white/8 bg-[#20222b] px-3 py-2 text-xs text-zinc-300"><option value="">Selecciona el siguiente paso</option>{targets.map((target) => <option key={String(target.config.stepKey)} value={String(target.config.stepKey)}>{target.name}</option>)}</select></label>;
+  const positive = label === "Si cumple";
+  return <label className={`rounded-xl border p-3 text-[11px] ${positive ? "border-emerald-400/15 bg-emerald-400/[.035] text-emerald-300" : "border-red-400/15 bg-red-400/[.025] text-red-300"}`}><span className="flex items-center gap-2 font-medium"><span className={`grid size-5 place-items-center rounded-full ${positive ? "bg-emerald-400/15" : "bg-red-400/15"}`}>{positive ? "✓" : "×"}</span>{label}</span><select value={value} required onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-lg border border-white/8 bg-[#20222b] px-3 py-2 text-xs text-zinc-300"><option value="">Selecciona el siguiente paso</option>{targets.map((target) => <option key={String(target.config.stepKey)} value={String(target.config.stepKey)}>{target.name}</option>)}</select></label>;
 }
 
 function NextStepSelect({ step, targets, onChange }: { step: WorkflowDefinitionInput["steps"][number]; targets: WorkflowDefinitionInput["steps"]; onChange: (value: string) => void }) {

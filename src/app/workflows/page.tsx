@@ -323,7 +323,7 @@ export default async function WorkflowsPage() {
           </div>
           {creatorId ? (
             <>
-              <WorkflowManager workflows={workflows} templates={templateOptions} defaults={workflowDefaults} />
+              <WorkflowManager workflows={workflows} templates={templateOptions} defaults={workflowDefaults} analytics={workflowAnalytics} />
               <WorkflowAnalyticsPanel analytics={workflowAnalytics} stepAnalytics={stepAnalytics} />
               <EnrollmentPanel
                 fans={fans}
