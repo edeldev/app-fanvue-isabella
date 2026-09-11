@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 
 export const fanFilters = ["ALL", "ONLINE", "FOLLOWERS", "FOLLOWERS_ONLY", "ACTIVE_SUBSCRIBERS", "PAID_SUBSCRIBERS", "FREE_TRIAL_SUBSCRIBERS", "AUTO_RENEWING", "NON_RENEWING", "EXPIRED_SUBSCRIBERS", "SPENT_MORE_THAN_50", "HAS_TIPPED", "HAS_PURCHASED", "TOP_SPENDERS"] as const;
 export type FanFilter = (typeof fanFilters)[number];
+export const ONLINE_PRESENCE_TTL_MS = 10 * 60 * 1_000;
 
 export const fanFilterOptions: Array<{ value: FanFilter; label: string; description: string }> = [
   { value: "ALL", label: "Todos", description: "Todos tus contactos reales de Fanvue." },
@@ -24,8 +25,11 @@ export function parseFanFilter(value: string | undefined): FanFilter {
   return fanFilters.includes(value as FanFilter) ? (value as FanFilter) : "ALL";
 }
 
-export function fanFilterWhere(filter: FanFilter): Prisma.FanWhereInput {
-  if (filter === "ONLINE") return { isOnline: true };
+export function fanFilterWhere(filter: FanFilter, now = new Date()): Prisma.FanWhereInput {
+  if (filter === "ONLINE") return {
+    isOnline: true,
+    presenceChangedAt: { gte: new Date(now.getTime() - ONLINE_PRESENCE_TTL_MS) },
+  };
   if (filter === "FOLLOWERS") return { isFollower: true };
   if (filter === "FOLLOWERS_ONLY") return { isFollower: true, isSubscriber: false, isFreeTrialSubscriber: false };
   if (filter === "ACTIVE_SUBSCRIBERS") return { OR: [{ isSubscriber: true }, { isFreeTrialSubscriber: true }] };
@@ -41,18 +45,24 @@ export function fanFilterWhere(filter: FanFilter): Prisma.FanWhereInput {
   return {};
 }
 
-export function buildFansWhere(creatorId: string, filter: FanFilter, search: string): Prisma.FanWhereInput {
+export function buildFansWhere(creatorId: string, filter: FanFilter, search: string, now = new Date()): Prisma.FanWhereInput {
   const normalizedSearch = search.trim().slice(0, 80);
   return {
     creatorId,
     isCreatorAccount: false,
     AND: [
       { OR: [{ isFollower: true }, { isSubscriber: true }, { isFreeTrialSubscriber: true }, { isExpiredSubscriber: true }] },
-      fanFilterWhere(filter),
+      fanFilterWhere(filter, now),
       ...(normalizedSearch ? [{ OR: [
         { displayName: { contains: normalizedSearch, mode: "insensitive" as const } },
         { username: { contains: normalizedSearch, mode: "insensitive" as const } },
       ] }] : []),
     ],
   };
+}
+
+export function isFanOnlineNow(isOnline: boolean, presenceChangedAt: Date | null, now = new Date()) {
+  return isOnline
+    && presenceChangedAt !== null
+    && presenceChangedAt.getTime() >= now.getTime() - ONLINE_PRESENCE_TTL_MS;
 }
