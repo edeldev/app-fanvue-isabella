@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFansWhere, fanFilterWhere, isFanOnlineNow, parseFanFilter } from "./filters";
+import { buildFansWhere, fanFilterWhere, isConfirmedVip, isFanOnlineNow, parseFanFilter } from "./filters";
 
 describe("fan filters", () => {
   it("rejects unknown filters", () => {
@@ -22,6 +22,13 @@ describe("fan filters", () => {
     expect(isFanOnlineNow(true, new Date("2026-09-11T14:55:00.000Z"), now)).toBe(true);
     expect(isFanOnlineNow(true, new Date("2026-09-11T14:49:59.999Z"), now)).toBe(false);
     expect(isFanOnlineNow(false, new Date("2026-09-11T14:59:00.000Z"), now)).toBe(false);
+  });
+
+  it("does not treat Fanvue's top-spender flag as VIP without confirmed spend", () => {
+    expect(fanFilterWhere("TOP_SPENDERS")).toEqual({ isTopSpender: true, totalSpentMinor: { gt: 0 } });
+    expect(isConfirmedVip(true, 0)).toBe(false);
+    expect(isConfirmedVip(true, 1)).toBe(true);
+    expect(isConfirmedVip(false, 10_000)).toBe(false);
   });
 
   it("keeps creator and contact boundaries when searching", () => {

@@ -18,7 +18,7 @@ export const fanFilterOptions: Array<{ value: FanFilter; label: string; descript
   { value: "SPENT_MORE_THAN_50", label: "Gastaron más de $50", description: "Su gasto histórico confirmado supera $50 USD." },
   { value: "HAS_TIPPED", label: "Dieron propina", description: "Tienen al menos una propina confirmada y no reembolsada." },
   { value: "HAS_PURCHASED", label: "Realizaron una compra", description: "Tienen al menos un pago positivo confirmado." },
-  { value: "TOP_SPENDERS", label: "VIP", description: "Fanvue los identifica entre tus fans con mayor gasto." },
+  { value: "TOP_SPENDERS", label: "VIP", description: "Fanvue los identifica como top spender y tienen gasto confirmado mayor a $0." },
 ];
 
 export function parseFanFilter(value: string | undefined): FanFilter {
@@ -41,7 +41,7 @@ export function fanFilterWhere(filter: FanFilter, now = new Date()): Prisma.FanW
   if (filter === "SPENT_MORE_THAN_50") return { totalSpentMinor: { gt: 5_000 } };
   if (filter === "HAS_TIPPED") return { purchases: { some: { source: { equals: "tip", mode: "insensitive" }, amountMinor: { gt: 0 }, reversedAt: null } } };
   if (filter === "HAS_PURCHASED") return { purchases: { some: { amountMinor: { gt: 0 }, reversedAt: null } } };
-  if (filter === "TOP_SPENDERS") return { isTopSpender: true };
+  if (filter === "TOP_SPENDERS") return { isTopSpender: true, totalSpentMinor: { gt: 0 } };
   return {};
 }
 
@@ -65,4 +65,8 @@ export function isFanOnlineNow(isOnline: boolean, presenceChangedAt: Date | null
   return isOnline
     && presenceChangedAt !== null
     && presenceChangedAt.getTime() >= now.getTime() - ONLINE_PRESENCE_TTL_MS;
+}
+
+export function isConfirmedVip(isTopSpender: boolean, totalSpentMinor: number) {
+  return isTopSpender && totalSpentMinor > 0;
 }
