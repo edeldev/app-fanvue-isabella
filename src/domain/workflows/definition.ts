@@ -22,6 +22,16 @@ export const workflowStepInputSchema = z.object({
   if (["SEND_MESSAGE", "SEND_PPV"].includes(step.type) && !step.messageTemplateId) {
     context.addIssue({ code: "custom", path: ["messageTemplateId"], message: "Selecciona una plantilla." });
   }
+  if (["SEND_MESSAGE", "SEND_PPV"].includes(step.type)) {
+    const mode = step.config.replyPauseMode;
+    if (mode !== undefined && !["GLOBAL", "CUSTOM", "DISABLED"].includes(String(mode))) {
+      context.addIssue({ code: "custom", path: ["config", "replyPauseMode"], message: "Selecciona una política válida para respuestas." });
+    }
+    if (mode === "CUSTOM") {
+      const result = z.number().int().min(1).max(43_200).safeParse(step.config.replySilenceMinutes);
+      if (!result.success) context.addIssue({ code: "custom", path: ["config", "replySilenceMinutes"], message: "El silencio debe estar entre 1 minuto y 30 días." });
+    }
+  }
   if (step.type === "WAIT") {
     const result = z.number().int().min(1).max(43_200).safeParse(step.config.durationMinutes);
     if (!result.success) context.addIssue({ code: "custom", path: ["config", "durationMinutes"], message: "La espera debe estar entre 1 minuto y 30 días." });

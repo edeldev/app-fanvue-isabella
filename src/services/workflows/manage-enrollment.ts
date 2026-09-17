@@ -4,6 +4,7 @@ import { remainingWaitSeconds, resumedRunAt } from "@/domain/workflows/pause-sch
 import { prisma } from "@/lib/prisma";
 import { reentryBlockedReason } from "@/domain/workflows/reentry-policy";
 import { isReplyWithinAttributionWindow } from "@/domain/workflows/reply-attribution";
+import { resolveReplyPausePolicy } from "@/domain/workflows/reply-pause-policy";
 
 const nonTerminalStatuses: EnrollmentStatus[] = ["ACTIVE", "WAITING", "PAUSED"];
 
@@ -103,27 +104,44 @@ export async function recordFanReplyInActiveWorkflows(creatorId: string, fanId: 
 export async function pauseEnrollmentsOnFanReply(creatorId: string, fanId: string, messageId: string, repliedAt: Date) {
   const enrollments = await prisma.workflowEnrollment.findMany({
     where: { creatorId, fanId, OR: [{ status: { in: ["ACTIVE", "WAITING"] } }, { status: "PAUSED", nextRunAt: { not: null } }], workflow: { pauseOnFanReply: true } },
-    include: { workflow: { select: { name: true, replySilenceMinutes: true } } },
+    include: {
+      currentStep: { select: { id: true } },
+      workflow: {
+        select: {
+          name: true,
+          pauseOnFanReply: true,
+          replySilenceMinutes: true,
+          steps: { orderBy: { position: "asc" }, select: { id: true, position: true, type: true, config: true } },
+        },
+      },
+    },
   });
   if (!enrollments.length) return 0;
   let paused = 0;
   await prisma.$transaction(async (transaction) => {
     for (const enrollment of enrollments) {
+      const policy = resolveReplyPausePolicy({
+        currentStepId: enrollment.currentStep?.id ?? enrollment.currentStepId,
+        steps: enrollment.workflow.steps,
+        globalEnabled: enrollment.workflow.pauseOnFanReply,
+        globalSilenceMinutes: enrollment.workflow.replySilenceMinutes,
+      });
+      if (!policy.enabled || policy.silenceMinutes === null) continue;
       const remainingSeconds = enrollment.status === "WAITING"
         ? remainingWaitSeconds(enrollment.nextRunAt, repliedAt)
         : enrollment.pausedFromStatus === "WAITING"
           ? enrollment.pausedRemainingSeconds
           : null;
       const pausedFromStatus = enrollment.status === "PAUSED" ? enrollment.pausedFromStatus : enrollment.status;
-      const autoResumeAt = new Date(repliedAt.getTime() + enrollment.workflow.replySilenceMinutes * 60_000);
+      const autoResumeAt = new Date(repliedAt.getTime() + policy.silenceMinutes * 60_000);
       const updated = await transaction.workflowEnrollment.updateMany({
         where: { id: enrollment.id, OR: [{ status: { in: ["ACTIVE", "WAITING"] } }, { status: "PAUSED", nextRunAt: { not: null } }] },
-        data: { status: "PAUSED", pausedAt: repliedAt, pausedFromStatus, pausedRemainingSeconds: remainingSeconds, pauseReason: `El fan respondió; reanudación automática tras ${enrollment.workflow.replySilenceMinutes} min sin mensajes.`, nextRunAt: autoResumeAt, lockedAt: null, lockOwner: null, lockExpiresAt: null },
+        data: { status: "PAUSED", pausedAt: repliedAt, pausedFromStatus, pausedRemainingSeconds: remainingSeconds, pauseReason: `El fan respondió; reanudación automática tras ${policy.silenceMinutes} min sin mensajes.`, nextRunAt: autoResumeAt, lockedAt: null, lockOwner: null, lockExpiresAt: null },
       });
       if (!updated.count) continue;
       paused += 1;
       await transaction.automationLog.create({
-        data: { creatorId, fanId, enrollmentId: enrollment.id, eventType: "WORKFLOW_PAUSED_BY_REPLY", reasonCode: "FAN_REPLIED", explanation: `${enrollment.workflow.name}: pausado porque el fan respondió; continuará tras ${enrollment.workflow.replySilenceMinutes} min sin nuevos mensajes.`, metadata: { messageId, repliedAt: repliedAt.toISOString(), autoResumeAt: autoResumeAt.toISOString(), remainingSeconds } satisfies Prisma.InputJsonValue },
+        data: { creatorId, fanId, enrollmentId: enrollment.id, eventType: "WORKFLOW_PAUSED_BY_REPLY", reasonCode: "FAN_REPLIED", explanation: `${enrollment.workflow.name}: pausado porque el fan respondió; continuará tras ${policy.silenceMinutes} min sin nuevos mensajes.`, metadata: { messageId, repliedAt: repliedAt.toISOString(), autoResumeAt: autoResumeAt.toISOString(), remainingSeconds, silenceMinutes: policy.silenceMinutes, policySource: policy.source, upcomingStepId: policy.stepId } satisfies Prisma.InputJsonValue },
       });
     }
   });
