@@ -8,6 +8,7 @@ import {
 import { WorkflowAlertsMenu } from "./workflow-alerts-menu";
 import { MobileNavigation } from "./mobile-navigation";
 import { GlobalSearch } from "./global-search";
+import { TopbarDropdownCoordinator } from "./topbar-dropdown-coordinator";
 import { EngagementNotificationsMenu } from "@/components/notifications/engagement-notifications-menu";
 
 export async function Topbar() {
@@ -53,7 +54,8 @@ export async function Topbar() {
     .toUpperCase();
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-white/8 bg-[#101218]/90 px-3 backdrop-blur-xl sm:px-5 md:px-8">
+    <header data-topbar className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-white/8 bg-[#101218]/90 px-3 backdrop-blur-xl sm:px-5 md:px-8">
+      <TopbarDropdownCoordinator />
       <div className="flex min-w-0 flex-1 items-center gap-2 text-zinc-500 sm:gap-3">
         <MobileNavigation />
         <GlobalSearch />

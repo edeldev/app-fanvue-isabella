@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BellRing, Heart, MessageCircle, UserPlus, Volume2, VolumeX } from "lucide-react";
+import { Bell, BellRing, Heart, LoaderCircle, MessageCircle, Trash2, UserPlus, Volume2, VolumeX } from "lucide-react";
 import { enqueueSnackbar } from "notistack";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EngagementNotificationView } from "@/domain/notifications/engagement";
@@ -13,7 +13,10 @@ export function EngagementNotificationsMenu() {
   const [notifications, setNotifications] = useState<EngagementNotificationView[]>([]);
   const [readAt, setReadAt] = useState("");
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [confirmingClear, setConfirmingClear] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const cursor = useRef("");
+  const menu = useRef<HTMLDetailsElement>(null);
   const initialized = useRef(false);
   const audioContext = useRef<AudioContext | null>(null);
 
@@ -89,7 +92,28 @@ export function EngagementNotificationsMenu() {
     }
   }
 
-  return <details className="group relative" onToggle={(event) => { if (event.currentTarget.open) markRead(); }}>
+  async function clearNotifications() {
+    setClearing(true);
+    try {
+      const response = await fetch("/api/notifications", { method: "DELETE" });
+      if (!response.ok) throw new Error("No se pudo eliminar el historial.");
+      const body = await response.json() as { deleted: number };
+      setNotifications([]);
+      setConfirmingClear(false);
+      cursor.current = new Date().toISOString();
+      const clearedAt = cursor.current;
+      setReadAt(clearedAt);
+      window.localStorage.setItem(READ_KEY, clearedAt);
+      if (menu.current) menu.current.open = false;
+      enqueueSnackbar(body.deleted === 1 ? "Se eliminó 1 notificación." : `Se eliminaron ${body.deleted} notificaciones.`, { variant: "success" });
+    } catch {
+      enqueueSnackbar("No se pudo eliminar el historial de notificaciones.", { variant: "error" });
+    } finally {
+      setClearing(false);
+    }
+  }
+
+  return <details ref={menu} className="group relative" onToggle={(event) => { if (event.currentTarget.open) markRead(); else setConfirmingClear(false); }}>
     <summary aria-label={`${unreadCount} notificaciones nuevas`} className="relative grid size-9 cursor-pointer list-none place-items-center rounded-lg border border-white/8 text-zinc-400 transition hover:border-white/15 hover:text-white [&::-webkit-details-marker]:hidden">
       {unreadCount ? <BellRing className="size-4 text-violet-300" /> : <Bell className="size-4" />}
       {unreadCount ? <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-violet-500 px-1 text-[9px] font-bold leading-5 text-white ring-2 ring-[#101218]">{unreadCount > 99 ? "99+" : unreadCount}</span> : null}
@@ -100,7 +124,7 @@ export function EngagementNotificationsMenu() {
         <button type="button" onClick={toggleSound} aria-label={soundEnabled ? "Silenciar notificaciones" : "Activar sonido"} title={soundEnabled ? "Sonido activado" : "Sonido desactivado"} className="grid size-9 place-items-center rounded-lg border border-white/8 text-zinc-400 hover:bg-white/5 hover:text-white">{soundEnabled ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}</button>
       </div>
       <div className="max-h-96 overflow-y-auto">{notifications.map((notification) => <NotificationRow key={notification.id} notification={notification} />)}{!notifications.length ? <div className="p-8 text-center"><Bell className="mx-auto size-6 text-zinc-700" /><p className="mt-2 text-xs text-zinc-500">La nueva actividad aparecerá aquí.</p></div> : null}</div>
-      <p className="border-t border-white/8 px-4 py-3 text-center text-[10px] text-zinc-600">Se actualiza automáticamente cada 5 segundos.</p>
+      {confirmingClear ? <div className="border-t border-white/8 bg-red-500/5 p-3"><p className="text-xs font-medium text-zinc-200">¿Eliminar todo el historial de actividad?</p><p className="mt-1 text-[10px] text-zinc-500">Esta acción limpia estos registros de la base de datos y no se puede deshacer.</p><div className="mt-3 flex justify-end gap-2"><button type="button" disabled={clearing} onClick={() => setConfirmingClear(false)} className="cursor-pointer rounded-lg px-3 py-2 text-xs font-medium text-zinc-400 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-50">Conservar</button><button type="button" disabled={clearing} onClick={() => void clearNotifications()} className="flex cursor-pointer items-center gap-2 rounded-lg bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-300 transition hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-50">{clearing ? <LoaderCircle className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}Eliminar</button></div></div> : <div className="flex items-center justify-between gap-3 border-t border-white/8 px-4 py-3"><p className="text-[10px] text-zinc-600">Se actualiza cada 5 s · retención 90 días</p>{notifications.length ? <button type="button" onClick={() => setConfirmingClear(true)} className="flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1.5 text-[10px] font-medium text-zinc-500 transition hover:bg-red-500/10 hover:text-red-300"><Trash2 className="size-3" />Eliminar historial</button> : null}</div>}
     </div>
   </details>;
 }

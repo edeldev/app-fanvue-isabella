@@ -46,3 +46,17 @@ export async function GET(request: Request) {
     }),
   });
 }
+
+export async function DELETE() {
+  const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
+  if (!creatorId) return Response.json({ error: "Sesión no autorizada." }, { status: 401 });
+
+  const result = await prisma.fanEvent.deleteMany({
+    where: {
+      creatorId,
+      type: { in: [...engagementEventTypes] },
+    },
+  });
+
+  return Response.json({ ok: true, deleted: result.count });
+}

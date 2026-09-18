@@ -1,5 +1,6 @@
 export const operationalLogRetentionDays = 90;
 export const webhookPayloadRetentionDays = 90;
+export const engagementNotificationRetentionDays = 90;
 export const maintenanceIntervalHours = 24;
 
 export function retentionCutoff(now: Date, days: number) {
