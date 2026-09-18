@@ -72,7 +72,11 @@ export async function POST(request: Request) {
 
   after(async () => {
     try {
-      await handleFanvueWebhook(credential.creatorId, parsed.envelope.type, parsed.envelope.data);
+      await handleFanvueWebhook(credential.creatorId, parsed.envelope.type, parsed.envelope.data, {
+        providerEventId,
+        webhookEventId: event.id,
+        timestamp: parsed.envelope.timestamp,
+      });
       await prisma.webhookEvent.update({ where: { id: event.id }, data: { processedAt: new Date(), failedAt: null, failureReason: null } });
       logger.info("Fanvue webhook processed", { eventId: event.id, eventType: parsed.envelope.type });
     } catch (caught) {

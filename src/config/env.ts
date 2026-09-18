@@ -13,7 +13,7 @@ const serverEnvSchema = z.object({
   FANVUE_WEBHOOK_SIGNING_SECRET: z.string().min(16),
   FANVUE_REDIRECT_URI: z.string().url(),
   FANVUE_SCOPES: z.string().default(
-    "read:self read:creator read:chat write:chat read:fan read:media write:media read:insights",
+    "read:self read:creator read:chat write:chat read:fan read:media write:media read:insights read:post",
   ),
 });
 

@@ -25,7 +25,14 @@ const fanStatusDataSchema = z.object({
   object: z.literal("fan_status"), change_type: z.enum(["presence", "mute"]),
   state: z.enum(["online", "offline", "muted", "unmuted"]), changed_at: z.string(), fan: personSchema,
 });
-const followDataSchema = z.object({ follower: personSchema });
+const followDataSchema = z.object({ created_at: z.string().nullable().optional(), follower: personSchema });
+const postEngagementDataSchema = z.object({
+  id: z.string().nullable(),
+  post_uuid: z.string(),
+  comment_text: z.string().nullable(),
+  created_at: z.string().nullable(),
+  actor: personSchema,
+});
 const subscriptionDataSchema = z.object({
   id: z.string().nullable(), status: z.enum(["active", "expired"]), cancel_at_period_end: z.boolean(),
   current_period_start: z.string().nullable(), created_at: z.string().nullable(), expires_at: z.string().nullable(), purchaser: personSchema,
@@ -71,7 +78,36 @@ async function refreshSubscriptionSegments(creatorId: string, fanId: string, fan
   ]);
 }
 
-export async function handleFanvueWebhook(creatorId: string, type: string, unknownData: unknown) {
+type WebhookContext = {
+  providerEventId: string;
+  webhookEventId: string;
+  timestamp?: string;
+};
+
+async function recordEngagementEvent({
+  creatorId,
+  fanId,
+  type,
+  occurredAt,
+  context,
+  payload,
+}: {
+  creatorId: string;
+  fanId: string;
+  type: "FOLLOW_CREATED" | "POST_LIKED" | "POST_COMMENTED";
+  occurredAt: Date;
+  context?: WebhookContext;
+  payload: Record<string, string | null>;
+}) {
+  if (!context) return;
+  await prisma.fanEvent.upsert({
+    where: { creatorId_externalEventId: { creatorId, externalEventId: context.providerEventId } },
+    update: { fanId, webhookEventId: context.webhookEventId, type, occurredAt, payload },
+    create: { creatorId, fanId, webhookEventId: context.webhookEventId, externalEventId: context.providerEventId, type, occurredAt, payload },
+  });
+}
+
+export async function handleFanvueWebhook(creatorId: string, type: string, unknownData: unknown, context?: WebhookContext) {
   if (type === "creator.fan.presence_changed" || type === "creator.fan.status_changed") {
     const data = fanStatusDataSchema.parse(unknownData);
     const fan = await upsertFan(creatorId, data.fan);
@@ -92,7 +128,30 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
     const data = followDataSchema.parse(unknownData);
     const fan = await upsertFan(creatorId, data.follower);
     await prisma.fan.update({ where: { id: fan.id }, data: { isFollower: true, isCreatorAccount: false } });
+    await recordEngagementEvent({
+      creatorId,
+      fanId: fan.id,
+      type: "FOLLOW_CREATED",
+      occurredAt: new Date(data.created_at ?? context?.timestamp ?? Date.now()),
+      context,
+      payload: {},
+    });
     await triggerWorkflowForFan(creatorId, fan.id, "FOLLOW_CREATED");
+    return;
+  }
+
+  if (type === "creator.post.liked" || type === "creator.post.commented") {
+    const data = postEngagementDataSchema.parse(unknownData);
+    const fan = await upsertFan(creatorId, data.actor);
+    await prisma.fan.update({ where: { id: fan.id }, data: { isCreatorAccount: false, lastActivityAt: new Date(data.created_at ?? context?.timestamp ?? Date.now()) } });
+    await recordEngagementEvent({
+      creatorId,
+      fanId: fan.id,
+      type: type === "creator.post.liked" ? "POST_LIKED" : "POST_COMMENTED",
+      occurredAt: new Date(data.created_at ?? context?.timestamp ?? Date.now()),
+      context,
+      payload: { postUuid: data.post_uuid, commentId: data.id, commentText: data.comment_text },
+    });
     return;
   }
 

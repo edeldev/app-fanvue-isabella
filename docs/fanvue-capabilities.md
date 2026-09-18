@@ -22,7 +22,7 @@ Official sources:
 | OAuth 2.0 authorization code | Supported | `https://auth.fanvue.com/oauth2/auth` and `/oauth2/token`. |
 | PKCE S256 | Supported, required | Verifier 43–128 chars; state is required and must be verified. |
 | Refresh tokens | Supported | Request `openid offline_access offline`; rotation must be persisted atomically. |
-| Scopes | Supported | Relevant scopes: `read:self`, `read:fan`, `read:chat`, `write:chat`, `read:media`, `read:insights`; request only enabled capabilities. |
+| Scopes | Supported | Relevant scopes: `read:self`, `read:creator`, `read:fan`, `read:chat`, `write:chat`, `read:media`, `write:media`, `read:insights`, `read:post`; request only enabled capabilities. |
 | Versioning | Supported, required | Header `X-Fanvue-API-Version`; documentation currently identifies `2025-06-26`. Keep it configurable and explicitly reviewed. |
 | Rate limits | Supported | Default documented limit is 100 requests / 60 seconds per user; honor `X-RateLimit-*` and `Retry-After` on 429. |
 | Webhook signatures | Supported | Standard Webhooks HMAC-SHA256 and `X-Fanvue-Signature`; verify raw bytes before parsing. |
@@ -34,6 +34,7 @@ Official sources:
 |---|---|---|
 | Current creator profile | Supported | `GET /v1/users/me`. |
 | Followers | Supported | Followers list and `creator.follow.created`. No unfollow event is listed in the current creator event catalog; reconcile periodically. |
+| Engagement notifications | Supported | `creator.post.liked` and `creator.post.commented` require `read:post`; persist the provider event ID because delivery is at least once. |
 | Subscribers/lifecycle | Supported | Subscriber list; `creator.subscription.activated`, `.renewed`, `.deactivated`, `.cancel_at_period_end_changed`. |
 | Chat list/history | Supported | Chat and per-user message endpoints with `read:chat`; use delta sync plus message webhooks. |
 | Send direct message | Supported | Per-user message endpoint with `write:chat`. It is eligible for automation only after Validation Guard. |
@@ -55,4 +56,3 @@ Official sources:
 ## Implementation gate
 
 No adapter method is considered implemented until its path, method, scope, request schema, response schema, error responses and version are checked against the current v1 OpenAPI document. Unknown/unsupported actions fail closed with `NOT_SUPPORTED_BY_CURRENT_FANVUE_API`; they never fall back to demo data.
-

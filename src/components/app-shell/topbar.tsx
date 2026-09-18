@@ -8,6 +8,7 @@ import {
 import { WorkflowAlertsMenu } from "./workflow-alerts-menu";
 import { MobileNavigation } from "./mobile-navigation";
 import { GlobalSearch } from "./global-search";
+import { EngagementNotificationsMenu } from "@/components/notifications/engagement-notifications-menu";
 
 export async function Topbar() {
   const cookieStore = await cookies();
@@ -58,6 +59,7 @@ export async function Topbar() {
         <GlobalSearch />
       </div>
       <div className="flex items-center gap-3">
+        {creator ? <EngagementNotificationsMenu /> : null}
         {creator ? <WorkflowAlertsMenu alerts={alerts} unreadCount={unreadAlertCount} /> : null}
         {creator ? (
           <details className="group relative">
