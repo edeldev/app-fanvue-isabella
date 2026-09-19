@@ -5,6 +5,7 @@ import Link from "next/link";
 import { enqueueSnackbar } from "notistack";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { IntelligenceSegment, SaleReadiness } from "@/domain/ai/fan-intelligence";
 
 export type FanIntelligenceView = {
@@ -232,13 +233,13 @@ function ResourceMatch({ icon, label, recommendation, match, href, onPreview }: 
 
 function RecommendationPreviewModal({ type, fan, strategy, onClose }: { type: "WORKFLOW" | "TEMPLATE"; fan: FanIntelligenceView; strategy: StrategyRecommendation; onClose: () => void }) {
   const isWorkflow = type === "WORKFLOW";
-  return <div role="dialog" aria-modal="true" aria-labelledby="recommendation-preview-title" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }} className="fixed inset-0 z-[160] grid place-items-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm">
+  return createPortal(<div role="dialog" aria-modal="true" aria-labelledby="recommendation-preview-title" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }} className="fixed inset-0 z-[300] grid place-items-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm">
     <div className="my-8 w-full max-w-2xl overflow-hidden rounded-3xl border border-white/12 bg-[#171920] shadow-2xl shadow-black/70">
       <div className="flex items-start justify-between gap-4 border-b border-white/8 bg-gradient-to-br from-violet-500/10 to-transparent p-5 sm:p-6"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-violet-300">Ejemplo recomendado para {fan.displayName}</p><h2 id="recommendation-preview-title" className="mt-2 text-xl font-semibold text-white">{isWorkflow ? strategy.workflowName : strategy.templateName}</h2><p className="mt-2 text-xs leading-5 text-zinc-500">Todavía no existe en tu biblioteca. Este ejemplo es una guía editable antes de guardarlo.</p></div><button type="button" onClick={onClose} aria-label="Cerrar ejemplo" className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-xl border border-white/8 text-zinc-500 hover:bg-white/5 hover:text-white"><X className="size-4" /></button></div>
       <div className="p-5 sm:p-6">{isWorkflow ? <WorkflowBlueprint strategy={strategy} /> : <TemplateBlueprint fan={fan} strategy={strategy} />}</div>
       <div className="flex flex-col-reverse gap-2 border-t border-white/8 bg-black/10 p-4 sm:flex-row sm:justify-end"><button type="button" onClick={onClose} className="cursor-pointer rounded-xl px-4 py-2.5 text-xs font-semibold text-zinc-400 hover:bg-white/5 hover:text-white">Seguir revisando</button><Link href={isWorkflow ? "/workflows?new=1" : "/templates#new-template"} className="flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-400">{isWorkflow ? <Route className="size-3.5" /> : <FileText className="size-3.5" />}Vamos a crearlo</Link></div>
     </div>
-  </div>;
+  </div>, document.body);
 }
 
 function WorkflowBlueprint({ strategy }: { strategy: StrategyRecommendation }) {
