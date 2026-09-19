@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectRecentConversationSignals, extractConversationInterests, scoreFanIntelligence } from "./fan-intelligence";
+import { detectCommercialGuard, detectRecentConversationSignals, extractConversationInterests, scoreFanIntelligence } from "./fan-intelligence";
 
 const now = new Date("2026-09-19T12:00:00.000Z");
 
@@ -34,5 +34,11 @@ describe("fan intelligence", () => {
     expect(detectRecentConversationSignals([
       { text: "Hola, cómo estás?", sentAt: new Date("2026-09-19T10:00:00.000Z") },
     ], now)).toEqual([]);
+  });
+
+  it("blocks commercial recommendations after a recent rejection", () => {
+    expect(detectCommercialGuard([
+      { text: "Ahora no quiero comprar nada, gracias", sentAt: new Date("2026-09-19T10:00:00.000Z") },
+    ])).toMatchObject({ code: "REJECTION" });
   });
 });

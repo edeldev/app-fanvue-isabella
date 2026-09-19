@@ -26,14 +26,18 @@ const DAY_MS = 24 * 60 * 60 * 1_000;
 export function prioritizeFanAttention(
   signals: AttentionSignals,
   now = new Date(),
+  timeZone = "UTC",
 ): AttentionRecommendation {
   const hasUnansweredMessage = signals.unreadMessages > 0
     || Boolean(
       signals.lastInboundAt
       && (!signals.lastOutboundAt || signals.lastInboundAt > signals.lastOutboundAt),
     );
-  const daysUntilTrialEnds = signals.trialEndsAt
+  const exactDaysUntilTrialEnds = signals.trialEndsAt
     ? (signals.trialEndsAt.getTime() - now.getTime()) / DAY_MS
+    : Number.POSITIVE_INFINITY;
+  const calendarDaysUntilTrialEnds = signals.trialEndsAt
+    ? localDayNumber(signals.trialEndsAt, timeZone) - localDayNumber(now, timeZone)
     : Number.POSITIVE_INFINITY;
   const daysSinceActivity = signals.lastActivityAt
     ? Math.max(0, (now.getTime() - signals.lastActivityAt.getTime()) / DAY_MS)
@@ -51,12 +55,16 @@ export function prioritizeFanAttention(
     };
   }
 
-  if (signals.isFreeTrialSubscriber && daysUntilTrialEnds >= 0 && daysUntilTrialEnds <= 3) {
-    const days = Math.max(1, Math.ceil(daysUntilTrialEnds));
+  if (signals.isFreeTrialSubscriber && exactDaysUntilTrialEnds >= 0 && calendarDaysUntilTrialEnds <= 3) {
+    const reason = calendarDaysUntilTrialEnds === 0
+      ? "Su prueba gratuita termina hoy"
+      : calendarDaysUntilTrialEnds === 1
+        ? "Su prueba gratuita termina mañana"
+        : `Su prueba termina en ${calendarDaysUntilTrialEnds} días`;
     return {
-      score: 85 - Math.floor(daysUntilTrialEnds * 5),
+      score: 85 - Math.floor(exactDaysUntilTrialEnds * 5),
       priority: "TODAY",
-      reason: daysUntilTrialEnds < 1 ? "Su prueba gratuita termina hoy" : `Su prueba termina en ${days} días`,
+      reason,
       action: "Conectar y mostrar valor antes de sugerir la suscripción.",
     };
   }
@@ -92,4 +100,19 @@ export function prioritizeFanAttention(
   }
 
   return null;
+}
+
+function localDayNumber(date: Date, timeZone: string) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+    }).formatToParts(date);
+    const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return Date.UTC(Number(value.year), Number(value.month) - 1, Number(value.day)) / DAY_MS;
+  } catch {
+    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) / DAY_MS;
+  }
 }

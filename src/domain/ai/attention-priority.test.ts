@@ -37,7 +37,17 @@ describe("prioritizeFanAttention", () => {
     }, now);
 
     expect(result?.priority).toBe("TODAY");
-    expect(result?.reason).toContain("prueba");
+    expect(result?.reason).toBe("Su prueba gratuita termina mañana");
+  });
+
+  it("uses calendar dates instead of treating less than 24 hours as today", () => {
+    const result = prioritizeFanAttention({
+      ...base,
+      isFreeTrialSubscriber: true,
+      trialEndsAt: new Date("2026-09-20T15:30:00.000Z"),
+    }, now, "America/Monterrey");
+
+    expect(result?.reason).toBe("Su prueba gratuita termina mañana");
   });
 
   it("recognizes a recent engaged fan with low spend", () => {

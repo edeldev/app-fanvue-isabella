@@ -7,6 +7,11 @@ export type RecentConversationSignal = {
   evidence: string;
   detectedAt: Date;
 };
+export type CommercialGuard = {
+  code: "REJECTION" | "NOT_NOW" | "BUDGET_CONCERN";
+  label: string;
+  evidence: string;
+};
 
 export type FanIntelligenceSignals = {
   totalSpentMinor: number;
@@ -138,6 +143,26 @@ export function detectRecentConversationSignals(
       }
     });
   return [...detected.values()].slice(0, 3);
+}
+
+export function detectCommercialGuard(messages: Array<{ text: string | null; sentAt: Date }>): CommercialGuard | null {
+  const newest = [...messages]
+    .filter((message) => message.text?.trim())
+    .sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime())
+    .slice(0, 5);
+  const guards: Array<{ code: CommercialGuard["code"]; label: string; patterns: RegExp[] }> = [
+    { code: "REJECTION", label: "Rechazó recibir ofertas", patterns: [/no me interesa/i, /no quiero/i, /no gracias/i, /no me mandes/i, /deja de enviar/i, /\bstop\b/i, /not interested/i] },
+    { code: "NOT_NOW", label: "Pidió tiempo o espacio", patterns: [/ahora no/i, /quiz[aá]s luego/i, /despu[eé]s/i, /dame tiempo/i, /necesito espacio/i, /estoy ocupad/i, /not now/i, /maybe later/i] },
+    { code: "BUDGET_CONCERN", label: "Expresó una objeción de precio", patterns: [/no tengo dinero/i, /no puedo pagar/i, /muy caro/i, /demasiado caro/i, /sin dinero/i, /can'?t afford/i, /too expensive/i] },
+  ];
+  for (const message of newest) {
+    for (const guard of guards) {
+      if (guard.patterns.some((pattern) => pattern.test(message.text!))) {
+        return { code: guard.code, label: guard.label, evidence: message.text!.trim().slice(0, 180) };
+      }
+    }
+  }
+  return null;
 }
 
 function intelligenceReasons(signals: FanIntelligenceSignals, readiness: SaleReadiness) {

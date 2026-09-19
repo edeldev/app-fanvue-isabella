@@ -44,6 +44,7 @@ async function dashboardData(creatorId: string | null) {
         fanvueFollowersCount: true,
         fanvueSubscribersCount: true,
         fanvueContactsCount: true,
+        settings: { select: { timezone: true } },
       },
     }),
     prisma.fan.count({
@@ -164,7 +165,7 @@ async function dashboardData(creatorId: string | null) {
         trialEndsAt: fan.subscriptions[0]?.isFreeTrial
           ? fan.subscriptions[0].currentPeriodEndsAt
           : null,
-      });
+      }, new Date(), creator?.settings?.timezone || "America/Monterrey");
       return recommendation ? [{
         ...recommendation,
         id: fan.id,

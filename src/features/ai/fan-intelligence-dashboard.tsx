@@ -30,6 +30,7 @@ export type FanIntelligenceView = {
   lastActivityAt: string | null;
   lastInboundText: string | null;
   recentSignals: Array<{ key: "BIKINI" | "DRESS" | "LINGERIE" | "NUDE" | "COSPLAY"; label: string; evidence: string; detectedAt: string }>;
+  commercialGuard: { code: "REJECTION" | "NOT_NOW" | "BUDGET_CONCERN"; label: string; evidence: string } | null;
   interests: string[];
   reasons: string[];
   nextAction: string;
@@ -135,7 +136,8 @@ function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanInte
             <ResourceMatch icon={<FileText className="size-3.5" />} label="Plantilla" recommendation={strategy.templateName} match={matchingTemplate?.name ?? null} href={matchingTemplate ? `/templates#template-${matchingTemplate.id}` : undefined} onPreview={() => setPreview("TEMPLATE")} />
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2"><button type="button" onClick={() => setGoal("RELATIONSHIP")} className={goalButton(goal === "RELATIONSHIP")}><HeartHandshake className="size-3.5" />Conectar</button><button type="button" onClick={() => setGoal("SUBSCRIPTION")} className={goalButton(goal === "SUBSCRIPTION")}><Users className="size-3.5" />Suscripción</button><button type="button" onClick={() => setGoal("PPV")} className={goalButton(goal === "PPV")}><TrendingUp className="size-3.5" />PPV</button></div>
+        {fan.commercialGuard ? <div className="rounded-2xl border border-rose-400/15 bg-rose-400/[.045] p-4"><p className="text-xs font-semibold text-rose-200">Pausa comercial: {fan.commercialGuard.label}</p><p className="mt-1 text-[10px] italic leading-4 text-zinc-600">“{fan.commercialGuard.evidence}”</p></div> : null}
+        <div className="grid grid-cols-3 gap-2"><button type="button" onClick={() => setGoal("RELATIONSHIP")} className={goalButton(goal === "RELATIONSHIP")}><HeartHandshake className="size-3.5" />Conectar</button><button type="button" disabled={Boolean(fan.commercialGuard)} title={fan.commercialGuard ? "Deshabilitado por una señal comercial negativa reciente" : undefined} onClick={() => setGoal("SUBSCRIPTION")} className={goalButton(goal === "SUBSCRIPTION", Boolean(fan.commercialGuard))}><Users className="size-3.5" />Suscripción</button><button type="button" disabled={Boolean(fan.commercialGuard)} title={fan.commercialGuard ? "Deshabilitado por una señal comercial negativa reciente" : undefined} onClick={() => setGoal("PPV")} className={goalButton(goal === "PPV", Boolean(fan.commercialGuard))}><TrendingUp className="size-3.5" />PPV</button></div>
         <div className="rounded-2xl border border-white/8 bg-black/15 p-4"><div className="mb-3 flex items-center gap-2 text-xs font-medium text-violet-300"><Sparkles className="size-3.5" />Borrador contextual</div><p className="text-sm leading-6 text-zinc-300">{draft}</p><div className="mt-4 flex gap-2"><button type="button" onClick={() => void copyDraft()} className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-xs font-semibold text-zinc-300 transition hover:bg-white/5"><Copy className="size-3.5" />Copiar</button><Link href={`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}`} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-violet-500 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-400"><MessageCircle className="size-3.5" />Abrir chat</Link></div></div>
         {fan.interests.length ? <div><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Señales de los últimos 4 días</p><div className="mt-2 flex flex-wrap gap-2">{fan.interests.map((interest) => <span key={interest} className="rounded-full border border-white/8 bg-white/[.035] px-2.5 py-1 text-[10px] text-zinc-400">{interest}</span>)}</div>{fan.recentSignals[0] ? <p className="mt-2 line-clamp-2 text-[10px] italic leading-4 text-zinc-600">Evidencia: “{fan.recentSignals[0].evidence}”</p> : null}</div> : null}
         <div><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Por qué lo recomendamos</p><ul className="mt-2 space-y-2">{fan.reasons.map((reason) => <li key={reason} className="flex gap-2 text-[11px] leading-5 text-zinc-500"><span className="mt-2 size-1 shrink-0 rounded-full bg-violet-400" />{reason}</li>)}</ul></div>
@@ -149,6 +151,7 @@ function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanInte
 
 function buildDraft(fan: FanIntelligenceView, goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV") {
   const name = fan.displayName.split(/\s+/)[0] || "{{nombre}}";
+  if (fan.commercialGuard) return `${name}, gracias por decírmelo. No te preocupes; no te enviaré ninguna oferta ahora 💜`;
   const interest = fan.interests[0];
   const recentSignal = fan.recentSignals[0];
   if (goal === "PPV") return recentSignal
@@ -186,6 +189,7 @@ type IntentionalMessage = { intent: string; when: string; avoid: string; text: s
 
 function intentionalMessages(fan: FanIntelligenceView): IntentionalMessage[] {
   const name = fan.displayName.split(/\s+/)[0] || "{{nombre}}";
+  if (fan.commercialGuard) return [{ intent: "Respetar su límite y detener recomendaciones comerciales.", when: "Como única confirmación después de su mensaje", avoid: "ya confirmaste que respetarás su decisión", text: `${name}, gracias por decírmelo. No te preocupes; no te enviaré ninguna oferta ahora 💜` }];
   const interest = fan.interests[0];
   const recentSignal = fan.recentSignals[0];
   const interestReference = interest ? `lo que me contaste sobre ${interest}` : "lo que más disfrutas ver aquí";
@@ -236,6 +240,13 @@ function intentionalMessages(fan: FanIntelligenceView): IntentionalMessage[] {
 }
 
 function strategyForFan(fan: FanIntelligenceView): StrategyRecommendation {
+  if (fan.commercialGuard) return {
+    workflowName: "Pausa comercial respetuosa",
+    summary: "Existe una señal negativa reciente. Detén ofertas y conserva la relación sin intentar vencer su objeción.",
+    goals: [], triggers: ["MESSAGE_RECEIVED", "MANUAL"], workflowKeywords: ["pausa", "respeto", "sin oferta", "relación"],
+    templateName: "Confirmar pausa sin oferta", templateType: "TEXT", templateKeywords: ["pausa", "respeto", "sin oferta", "confirmación"], templateMessageIndex: 0,
+    steps: ["Confirmar que entendiste su mensaje.", "No enviar PPV, descuentos ni argumentos de venta.", "Mantener cualquier conversación posterior sin presión comercial.", "Reevaluar únicamente si el fan expresa por iniciativa propia un interés nuevo."],
+  };
   if (fan.segment === "HIGH_VALUE" && !fan.lastInboundText) return {
     workflowName: "Reconexión VIP personal",
     summary: "Su valor histórico merece atención, pero la conversación está fría. Primero recupera la relación sin enviar ofertas ni PPV.",
@@ -358,8 +369,8 @@ function IntentionalMessageNode({ index, message }: { index: number; message: In
 function readableTrigger(trigger: string) { return ({ FOLLOW_CREATED: "Nuevo seguidor", SUBSCRIPTION_ACTIVATED: "Suscripción activada", MESSAGE_RECEIVED: "Mensaje recibido", PRESENCE_ONLINE: "Fan conectado", MANUAL: "Asignación manual" } as Record<string, string>)[trigger] ?? trigger; }
 function readableGoal(goal: string) { return ({ FIRST_PURCHASE: "Primera compra", PAID_SUBSCRIPTION: "Suscripción de pago", PPV_PURCHASE: "Compra de PPV", SPEND_AMOUNT: "Alcanzar un monto de gasto", ANY_PURCHASE: "Cualquier compra" } as Record<string, string>)[goal] ?? goal; }
 
-function goalButton(active: boolean) {
-  return `flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border px-2 py-2.5 text-[10px] font-medium transition ${active ? "border-violet-400/30 bg-violet-500/15 text-violet-200" : "border-white/8 bg-white/[.025] text-zinc-500 hover:text-zinc-300"}`;
+function goalButton(active: boolean, disabled = false) {
+  return `flex flex-col items-center gap-1.5 rounded-xl border px-2 py-2.5 text-[10px] font-medium transition ${disabled ? "cursor-not-allowed border-white/5 bg-white/[.015] text-zinc-700 opacity-60" : active ? "cursor-pointer border-violet-400/30 bg-violet-500/15 text-violet-200" : "cursor-pointer border-white/8 bg-white/[.025] text-zinc-500 hover:text-zinc-300"}`;
 }
 function MiniScore({ label, value }: { label: string; value: number }) { return <div><div className="h-1 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-violet-400" style={{ width: `${value}%` }} /></div><p className="mt-1 text-[9px] text-zinc-600">{label} {value}</p></div>; }
 function readinessLabel(readiness: SaleReadiness) { return readiness === "HOT" ? "Momento activo" : readiness === "WARM" ? "Interés reciente" : "Sin señal reciente"; }

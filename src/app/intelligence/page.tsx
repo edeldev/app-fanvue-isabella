@@ -2,7 +2,7 @@ import { BrainCircuit, LockKeyhole, Sparkles } from "lucide-react";
 import { cookies } from "next/headers";
 import { Sidebar } from "@/components/app-shell/sidebar";
 import { Topbar } from "@/components/app-shell/topbar";
-import { detectRecentConversationSignals, extractConversationInterests, scoreFanIntelligence } from "@/domain/ai/fan-intelligence";
+import { detectCommercialGuard, detectRecentConversationSignals, extractConversationInterests, scoreFanIntelligence } from "@/domain/ai/fan-intelligence";
 import { FanIntelligenceDashboard, type FanIntelligenceView } from "@/features/ai/fan-intelligence-dashboard";
 import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
@@ -62,6 +62,7 @@ export default async function IntelligencePage() {
     const inbound = messages.filter((message) => message.direction === "INBOUND");
     const outbound = messages.filter((message) => message.direction === "OUTBOUND");
     const recentSignals = detectRecentConversationSignals(inbound, now);
+    const commercialGuard = detectCommercialGuard(inbound);
     const intelligence = scoreFanIntelligence({
       totalSpentMinor: fan.totalSpentMinor,
       purchaseCount: fan.purchases.length,
@@ -98,6 +99,7 @@ export default async function IntelligencePage() {
         evidence: signal.evidence,
         detectedAt: signal.detectedAt.toISOString(),
       })),
+      commercialGuard,
       interests: [...new Set([
         ...recentSignals.map((signal) => signal.label),
         ...extractConversationInterests(inbound.flatMap((message) => message.text ? [message.text] : [])),
