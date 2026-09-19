@@ -179,6 +179,7 @@ type StrategyRecommendation = {
   templateName: string;
   templateType: "TEXT" | "PPV";
   templateKeywords: string[];
+  templateMessageIndex?: number;
   steps: string[];
 };
 type IntentionalMessage = { intent: string; when: string; avoid: string; text: string };
@@ -228,6 +229,20 @@ function intentionalMessages(fan: FanIntelligenceView): IntentionalMessage[] {
 }
 
 function strategyForFan(fan: FanIntelligenceView): StrategyRecommendation {
+  if (fan.segment === "HIGH_VALUE" && !fan.lastInboundText) return {
+    workflowName: "Reconexión VIP personal",
+    summary: "Su valor histórico merece atención, pero la conversación está fría. Primero recupera la relación sin enviar ofertas ni PPV.",
+    goals: [], triggers: ["MANUAL"], workflowKeywords: ["vip", "reconexión", "relación", "personal"],
+    templateName: "Volver a conectar con VIP", templateType: "TEXT", templateKeywords: ["vip", "reconexión", "relación", "personal"], templateMessageIndex: 0,
+    steps: ["Saludar de forma personal sin mencionar una compra.", "Preguntar qué le interesa ver actualmente.", "Esperar una respuesta real y conversar manualmente.", "Solo después de detectar una preferencia reciente, pasar a una recomendación PPV."],
+  };
+  if (fan.segment === "HIGH_VALUE" && fan.recentSignals.length === 0) return {
+    workflowName: "Descubrimiento VIP antes de oferta",
+    summary: "La conversación ya se recuperó, pero todavía falta una preferencia concreta. Descúbrela antes de seleccionar contenido de pago.",
+    goals: [], triggers: ["MESSAGE_RECEIVED", "MANUAL"], workflowKeywords: ["vip", "descubrimiento", "preferencias", "relación"],
+    templateName: "Pregunta VIP de preferencias", templateType: "TEXT", templateKeywords: ["vip", "preferencias", "pregunta", "personal"], templateMessageIndex: 0,
+    steps: ["Reconocer su respuesta reciente.", "Preguntar qué tipo de contenido le interesa ahora.", "Guardar una señal explícita de la conversación.", "Preparar un PPV únicamente cuando exista contenido que coincida."],
+  };
   if (fan.segment === "HIGH_VALUE") return {
     workflowName: "Atención VIP y PPV personalizado",
     summary: "Protege la relación de alto valor y ofrece contenido relacionado con sus intereses, sin saturarlo.",
@@ -309,7 +324,10 @@ function WorkflowBlueprint({ fan, strategy }: { fan: FanIntelligenceView; strate
 }
 
 function TemplateBlueprint({ fan, strategy }: { fan: FanIntelligenceView; strategy: StrategyRecommendation }) {
-  const example = intentionalMessages(fan).at(-1)!;
+  const messages = intentionalMessages(fan);
+  const example = strategy.templateMessageIndex === undefined
+    ? messages.at(-1)!
+    : messages[strategy.templateMessageIndex] ?? messages[0];
   return <div><div className="grid gap-3 sm:grid-cols-2"><BlueprintFact label="Tipo" value={strategy.templateType === "PPV" ? "PPV con vista gratuita" : "Mensaje de texto"} /><BlueprintFact label="Intención" value={example.intent} /><BlueprintFact label="Enviar cuando" value={example.when} /><BlueprintFact label="No enviar cuando" value={example.avoid} /></div><div className="mt-5 rounded-2xl border border-white/8 bg-black/15 p-5"><div className="flex items-center gap-2 text-xs font-semibold text-violet-300"><Sparkles className="size-3.5" />Mensaje exclusivo sugerido</div><p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-zinc-300">{example.text}</p>{strategy.templateType === "PPV" ? <div className="mt-4 grid gap-2 sm:grid-cols-2"><div className="rounded-xl border border-emerald-400/15 bg-emerald-400/[.04] p-3"><p className="text-[10px] font-semibold text-emerald-200">Vista gratuita</p><p className="mt-1 text-[10px] text-zinc-600">Debe anticipar el tema que el fan confirmó, no una imagen genérica reutilizada.</p></div><div className="rounded-xl border border-amber-400/15 bg-amber-400/[.04] p-3"><p className="text-[10px] font-semibold text-amber-200">Contenido bloqueado</p><p className="mt-1 text-[10px] text-zinc-600">Contenido coherente con la conversación y un precio proporcional a su historial confirmado.</p></div></div> : null}</div><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full border border-white/8 px-2.5 py-1 text-[10px] text-zinc-500">Personalizar con {"{{nombre}}"}</span>{fan.interests[0] ? <span className="rounded-full border border-white/8 px-2.5 py-1 text-[10px] text-zinc-500">Interés real: {fan.interests[0]}</span> : <span className="rounded-full border border-amber-400/15 px-2.5 py-1 text-[10px] text-amber-300">Falta descubrir un interés</span>}<span className="rounded-full border border-white/8 px-2.5 py-1 text-[10px] text-zinc-500">Revisar antes de enviar</span></div></div>;
 }
 
