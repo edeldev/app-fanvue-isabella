@@ -1,8 +1,9 @@
 "use client";
 
-import { Bot, Check, ChevronRight, Copy, HeartHandshake, MessageCircle, Search, ShieldCheck, Sparkles, Target, TrendingUp, UserRoundSearch, Users } from "lucide-react";
+import { Bot, Check, ChevronRight, Copy, FileText, HeartHandshake, MessageCircle, Route, Search, ShieldCheck, Sparkles, Target, TrendingUp, UserRoundSearch, Users } from "lucide-react";
 import Link from "next/link";
 import { enqueueSnackbar } from "notistack";
+import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import type { IntelligenceSegment, SaleReadiness } from "@/domain/ai/fan-intelligence";
 
@@ -30,10 +31,12 @@ export type FanIntelligenceView = {
   interests: string[];
   reasons: string[];
   nextAction: string;
+  activeWorkflow: { id: string; name: string; status: string } | null;
 };
 
 type FunnelCoverage = { trigger: string; label: string; published: number; description: string };
-type TemplateOption = { name: string; category: string; type: string };
+type TemplateOption = { id: string; name: string; category: string; type: string };
+type WorkflowOption = { id: string; name: string; status: string; triggerEvent: string; goalType: string; steps: number };
 
 const segmentMeta: Record<IntelligenceSegment, { label: string; description: string; className: string }> = {
   HIGH_VALUE: { label: "Alto valor", description: "Mayor gasto y compras confirmadas", className: "border-amber-400/25 bg-amber-400/8 text-amber-200" },
@@ -45,7 +48,7 @@ const segmentMeta: Record<IntelligenceSegment, { label: string; description: str
 const segmentOrder: IntelligenceSegment[] = ["HIGH_VALUE", "MID_VALUE", "HIGH_POTENTIAL", "NURTURE", "AT_RISK"];
 const money = new Intl.NumberFormat("es-MX", { style: "currency", currency: "USD" });
 
-export function FanIntelligenceDashboard({ fans, funnelCoverage, templates }: { fans: FanIntelligenceView[]; funnelCoverage: FunnelCoverage[]; templates: TemplateOption[] }) {
+export function FanIntelligenceDashboard({ fans, funnelCoverage, templates, workflows }: { fans: FanIntelligenceView[]; funnelCoverage: FunnelCoverage[]; templates: TemplateOption[]; workflows: WorkflowOption[] }) {
   const [query, setQuery] = useState("");
   const [segment, setSegment] = useState<IntelligenceSegment | "ALL">("ALL");
   const [selectedId, setSelectedId] = useState(fans[0]?.id ?? "");
@@ -83,7 +86,7 @@ export function FanIntelligenceDashboard({ fans, funnelCoverage, templates }: { 
           {!filtered.length ? <div className="p-12 text-center"><UserRoundSearch className="mx-auto size-8 text-zinc-700" /><p className="mt-3 text-sm text-zinc-500">No encontramos fans con estos filtros.</p></div> : null}
         </div>
       </div>
-      <aside className="min-w-0">{selected ? <FanCopilot fan={selected} goal={goal} setGoal={setGoal} templates={templates} /> : <div className="rounded-3xl border border-dashed border-white/10 p-10 text-center text-sm text-zinc-600">Selecciona un fan para abrir su copiloto.</div>}</aside>
+      <aside className="min-w-0">{selected ? <FanCopilot fan={selected} goal={goal} setGoal={setGoal} templates={templates} workflows={workflows} /> : <div className="rounded-3xl border border-dashed border-white/10 p-10 text-center text-sm text-zinc-600">Selecciona un fan para abrir su copiloto.</div>}</aside>
     </section>
 
     <section className="rounded-3xl border border-white/8 bg-gradient-to-br from-violet-500/[.07] to-transparent p-5 sm:p-6">
@@ -104,8 +107,11 @@ function FanRow({ fan, selected, onSelect }: { fan: FanIntelligenceView; selecte
   </button>;
 }
 
-function FanCopilot({ fan, goal, setGoal, templates }: { fan: FanIntelligenceView; goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV"; setGoal: (goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV") => void; templates: TemplateOption[] }) {
+function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanIntelligenceView; goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV"; setGoal: (goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV") => void; templates: TemplateOption[]; workflows: WorkflowOption[] }) {
   const draft = buildDraft(fan, goal);
+  const strategy = strategyForFan(fan);
+  const matchingWorkflow = findMatchingWorkflow(strategy, workflows);
+  const matchingTemplate = findMatchingTemplate(strategy, templates);
   const recommendedTemplates = templates.filter((template) => goal === "PPV" ? template.type.toLocaleUpperCase() === "PPV" : template.type.toLocaleUpperCase() !== "PPV").slice(0, 3);
   async function copyDraft() {
     await navigator.clipboard.writeText(draft);
@@ -116,6 +122,16 @@ function FanCopilot({ fan, goal, setGoal, templates }: { fan: FanIntelligenceVie
       <div className="border-b border-white/8 bg-gradient-to-br from-violet-500/12 to-fuchsia-500/[.03] p-5"><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-2xl bg-violet-500 text-white"><Bot className="size-5" /></span><div><p className="text-sm font-semibold text-white">Copiloto de relación</p><p className="mt-0.5 text-[10px] text-violet-200/60">Contexto de {fan.displayName}</p></div></div><span className="flex items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-1 text-[9px] font-semibold text-emerald-300"><ShieldCheck className="size-3" />Requiere aprobación</span></div></div>
       <div className="space-y-5 p-5">
         <div><div className="flex items-center justify-between"><p className="text-xs font-semibold text-zinc-300">Siguiente mejor acción</p><span className="text-[10px] text-zinc-600">Confianza {Math.max(fan.relationshipScore, fan.valueScore)}%</span></div><p className="mt-2 text-xs leading-5 text-zinc-500">{fan.nextAction}</p></div>
+        <div className="rounded-2xl border border-violet-400/15 bg-violet-500/[.045] p-4">
+          <div className="flex items-center gap-2 text-xs font-semibold text-violet-200"><Route className="size-3.5" />Estrategia recomendada</div>
+          <p className="mt-2 text-sm font-semibold text-white">{strategy.workflowName}</p><p className="mt-1 text-[11px] leading-5 text-zinc-500">{strategy.summary}</p>
+          {fan.activeWorkflow ? <div className="mt-3 rounded-xl border border-sky-400/15 bg-sky-400/[.05] px-3 py-2"><p className="text-[10px] font-semibold text-sky-200">Ya está en: {fan.activeWorkflow.name}</p><p className="mt-0.5 text-[9px] text-zinc-600">Revisa ese flujo antes de asignar otro para evitar mensajes cruzados.</p></div> : null}
+          <ol className="mt-3 space-y-2">{strategy.steps.map((step, index) => <li key={step} className="flex gap-2 text-[10px] leading-4 text-zinc-400"><span className="grid size-4 shrink-0 place-items-center rounded-full bg-violet-400/10 text-[8px] font-bold text-violet-300">{index + 1}</span>{step}</li>)}</ol>
+          <div className="mt-4 grid gap-2">
+            <ResourceMatch icon={<Route className="size-3.5" />} label="Workflow" recommendation={strategy.workflowName} match={matchingWorkflow ? `${matchingWorkflow.name} · ${matchingWorkflow.status === "PUBLISHED" ? "Publicado" : "Borrador"}` : null} href={matchingWorkflow ? `/workflows?q=${encodeURIComponent(matchingWorkflow.name)}` : "/workflows"} />
+            <ResourceMatch icon={<FileText className="size-3.5" />} label="Plantilla" recommendation={strategy.templateName} match={matchingTemplate?.name ?? null} href={matchingTemplate ? `/templates#template-${matchingTemplate.id}` : "/templates"} />
+          </div>
+        </div>
         <div className="grid grid-cols-3 gap-2"><button type="button" onClick={() => setGoal("RELATIONSHIP")} className={goalButton(goal === "RELATIONSHIP")}><HeartHandshake className="size-3.5" />Conectar</button><button type="button" onClick={() => setGoal("SUBSCRIPTION")} className={goalButton(goal === "SUBSCRIPTION")}><Users className="size-3.5" />Suscripción</button><button type="button" onClick={() => setGoal("PPV")} className={goalButton(goal === "PPV")}><TrendingUp className="size-3.5" />PPV</button></div>
         <div className="rounded-2xl border border-white/8 bg-black/15 p-4"><div className="mb-3 flex items-center gap-2 text-xs font-medium text-violet-300"><Sparkles className="size-3.5" />Borrador contextual</div><p className="text-sm leading-6 text-zinc-300">{draft}</p><div className="mt-4 flex gap-2"><button type="button" onClick={() => void copyDraft()} className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-xs font-semibold text-zinc-300 transition hover:bg-white/5"><Copy className="size-3.5" />Copiar</button><Link href={`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}`} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-violet-500 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-400"><MessageCircle className="size-3.5" />Abrir chat</Link></div></div>
         {fan.interests.length ? <div><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Intereses detectados</p><div className="mt-2 flex flex-wrap gap-2">{fan.interests.map((interest) => <span key={interest} className="rounded-full border border-white/8 bg-white/[.035] px-2.5 py-1 text-[10px] text-zinc-400">{interest}</span>)}</div></div> : null}
@@ -134,6 +150,80 @@ function buildDraft(fan: FanIntelligenceView, goal: "RELATIONSHIP" | "SUBSCRIPTI
   if (goal === "SUBSCRIPTION") return `Hola ${name} ✨ ${interest ? `Como te gusta ${interest}, ` : ""}creo que disfrutarías bastante el contenido para suscriptores. ¿Quieres que te cuente qué incluye para que veas si realmente es para ti?`;
   if (fan.lastInboundText) return `Hola ${name} 😊 Me gustó leerte. ${interest ? `Quiero conocerte mejor: ¿qué es lo que más te gusta de ${interest}?` : "Quiero conocerte mejor, ¿qué tipo de contenido disfrutas más?"}`;
   return `Hola ${name} 😊 Gracias por estar aquí. Quiero conocerte mejor: ¿qué tipo de contenido te gustaría ver de mí?`;
+}
+
+type StrategyRecommendation = {
+  workflowName: string;
+  summary: string;
+  goals: string[];
+  triggers: string[];
+  workflowKeywords: string[];
+  templateName: string;
+  templateType: "TEXT" | "PPV";
+  templateKeywords: string[];
+  steps: string[];
+};
+
+function strategyForFan(fan: FanIntelligenceView): StrategyRecommendation {
+  if (fan.segment === "HIGH_VALUE") return {
+    workflowName: "Atención VIP y PPV personalizado",
+    summary: "Protege la relación de alto valor y ofrece contenido relacionado con sus intereses, sin saturarlo.",
+    goals: ["PPV_PURCHASE", "SPEND_AMOUNT", "ANY_PURCHASE"], triggers: ["MESSAGE_RECEIVED", "MANUAL"], workflowKeywords: ["vip", "ppv", "alto valor", "personalizado"],
+    templateName: "Oferta VIP personalizada", templateType: "PPV", templateKeywords: ["vip", "exclusivo", "personalizado", "ppv"],
+    steps: ["Abrir con contexto personal y reconocer la relación.", "Confirmar qué contenido le interesa ahora.", "Esperar respuesta y ofrecer un PPV relevante con vista gratuita.", "Si no compra, continuar la relación; no repetir la oferta inmediatamente."],
+  };
+  if (fan.segment === "MID_VALUE") return {
+    workflowName: "Escalamiento de valor",
+    summary: "Usa lo que ya compró como señal y prepara una siguiente oferta de mayor afinidad, no solo de mayor precio.",
+    goals: ["SPEND_AMOUNT", "PPV_PURCHASE", "ANY_PURCHASE"], triggers: ["MESSAGE_RECEIVED", "MANUAL"], workflowKeywords: ["escalamiento", "upsell", "ppv", "valor medio"],
+    templateName: "Siguiente contenido recomendado", templateType: "PPV", templateKeywords: ["recomendado", "ppv", "especial", "siguiente"],
+    steps: ["Retomar un gusto o compra previa.", "Conversar y validar interés sin enviar precio todavía.", "Presentar una vista gratuita y explicar por qué encaja con él.", "Detener la secuencia si compra o pide no recibir ofertas."],
+  };
+  if (fan.segment === "HIGH_POTENTIAL") return {
+    workflowName: "Primera conversión desde conversación",
+    summary: "Convierte una relación activa en la primera compra o suscripción sin romper el tono natural del chat.",
+    goals: ["FIRST_PURCHASE", "PAID_SUBSCRIPTION"], triggers: ["MESSAGE_RECEIVED", "FOLLOW_CREATED"], workflowKeywords: ["primera compra", "conversión", "potencial", "seguimiento"],
+    templateName: "Pregunta de interés antes de oferta", templateType: "TEXT", templateKeywords: ["interés", "pregunta", "conocer", "seguimiento"],
+    steps: ["Hacer una pregunta breve sobre sus gustos.", "Responder manualmente y construir contexto.", "Compartir valor gratuito o una vista previa.", "Solo con una señal positiva, recomendar suscripción o un PPV de entrada."],
+  };
+  if (fan.segment === "AT_RISK") return {
+    workflowName: "Reactivación suave",
+    summary: "Recupera la conversación con valor y curiosidad; la venta queda para después de una respuesta real.",
+    goals: ["ANY_PURCHASE", "PAID_SUBSCRIPTION"], triggers: ["MANUAL", "PRESENCE_ONLINE"], workflowKeywords: ["reactivación", "regreso", "inactivo", "recuperación"],
+    templateName: "Reencuentro sin venta", templateType: "TEXT", templateKeywords: ["reencuentro", "reactivación", "extraño", "regreso"],
+    steps: ["Saludar sin mencionar una oferta.", "Preguntar por sus preferencias actuales.", "Esperar una respuesta antes de continuar.", "Si recupera interés, moverlo a un flujo de relación o conversión."],
+  };
+  return {
+    workflowName: "Bienvenida y descubrimiento",
+    summary: "Construye memoria de gustos primero; después decide si conviene suscripción, PPV o solo continuar conversando.",
+    goals: ["PAID_SUBSCRIPTION", "FIRST_PURCHASE"], triggers: ["FOLLOW_CREATED", "SUBSCRIPTION_ACTIVATED"], workflowKeywords: ["bienvenida", "nuevo seguidor", "descubrimiento", "primer contacto"],
+    templateName: "Bienvenida con pregunta abierta", templateType: "TEXT", templateKeywords: ["bienvenida", "primer contacto", "gracias", "pregunta"],
+    steps: ["Agradecer que llegó sin venderle de inmediato.", "Preguntar qué tipo de contenido disfruta.", "Guardar sus señales y responder de forma personalizada.", "Cuando exista interés, cambiar a la estrategia de conversión adecuada."],
+  };
+}
+
+function findMatchingWorkflow(strategy: StrategyRecommendation, workflows: WorkflowOption[]) {
+  return workflows.map((workflow) => {
+    const searchable = workflow.name.toLocaleLowerCase("es-MX");
+    const score = (strategy.goals.includes(workflow.goalType) ? 5 : 0)
+      + (strategy.triggers.includes(workflow.triggerEvent) ? 3 : 0)
+      + strategy.workflowKeywords.filter((keyword) => searchable.includes(keyword)).length * 2
+      + (workflow.status === "PUBLISHED" ? 1 : 0);
+    return { workflow, score };
+  }).filter((candidate) => candidate.score >= 5).sort((a, b) => b.score - a.score)[0]?.workflow ?? null;
+}
+
+function findMatchingTemplate(strategy: StrategyRecommendation, templates: TemplateOption[]) {
+  return templates.map((template) => {
+    const searchable = `${template.name} ${template.category}`.toLocaleLowerCase("es-MX");
+    const score = (template.type.toLocaleUpperCase() === strategy.templateType ? 4 : 0)
+      + strategy.templateKeywords.filter((keyword) => searchable.includes(keyword)).length * 2;
+    return { template, score };
+  }).filter((candidate) => candidate.score >= 6).sort((a, b) => b.score - a.score)[0]?.template ?? null;
+}
+
+function ResourceMatch({ icon, label, recommendation, match, href }: { icon: ReactNode; label: string; recommendation: string; match: string | null; href: string }) {
+  return <Link href={href} className="flex items-center gap-3 rounded-xl border border-white/8 bg-black/10 p-3 transition hover:border-violet-400/20 hover:bg-violet-400/[.04]"><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white/5 text-violet-300">{icon}</span><span className="min-w-0 flex-1"><span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-600">{label} recomendado</span><span className="mt-0.5 block truncate text-[11px] text-zinc-300">{recommendation}</span><span className={`mt-1 block truncate text-[9px] ${match ? "text-emerald-300" : "text-amber-300"}`}>{match ? `Coincidencia encontrada: ${match}` : "No existe uno compatible; conviene crearlo"}</span></span><ChevronRight className="size-3.5 shrink-0 text-zinc-700" /></Link>;
 }
 
 function goalButton(active: boolean) {
