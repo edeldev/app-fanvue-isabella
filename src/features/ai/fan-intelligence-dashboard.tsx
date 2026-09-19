@@ -212,7 +212,14 @@ function intentionalMessages(fan: FanIntelligenceView): IntentionalMessage[] {
     { intent: "Proponer una primera compra de baja fricción con permiso.", when: "Solo después de un sí explícito a la vista previa", avoid: "no pidió verla, está frío o acaba de rechazar una oferta", text: `${name}, elegí esto porque conecta con ${interestReference}. Te dejé la vista previa para que sepas exactamente qué esperar; si te gusta, puedes desbloquear el resto aquí 💜` },
   ];
   if (fan.segment === "MID_VALUE") return [
-    { ...discovery, intent: "Actualizar sus preferencias antes de recomendar otra compra." },
+    {
+      intent: fan.lastInboundText ? "Actualizar sus preferencias antes de recomendar otra compra." : "Retomar la relación sin convertir su compra anterior en presión.",
+      when: fan.lastInboundText ? "Como continuación de su mensaje reciente" : "Cuando no existe conversación en los últimos 4 días",
+      avoid: "ya recibió un seguimiento reciente, pidió espacio o no puedes continuar la conversación manualmente",
+      text: fan.lastInboundText
+        ? `${name}, me dio gusto leerte 😊 Antes de recomendarte cualquier cosa, tengo curiosidad: ¿qué te gustaría ver de mí ahora?`
+        : `${name}, hace tiempo que no hablamos 😊 Me acordé de ti y quise saber cómo estás. Sin ofertas de por medio: ¿qué te gustaría ver más de mí últimamente?`,
+    },
     { intent: "Validar una recomendación basada en su historial, sin asumir que quiere comprar.", when: "Después de una respuesta positiva o conversación reciente", avoid: "su última compra fue demasiado reciente o no está respondiendo", text: `${name}, quiero recomendarte algo que realmente valga la pena para ti. Pensando en ${interestReference}, ¿te atrae más algo íntimo y natural o algo más elaborado?` },
     { intent: "Ofrecer un PPV relevante y transparente.", when: "Cuando responda la pregunta y exista contenido que coincida", avoid: "el contenido no coincide con su respuesta", text: `${name}, escogí este contenido por lo que acabas de decirme. Mira primero la vista gratuita; si es tu estilo, el resto está disponible para desbloquear 💜` },
   ];
@@ -249,6 +256,20 @@ function strategyForFan(fan: FanIntelligenceView): StrategyRecommendation {
     goals: ["PPV_PURCHASE", "SPEND_AMOUNT", "ANY_PURCHASE"], triggers: ["MESSAGE_RECEIVED", "MANUAL"], workflowKeywords: ["vip", "ppv", "alto valor", "personalizado"],
     templateName: "Oferta VIP personalizada", templateType: "PPV", templateKeywords: ["vip", "exclusivo", "personalizado", "ppv"],
     steps: ["Abrir con contexto personal y reconocer la relación.", "Confirmar qué contenido le interesa ahora.", "Esperar respuesta y ofrecer un PPV relevante con vista gratuita.", "Si no compra, continuar la relación; no repetir la oferta inmediatamente."],
+  };
+  if (fan.segment === "MID_VALUE" && !fan.lastInboundText) return {
+    workflowName: "Reconexión de cliente",
+    summary: "Ya compró antes, pero la conversación está fría. Recupera el contacto sin asumir que quiere volver a comprar.",
+    goals: [], triggers: ["MANUAL"], workflowKeywords: ["reconexión", "cliente", "relación", "seguimiento"],
+    templateName: "Retomar conversación sin oferta", templateType: "TEXT", templateKeywords: ["reconexión", "cliente", "conversación", "seguimiento"], templateMessageIndex: 0,
+    steps: ["Retomar el contacto sin mostrar precio ni contenido bloqueado.", "Preguntar si sus gustos han cambiado.", "Esperar una respuesta y conversar con naturalidad.", "Solo después de una señal reciente, preparar una recomendación relevante."],
+  };
+  if (fan.segment === "MID_VALUE" && fan.recentSignals.length === 0) return {
+    workflowName: "Actualizar preferencias de cliente",
+    summary: "Volvió a conversar, pero todavía no existe una preferencia concreta que justifique otra oferta.",
+    goals: [], triggers: ["MESSAGE_RECEIVED", "MANUAL"], workflowKeywords: ["preferencias", "cliente", "descubrimiento", "seguimiento"],
+    templateName: "Pregunta de preferencia actual", templateType: "TEXT", templateKeywords: ["preferencia", "pregunta", "cliente", "interés"], templateMessageIndex: 0,
+    steps: ["Reconocer su mensaje reciente.", "Preguntar qué contenido le interesa actualmente.", "Confirmar una preferencia sin presionar una compra.", "Recomendar un PPV solo cuando el contenido coincida con su respuesta."],
   };
   if (fan.segment === "MID_VALUE") return {
     workflowName: "Escalamiento de valor",
