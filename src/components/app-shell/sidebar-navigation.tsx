@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  BrainCircuit,
   Bot,
   FileText,
   LayoutDashboard,
@@ -20,6 +21,7 @@ const navigation = [
   ["Plantillas", "/templates", FileText],
   ["Flujos", "/workflows", Workflow],
   ["Automatización", "/automation", Bot],
+  ["IA de fans", "/intelligence", BrainCircuit],
   ["Analítica", "/analytics", BarChart3],
   ["Configuración", "/settings", Settings],
 ] as const;
