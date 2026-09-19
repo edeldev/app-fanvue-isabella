@@ -149,10 +149,14 @@ function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanInte
 function buildDraft(fan: FanIntelligenceView, goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV") {
   const name = fan.displayName.split(/\s+/)[0] || "{{nombre}}";
   const interest = fan.interests[0];
-  if (goal === "PPV") return `${name}, ${interest ? `por lo que me contaste sobre ${interest}, ` : "antes de recomendarte algo, "}creo que tengo una opción que podría encajar contigo. ¿Quieres que te enseñe una vista previa sin compromiso?`;
+  if (goal === "PPV") return fan.lastInboundText
+    ? `${name}, me quedé pensando en lo que dijiste${interest ? ` sobre ${interest}` : ""}… y tengo algo que encaja demasiado bien 👀 ¿Quieres ver primero un pequeño adelanto?`
+    : `${name}, elegí una vista previa que creo que podría sorprenderte 👀 ¿Te enseño el adelanto y tú me dices si quieres descubrir el resto?`;
   if (goal === "SUBSCRIPTION") return fan.isFreeTrialSubscriber
     ? `${name}, quiero que aproveches tu prueba para descubrir lo que realmente te gusta. ${interest ? `Como te interesa ${interest}, puedo enseñarte dónde encontrar más contenido así.` : "¿Qué te gustaría explorar antes de que termine?"}`
-    : `${name}, ${interest ? `por lo que me has contado sobre ${interest}, ` : "por lo que hemos hablado, "}creo que parte del contenido para suscriptores sí podría gustarte. ¿Quieres que te explique qué incluye antes de decidir?`;
+    : fan.lastInboundText
+      ? `${name}, por lo que me has contado${interest ? ` sobre ${interest}` : ""}, hay una parte de mi contenido para suscriptores que creo que te va a gustar mucho 👀 ¿Quieres que te cuente qué incluye?`
+      : `${name}, hay una parte de mi contenido que casi nunca enseño fuera de la suscripción 👀 ¿Quieres que te cuente qué incluye antes de decidir?`;
   return intentionalMessages(fan)[0].text;
 }
 
@@ -173,6 +177,12 @@ function intentionalMessages(fan: FanIntelligenceView): IntentionalMessage[] {
   const name = fan.displayName.split(/\s+/)[0] || "{{nombre}}";
   const interest = fan.interests[0];
   const interestReference = interest ? `lo que me contaste sobre ${interest}` : "lo que más disfrutas ver aquí";
+  const subscriptionReveal = fan.lastInboundText
+    ? `${name}, por lo que me has contado${interest ? ` sobre ${interest}` : ""}, hay una parte de mi contenido para suscriptores que creo que te va a gustar mucho 👀 ¿Quieres que te cuente qué incluye?`
+    : `${name}, hay una parte de mi contenido que casi nunca enseño fuera de la suscripción 👀 ¿Quieres que te cuente qué incluye antes de decidir?`;
+  const ppvReveal = fan.lastInboundText
+    ? `${name}, elegí esto pensando en lo que me dijiste${interest ? ` sobre ${interest}` : ""}. Mira primero el adelanto… el resto es justo la parte que no quise revelar aquí 👀💜`
+    : `${name}, elegí una de mis vistas previas favoritas para ti. Mira primero el adelanto… el resto es justo la parte que no quise revelar aquí 👀💜`;
   const discovery: IntentionalMessage = {
     intent: "Conseguir una respuesta auténtica y descubrir una preferencia útil.",
     when: fan.lastInboundText ? "Como continuación natural de la conversación" : "Primer contacto o después de 24 h sin conversación",
@@ -182,7 +192,7 @@ function intentionalMessages(fan: FanIntelligenceView): IntentionalMessage[] {
   if (fan.segment === "NURTURE") return [
     discovery,
     { intent: "Demostrar que su respuesta fue escuchada, sin vender.", when: "2–3 días después, solo si respondió", avoid: "no respondió al primer mensaje", text: `${name}, me acordé de ${interestReference}. Estoy preparando cosas nuevas y me dio curiosidad: ¿prefieres algo más espontáneo o más producido?` },
-    { intent: "Pedir permiso para explicar la suscripción.", when: "Después de dos intercambios reales o una señal positiva", avoid: "respuestas cortas, silencio o rechazo", text: `${name}, por lo que me has contado creo que hay contenido de suscripción que sí encaja contigo. ¿Quieres que te explique qué incluye antes de decidir?` },
+    { intent: "Pedir permiso para explicar la suscripción.", when: fan.lastInboundText ? "Después de dos intercambios reales o una señal positiva" : "Como invitación inicial, sin afirmar que ya conversaron", avoid: "respuestas cortas, silencio después de una invitación reciente o rechazo", text: subscriptionReveal },
   ];
   if (fan.segment === "HIGH_POTENTIAL") return [
     discovery,
@@ -197,7 +207,7 @@ function intentionalMessages(fan: FanIntelligenceView): IntentionalMessage[] {
   if (fan.segment === "HIGH_VALUE") return [
     { intent: "Dar atención 1:1 y actualizar gustos sin convertirlo en campaña.", when: "Conversación individual, nunca como envío masivo", avoid: "no puedes responder personalmente después", text: `${name}, quiero asegurarme de no enviarte cosas genéricas. Últimamente, ¿qué te apetece más ver de mí: algo parecido a ${interest ?? "lo que ya te ha gustado"} o probar algo distinto?` },
     { intent: "Diseñar la recomendación con participación del fan.", when: "Después de conocer su preferencia actual", avoid: "no respondió o pidió espacio", text: `${name}, perfecto, ya tengo una idea mucho más clara. Tengo una opción que encaja con eso; ¿quieres que te enseñe una vista previa antes de prepararte la recomendación completa?` },
-    { intent: "Presentar una oferta exclusiva y verificable, no una falsa urgencia.", when: "Después de aceptar la vista previa", avoid: "el contenido no es realmente acorde o exclusivo", text: `${name}, seleccioné esto específicamente por lo que me dijiste hoy. Puedes revisar la vista gratuita primero; si te convence, aquí está el contenido completo 💜` },
+    { intent: "Presentar una oferta exclusiva y verificable, no una falsa urgencia.", when: "Después de aceptar la vista previa", avoid: "el contenido no es realmente acorde, ya recibió esta oferta o no mostró interés", text: ppvReveal },
   ];
   return [
     { intent: "Reabrir la relación sin presión comercial.", when: "Después de 30 días o más sin actividad", avoid: "ya recibió una reactivación reciente", text: `${name}, hace tiempo que no hablamos 😊 No vengo a venderte nada; solo quería saber cómo estás y qué te gustaría ver ahora.` },
