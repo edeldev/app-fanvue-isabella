@@ -118,7 +118,7 @@ export function EngagementNotificationsMenu() {
       {unreadCount ? <BellRing className="size-4 text-violet-300" /> : <Bell className="size-4" />}
       {unreadCount ? <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-violet-500 px-1 text-[9px] font-bold leading-5 text-white ring-2 ring-[#101218]">{unreadCount > 99 ? "99+" : unreadCount}</span> : null}
     </summary>
-    <div className="absolute right-0 mt-3 w-[min(25rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-[#181a21] shadow-2xl shadow-black/50">
+    <div onClick={(event) => event.stopPropagation()} className="absolute right-0 mt-3 w-[min(25rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-[#181a21] shadow-2xl shadow-black/50">
       <div className="flex items-center justify-between gap-3 border-b border-white/8 p-4">
         <div><p className="text-sm font-semibold text-white">Actividad en tiempo real</p><p className="mt-0.5 text-[10px] text-zinc-600">Seguidores, likes y comentarios</p></div>
         <button type="button" onClick={toggleSound} aria-label={soundEnabled ? "Silenciar notificaciones" : "Activar sonido"} title={soundEnabled ? "Sonido activado" : "Sonido desactivado"} className="grid size-9 place-items-center rounded-lg border border-white/8 text-zinc-400 hover:bg-white/5 hover:text-white">{soundEnabled ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}</button>
