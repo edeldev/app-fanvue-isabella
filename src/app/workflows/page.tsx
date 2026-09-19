@@ -24,9 +24,12 @@ import {
   type WorkflowAnalyticsEvent,
 } from "@/domain/workflows/step-analytics";
 
-export default async function WorkflowsPage({ searchParams }: { searchParams: Promise<{ q?: string | string[] }> }) {
+export default async function WorkflowsPage({ searchParams }: { searchParams: Promise<{ q?: string | string[]; new?: string | string[]; fan?: string | string[]; workflow?: string | string[] }> }) {
   const queryParams = await searchParams;
   const initialQuery = (Array.isArray(queryParams.q) ? queryParams.q[0] : queryParams.q)?.trim().slice(0, 80) ?? "";
+  const openCreator = (Array.isArray(queryParams.new) ? queryParams.new[0] : queryParams.new) === "1";
+  const initialFanId = (Array.isArray(queryParams.fan) ? queryParams.fan[0] : queryParams.fan) ?? "";
+  const initialWorkflowId = (Array.isArray(queryParams.workflow) ? queryParams.workflow[0] : queryParams.workflow) ?? "";
   const creatorId = readCreatorSession(
     (await cookies()).get(CREATOR_SESSION_COOKIE)?.value,
   );
@@ -325,7 +328,7 @@ export default async function WorkflowsPage({ searchParams }: { searchParams: Pr
           </div>
           {creatorId ? (
             <>
-              <WorkflowManager workflows={workflows} templates={templateOptions} defaults={workflowDefaults} analytics={workflowAnalytics} initialQuery={initialQuery} />
+              <WorkflowManager workflows={workflows} templates={templateOptions} defaults={workflowDefaults} analytics={workflowAnalytics} initialQuery={initialQuery} openCreator={openCreator} />
               <WorkflowAnalyticsPanel analytics={workflowAnalytics} stepAnalytics={stepAnalytics} />
               <EnrollmentPanel
                 fans={fans}
@@ -342,6 +345,8 @@ export default async function WorkflowsPage({ searchParams }: { searchParams: Pr
                   all: allActivityCount,
                   olderThan90Days: oldActivityCount,
                 }}
+                initialFanId={initialFanId}
+                initialWorkflowId={initialWorkflowId}
               />
             </>
           ) : (

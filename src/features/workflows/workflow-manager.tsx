@@ -34,15 +34,16 @@ const PAGE_SIZE = 6;
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 type StatusFilter = "ALL" | WorkflowView["status"];
 
-export function WorkflowManager({ workflows, templates, defaults, analytics, initialQuery = "" }: {
+export function WorkflowManager({ workflows, templates, defaults, analytics, initialQuery = "", openCreator = false }: {
   workflows: WorkflowView[];
   templates: TemplateOption[];
   defaults: WorkflowDefaultsView;
   analytics: WorkflowAnalyticsView[];
   initialQuery?: string;
+  openCreator?: boolean;
 }) {
   const router = useRouter();
-  const [editor, setEditor] = useState<WorkflowView | null | undefined>(undefined);
+  const [editor, setEditor] = useState<WorkflowView | null | undefined>(openCreator ? null : undefined);
   const [busy, setBusy] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<WorkflowView | null>(null);
   const [query, setQuery] = useState(initialQuery);

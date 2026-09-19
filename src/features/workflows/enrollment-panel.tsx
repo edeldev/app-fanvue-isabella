@@ -11,10 +11,10 @@ import { enqueueSnackbar } from "notistack";
 
 type AudienceOption = { id: AudienceSegment; label: string; count: number };
 
-export function EnrollmentPanel({ fans, audiences, workflows, enrollments, unstartedEnrollmentIds, enrollmentProgress, activity, activityCounts }: { fans: FanOption[]; audiences: AudienceOption[]; workflows: Pick<WorkflowView, "id" | "name">[]; enrollments: EnrollmentView[]; unstartedEnrollmentIds: string[]; enrollmentProgress: EnrollmentProgressView; activity: AutomationLogView[]; activityCounts: { all: number; olderThan90Days: number } }) {
+export function EnrollmentPanel({ fans, audiences, workflows, enrollments, unstartedEnrollmentIds, enrollmentProgress, activity, activityCounts, initialFanId = "", initialWorkflowId = "" }: { fans: FanOption[]; audiences: AudienceOption[]; workflows: Pick<WorkflowView, "id" | "name">[]; enrollments: EnrollmentView[]; unstartedEnrollmentIds: string[]; enrollmentProgress: EnrollmentProgressView; activity: AutomationLogView[]; activityCounts: { all: number; olderThan90Days: number }; initialFanId?: string; initialWorkflowId?: string }) {
   const router = useRouter();
-  const [fanId, setFanId] = useState("");
-  const [workflowId, setWorkflowId] = useState("");
+  const [fanId, setFanId] = useState(() => fans.some((fan) => fan.id === initialFanId) ? initialFanId : "");
+  const [workflowId, setWorkflowId] = useState(() => workflows.some((workflow) => workflow.id === initialWorkflowId) ? initialWorkflowId : "");
   const [destination, setDestination] = useState<"fan" | "audience">("fan");
   const [included, setIncluded] = useState<AudienceSegment[]>([]);
   const [excluded, setExcluded] = useState<AudienceSegment[]>([]);

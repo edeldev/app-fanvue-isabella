@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Check, ChevronRight, Copy, FileText, HeartHandshake, MessageCircle, Route, Search, ShieldCheck, Sparkles, Target, TrendingUp, UserRoundSearch, Users } from "lucide-react";
+import { Bot, Check, ChevronRight, Copy, FileText, HeartHandshake, MessageCircle, Route, Search, ShieldCheck, Sparkles, Target, TrendingUp, UserRoundSearch, Users, X } from "lucide-react";
 import Link from "next/link";
 import { enqueueSnackbar } from "notistack";
 import type { ReactNode } from "react";
@@ -108,6 +108,7 @@ function FanRow({ fan, selected, onSelect }: { fan: FanIntelligenceView; selecte
 }
 
 function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanIntelligenceView; goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV"; setGoal: (goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV") => void; templates: TemplateOption[]; workflows: WorkflowOption[] }) {
+  const [preview, setPreview] = useState<"WORKFLOW" | "TEMPLATE" | null>(null);
   const draft = buildDraft(fan, goal);
   const strategy = strategyForFan(fan);
   const matchingWorkflow = findMatchingWorkflow(strategy, workflows);
@@ -128,8 +129,8 @@ function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanInte
           {fan.activeWorkflow ? <div className="mt-3 rounded-xl border border-sky-400/15 bg-sky-400/[.05] px-3 py-2"><p className="text-[10px] font-semibold text-sky-200">Ya está en: {fan.activeWorkflow.name}</p><p className="mt-0.5 text-[9px] text-zinc-600">Revisa ese flujo antes de asignar otro para evitar mensajes cruzados.</p></div> : null}
           <ol className="mt-3 space-y-2">{strategy.steps.map((step, index) => <li key={step} className="flex gap-2 text-[10px] leading-4 text-zinc-400"><span className="grid size-4 shrink-0 place-items-center rounded-full bg-violet-400/10 text-[8px] font-bold text-violet-300">{index + 1}</span>{step}</li>)}</ol>
           <div className="mt-4 grid gap-2">
-            <ResourceMatch icon={<Route className="size-3.5" />} label="Workflow" recommendation={strategy.workflowName} match={matchingWorkflow ? `${matchingWorkflow.name} · ${matchingWorkflow.status === "PUBLISHED" ? "Publicado" : "Borrador"}` : null} href={matchingWorkflow ? `/workflows?q=${encodeURIComponent(matchingWorkflow.name)}` : "/workflows"} />
-            <ResourceMatch icon={<FileText className="size-3.5" />} label="Plantilla" recommendation={strategy.templateName} match={matchingTemplate?.name ?? null} href={matchingTemplate ? `/templates#template-${matchingTemplate.id}` : "/templates"} />
+            <ResourceMatch icon={<Route className="size-3.5" />} label="Workflow" recommendation={strategy.workflowName} match={matchingWorkflow ? `${matchingWorkflow.name} · ${matchingWorkflow.status === "PUBLISHED" ? "Publicado" : "Borrador"}` : null} href={matchingWorkflow ? matchingWorkflow.status === "PUBLISHED" ? `/workflows?fan=${encodeURIComponent(fan.id)}&workflow=${encodeURIComponent(matchingWorkflow.id)}` : `/workflows?q=${encodeURIComponent(matchingWorkflow.name)}` : undefined} onPreview={() => setPreview("WORKFLOW")} />
+            <ResourceMatch icon={<FileText className="size-3.5" />} label="Plantilla" recommendation={strategy.templateName} match={matchingTemplate?.name ?? null} href={matchingTemplate ? `/templates#template-${matchingTemplate.id}` : undefined} onPreview={() => setPreview("TEMPLATE")} />
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2"><button type="button" onClick={() => setGoal("RELATIONSHIP")} className={goalButton(goal === "RELATIONSHIP")}><HeartHandshake className="size-3.5" />Conectar</button><button type="button" onClick={() => setGoal("SUBSCRIPTION")} className={goalButton(goal === "SUBSCRIPTION")}><Users className="size-3.5" />Suscripción</button><button type="button" onClick={() => setGoal("PPV")} className={goalButton(goal === "PPV")}><TrendingUp className="size-3.5" />PPV</button></div>
@@ -140,6 +141,7 @@ function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanInte
       </div>
     </div>
     <p className="px-2 text-[10px] leading-4 text-zinc-600">La puntuación usa datos observables y no supone emociones. Verifica siempre el contexto antes de vender o enviar contenido de pago.</p>
+    {preview ? <RecommendationPreviewModal type={preview} fan={fan} strategy={strategy} onClose={() => setPreview(null)} /> : null}
   </div>;
 }
 
@@ -222,9 +224,39 @@ function findMatchingTemplate(strategy: StrategyRecommendation, templates: Templ
   }).filter((candidate) => candidate.score >= 6).sort((a, b) => b.score - a.score)[0]?.template ?? null;
 }
 
-function ResourceMatch({ icon, label, recommendation, match, href }: { icon: ReactNode; label: string; recommendation: string; match: string | null; href: string }) {
-  return <Link href={href} className="flex items-center gap-3 rounded-xl border border-white/8 bg-black/10 p-3 transition hover:border-violet-400/20 hover:bg-violet-400/[.04]"><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white/5 text-violet-300">{icon}</span><span className="min-w-0 flex-1"><span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-600">{label} recomendado</span><span className="mt-0.5 block truncate text-[11px] text-zinc-300">{recommendation}</span><span className={`mt-1 block truncate text-[9px] ${match ? "text-emerald-300" : "text-amber-300"}`}>{match ? `Coincidencia encontrada: ${match}` : "No existe uno compatible; conviene crearlo"}</span></span><ChevronRight className="size-3.5 shrink-0 text-zinc-700" /></Link>;
+function ResourceMatch({ icon, label, recommendation, match, href, onPreview }: { icon: ReactNode; label: string; recommendation: string; match: string | null; href?: string; onPreview: () => void }) {
+  const content = <><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white/5 text-violet-300">{icon}</span><span className="min-w-0 flex-1"><span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-600">{label} recomendado</span><span className="mt-0.5 block truncate text-[11px] text-zinc-300">{recommendation}</span><span className={`mt-1 block truncate text-[9px] ${match ? "text-emerald-300" : "text-amber-300"}`}>{match ? `Coincidencia encontrada: ${match}` : "No existe uno compatible · Ver ejemplo"}</span></span><ChevronRight className="size-3.5 shrink-0 text-zinc-700" /></>;
+  const className = "flex w-full cursor-pointer items-center gap-3 rounded-xl border border-white/8 bg-black/10 p-3 text-left transition hover:border-violet-400/20 hover:bg-violet-400/[.04]";
+  return match && href ? <Link href={href} className={className}>{content}</Link> : <button type="button" onClick={onPreview} className={className}>{content}</button>;
 }
+
+function RecommendationPreviewModal({ type, fan, strategy, onClose }: { type: "WORKFLOW" | "TEMPLATE"; fan: FanIntelligenceView; strategy: StrategyRecommendation; onClose: () => void }) {
+  const isWorkflow = type === "WORKFLOW";
+  return <div role="dialog" aria-modal="true" aria-labelledby="recommendation-preview-title" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }} className="fixed inset-0 z-[160] grid place-items-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm">
+    <div className="my-8 w-full max-w-2xl overflow-hidden rounded-3xl border border-white/12 bg-[#171920] shadow-2xl shadow-black/70">
+      <div className="flex items-start justify-between gap-4 border-b border-white/8 bg-gradient-to-br from-violet-500/10 to-transparent p-5 sm:p-6"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-violet-300">Ejemplo recomendado para {fan.displayName}</p><h2 id="recommendation-preview-title" className="mt-2 text-xl font-semibold text-white">{isWorkflow ? strategy.workflowName : strategy.templateName}</h2><p className="mt-2 text-xs leading-5 text-zinc-500">Todavía no existe en tu biblioteca. Este ejemplo es una guía editable antes de guardarlo.</p></div><button type="button" onClick={onClose} aria-label="Cerrar ejemplo" className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-xl border border-white/8 text-zinc-500 hover:bg-white/5 hover:text-white"><X className="size-4" /></button></div>
+      <div className="p-5 sm:p-6">{isWorkflow ? <WorkflowBlueprint strategy={strategy} /> : <TemplateBlueprint fan={fan} strategy={strategy} />}</div>
+      <div className="flex flex-col-reverse gap-2 border-t border-white/8 bg-black/10 p-4 sm:flex-row sm:justify-end"><button type="button" onClick={onClose} className="cursor-pointer rounded-xl px-4 py-2.5 text-xs font-semibold text-zinc-400 hover:bg-white/5 hover:text-white">Seguir revisando</button><Link href={isWorkflow ? "/workflows?new=1" : "/templates#new-template"} className="flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-400">{isWorkflow ? <Route className="size-3.5" /> : <FileText className="size-3.5" />}Vamos a crearlo</Link></div>
+    </div>
+  </div>;
+}
+
+function WorkflowBlueprint({ strategy }: { strategy: StrategyRecommendation }) {
+  const trigger = readableTrigger(strategy.triggers[0]);
+  return <div><div className="grid gap-3 sm:grid-cols-2"><BlueprintFact label="Disparador sugerido" value={trigger} /><BlueprintFact label="Objetivo de conversión" value={readableGoal(strategy.goals[0])} /></div><div className="mt-5"><p className="text-xs font-semibold text-zinc-300">Estructura de ejemplo</p><div className="mt-3 space-y-2"><FlowNode index={1} type="Disparador" title={trigger} detail="El fan entra una sola vez y se valida que no tenga otro flujo principal incompatible." />{strategy.steps.map((step, index) => <FlowNode key={step} index={index + 2} type={flowStepType(strategy, index)} title={step} detail={flowStepDetail(strategy, index)} />)}<FlowNode index={strategy.steps.length + 2} type="Finalizar" title="Cerrar al convertir o terminar la secuencia" detail="Detener mensajes cuando alcance el objetivo, compre o solicite no recibir más ofertas." /></div></div><div className="mt-5 rounded-2xl border border-amber-400/15 bg-amber-400/[.045] p-4 text-[11px] leading-5 text-zinc-500"><strong className="text-amber-200">Configuración sugerida:</strong> pausar cuando el fan responda, reanudar después de 30 minutos sin mensajes y validar nuevamente antes de cualquier PPV.</div></div>;
+}
+
+function TemplateBlueprint({ fan, strategy }: { fan: FanIntelligenceView; strategy: StrategyRecommendation }) {
+  const example = strategy.templateType === "PPV" ? buildDraft(fan, "PPV") : buildDraft(fan, fan.segment === "NURTURE" || fan.segment === "AT_RISK" ? "RELATIONSHIP" : "SUBSCRIPTION");
+  return <div><div className="grid gap-3 sm:grid-cols-2"><BlueprintFact label="Tipo" value={strategy.templateType === "PPV" ? "PPV con vista gratuita" : "Mensaje de texto"} /><BlueprintFact label="Uso" value={strategy.summary} /></div><div className="mt-5 rounded-2xl border border-white/8 bg-black/15 p-5"><div className="flex items-center gap-2 text-xs font-semibold text-violet-300"><Sparkles className="size-3.5" />Ejemplo de contenido</div><p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-zinc-300">{example}</p>{strategy.templateType === "PPV" ? <div className="mt-4 grid gap-2 sm:grid-cols-2"><div className="rounded-xl border border-emerald-400/15 bg-emerald-400/[.04] p-3"><p className="text-[10px] font-semibold text-emerald-200">Vista gratuita</p><p className="mt-1 text-[10px] text-zinc-600">Una imagen atractiva que anticipe el contenido sin mostrarlo completo.</p></div><div className="rounded-xl border border-amber-400/15 bg-amber-400/[.04] p-3"><p className="text-[10px] font-semibold text-amber-200">Contenido bloqueado</p><p className="mt-1 text-[10px] text-zinc-600">Fotos o videos alineados al interés detectado; define el precio al crearla.</p></div></div> : null}</div><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full border border-white/8 px-2.5 py-1 text-[10px] text-zinc-500">Personalizar con {"{{nombre}}"}</span>{fan.interests[0] ? <span className="rounded-full border border-white/8 px-2.5 py-1 text-[10px] text-zinc-500">Interés: {fan.interests[0]}</span> : null}<span className="rounded-full border border-white/8 px-2.5 py-1 text-[10px] text-zinc-500">Revisar antes de enviar</span></div></div>;
+}
+
+function BlueprintFact({ label, value }: { label: string; value: string }) { return <div className="rounded-2xl border border-white/8 bg-white/[.025] p-4"><p className="text-[9px] font-semibold uppercase tracking-wider text-zinc-600">{label}</p><p className="mt-2 text-xs leading-5 text-zinc-300">{value}</p></div>; }
+function FlowNode({ index, type, title, detail }: { index: number; type: string; title: string; detail: string }) { return <div className="flex gap-3 rounded-2xl border border-white/8 bg-white/[.02] p-3"><span className="grid size-7 shrink-0 place-items-center rounded-lg bg-violet-500/15 text-[10px] font-bold text-violet-300">{index}</span><div><p className="text-[9px] font-semibold uppercase tracking-wider text-violet-300/70">{type}</p><p className="mt-1 text-xs font-medium text-zinc-300">{title}</p><p className="mt-1 text-[10px] leading-4 text-zinc-600">{detail}</p></div></div>; }
+function flowStepType(strategy: StrategyRecommendation, index: number) { if (index === 0) return "Enviar mensaje"; if (index === 1) return "Esperar respuesta"; if (index === 2) return "Evaluar condición"; return strategy.templateType === "PPV" ? "Enviar PPV" : "Cambiar de estrategia"; }
+function flowStepDetail(strategy: StrategyRecommendation, index: number) { if (index === 0) return `Usar la plantilla “${strategy.templateName}” o una equivalente.`; if (index === 1) return "Pausar si responde y continuar solo después del tiempo de silencio configurado."; if (index === 2) return "Comprobar interés, compras recientes, suscripción y respuestas antes de continuar."; return strategy.templateType === "PPV" ? "Mostrar vista gratuita y detener el flujo si compra." : "Continuar únicamente cuando exista una señal clara de interés."; }
+function readableTrigger(trigger: string) { return ({ FOLLOW_CREATED: "Nuevo seguidor", SUBSCRIPTION_ACTIVATED: "Suscripción activada", MESSAGE_RECEIVED: "Mensaje recibido", PRESENCE_ONLINE: "Fan conectado", MANUAL: "Asignación manual" } as Record<string, string>)[trigger] ?? trigger; }
+function readableGoal(goal: string) { return ({ FIRST_PURCHASE: "Primera compra", PAID_SUBSCRIPTION: "Suscripción de pago", PPV_PURCHASE: "Compra de PPV", SPEND_AMOUNT: "Alcanzar un monto de gasto", ANY_PURCHASE: "Cualquier compra" } as Record<string, string>)[goal] ?? goal; }
 
 function goalButton(active: boolean) {
   return `flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border px-2 py-2.5 text-[10px] font-medium transition ${active ? "border-violet-400/30 bg-violet-500/15 text-violet-200" : "border-white/8 bg-white/[.025] text-zinc-500 hover:text-zinc-300"}`;
