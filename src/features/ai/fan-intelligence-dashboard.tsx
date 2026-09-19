@@ -73,8 +73,8 @@ export function FanIntelligenceDashboard({ fans, funnelCoverage, templates, work
       })}
     </section>
 
-    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(22rem,.75fr)]">
-      <div className="overflow-hidden rounded-3xl border border-white/8 bg-white/[.025]">
+    <section className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(22rem,.75fr)]">
+      <div className="min-w-0 self-start overflow-hidden rounded-3xl border border-white/8 bg-white/[.025]">
         <div className="border-b border-white/8 p-4 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div><h2 className="font-semibold text-white">Mapa de oportunidades</h2><p className="mt-1 text-xs text-zinc-500">Puntuaciones explicables; nunca sustituyen tu criterio.</p></div>
@@ -82,12 +82,12 @@ export function FanIntelligenceDashboard({ fans, funnelCoverage, templates, work
           </div>
           {segment !== "ALL" ? <button type="button" onClick={() => setSegment("ALL")} className="mt-3 cursor-pointer text-[11px] font-medium text-violet-300 hover:text-violet-200">Mostrar todos los segmentos</button> : null}
         </div>
-        <div className="max-h-[720px] overflow-y-auto">
+        <div className="overflow-y-auto overscroll-contain xl:max-h-[calc(100dvh-15rem)] xl:min-h-[32rem]">
           {filtered.map((fan) => <FanRow key={fan.id} fan={fan} selected={selected?.id === fan.id} onSelect={() => setSelectedId(fan.id)} />)}
           {!filtered.length ? <div className="p-12 text-center"><UserRoundSearch className="mx-auto size-8 text-zinc-700" /><p className="mt-3 text-sm text-zinc-500">No encontramos fans con estos filtros.</p></div> : null}
         </div>
       </div>
-      <aside className="min-w-0">{selected ? <FanCopilot fan={selected} goal={goal} setGoal={setGoal} templates={templates} workflows={workflows} /> : <div className="rounded-3xl border border-dashed border-white/10 p-10 text-center text-sm text-zinc-600">Selecciona un fan para abrir su copiloto.</div>}</aside>
+      <aside className="min-w-0 self-start">{selected ? <FanCopilot fan={selected} goal={goal} setGoal={setGoal} templates={templates} workflows={workflows} /> : <div className="rounded-3xl border border-dashed border-white/10 p-10 text-center text-sm text-zinc-600">Selecciona un fan para abrir su copiloto.</div>}</aside>
     </section>
 
     <section className="rounded-3xl border border-white/8 bg-gradient-to-br from-violet-500/[.07] to-transparent p-5 sm:p-6">
@@ -119,7 +119,7 @@ function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanInte
     await navigator.clipboard.writeText(draft);
     enqueueSnackbar("Borrador copiado. Revísalo antes de enviarlo.", { variant: "success" });
   }
-  return <div className="sticky top-20 space-y-4">
+  return <div className="space-y-4 xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto xl:overscroll-contain xl:pr-1">
     <div className="overflow-hidden rounded-3xl border border-violet-400/15 bg-[#15171e] shadow-2xl shadow-violet-950/10">
       <div className="border-b border-white/8 bg-gradient-to-br from-violet-500/12 to-fuchsia-500/[.03] p-5"><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-2xl bg-violet-500 text-white"><Bot className="size-5" /></span><div><p className="text-sm font-semibold text-white">Copiloto de relación</p><p className="mt-0.5 text-[10px] text-violet-200/60">Contexto de {fan.displayName}</p></div></div><span className="flex items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-1 text-[9px] font-semibold text-emerald-300"><ShieldCheck className="size-3" />Requiere aprobación</span></div></div>
       <div className="space-y-5 p-5">
