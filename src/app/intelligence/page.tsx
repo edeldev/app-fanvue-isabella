@@ -107,5 +107,5 @@ export default async function IntelligencePage() {
 }
 
 function segmentWeight(segment: FanIntelligenceView["segment"]) {
-  return { HIGH_VALUE: 5, HIGH_POTENTIAL: 4, MID_VALUE: 3, NURTURE: 2, AT_RISK: 1 }[segment];
+  return { HIGH_VALUE: 5, MID_VALUE: 4, HIGH_POTENTIAL: 3, NURTURE: 2, AT_RISK: 1 }[segment];
 }
