@@ -31,6 +31,7 @@ export type FanIntelligenceView = {
   lastInboundText: string | null;
   recentSignals: Array<{ key: "BIKINI" | "DRESS" | "LINGERIE" | "NUDE" | "COSPLAY"; label: string; evidence: string; detectedAt: string }>;
   commercialGuard: { code: "REJECTION" | "NOT_NOW" | "BUDGET_CONCERN"; label: string; evidence: string } | null;
+  conversationContext: { stage: "PAUSE" | "CONNECTION" | "DISCOVERY" | "OFFER_READY"; reason: string; evidence: string | null };
   interests: string[];
   reasons: string[];
   nextAction: string;
@@ -121,8 +122,9 @@ function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanInte
     await navigator.clipboard.writeText(draft);
     enqueueSnackbar("Borrador copiado. Revísalo antes de enviarlo.", { variant: "success" });
   }
-  return <div className="space-y-4 xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto xl:overscroll-contain xl:pr-1">
-    <div className="overflow-hidden rounded-3xl border border-violet-400/15 bg-[#15171e] shadow-2xl shadow-violet-950/10">
+  const ppvBlocked = Boolean(fan.commercialGuard) || fan.conversationContext.stage !== "OFFER_READY";
+  return <div className="min-w-0 space-y-4 overflow-x-hidden xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto xl:overscroll-contain xl:pr-1">
+    <div className="min-w-0 overflow-hidden rounded-3xl border border-violet-400/15 bg-[#15171e] shadow-2xl shadow-violet-950/10">
       <div className="border-b border-white/8 bg-gradient-to-br from-violet-500/12 to-fuchsia-500/[.03] p-5"><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-2xl bg-violet-500 text-white"><Bot className="size-5" /></span><div><p className="text-sm font-semibold text-white">Copiloto de relación</p><p className="mt-0.5 text-[10px] text-violet-200/60">Contexto de {fan.displayName}</p></div></div><span className="flex items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-1 text-[9px] font-semibold text-emerald-300"><ShieldCheck className="size-3" />Requiere aprobación</span></div></div>
       <div className="space-y-5 p-5">
         <div><div className="flex items-center justify-between"><p className="text-xs font-semibold text-zinc-300">Siguiente mejor acción</p><span className="text-[10px] text-zinc-600">Confianza {Math.max(fan.relationshipScore, fan.valueScore)}%</span></div><p className="mt-2 text-xs leading-5 text-zinc-500">{fan.nextAction}</p></div>
@@ -137,7 +139,8 @@ function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanInte
           </div>
         </div>
         {fan.commercialGuard ? <div className="rounded-2xl border border-rose-400/15 bg-rose-400/[.045] p-4"><p className="text-xs font-semibold text-rose-200">Pausa comercial: {fan.commercialGuard.label}</p><p className="mt-1 text-[10px] italic leading-4 text-zinc-600">“{fan.commercialGuard.evidence}”</p></div> : null}
-        <div className="grid grid-cols-3 gap-2"><button type="button" onClick={() => setGoal("RELATIONSHIP")} className={goalButton(goal === "RELATIONSHIP")}><HeartHandshake className="size-3.5" />Conectar</button><button type="button" disabled={Boolean(fan.commercialGuard)} title={fan.commercialGuard ? "Deshabilitado por una señal comercial negativa reciente" : undefined} onClick={() => setGoal("SUBSCRIPTION")} className={goalButton(goal === "SUBSCRIPTION", Boolean(fan.commercialGuard))}><Users className="size-3.5" />Suscripción</button><button type="button" disabled={Boolean(fan.commercialGuard)} title={fan.commercialGuard ? "Deshabilitado por una señal comercial negativa reciente" : undefined} onClick={() => setGoal("PPV")} className={goalButton(goal === "PPV", Boolean(fan.commercialGuard))}><TrendingUp className="size-3.5" />PPV</button></div>
+        <div className="rounded-2xl border border-white/8 bg-black/10 p-4"><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Lectura de la conversación</p><p className="mt-2 text-xs leading-5 text-zinc-300">{fan.conversationContext.reason}</p>{fan.conversationContext.evidence ? <p className="mt-1 line-clamp-2 text-[10px] italic leading-4 text-zinc-600">“{fan.conversationContext.evidence}”</p> : null}</div>
+        <div className="grid grid-cols-3 gap-2"><button type="button" onClick={() => setGoal("RELATIONSHIP")} className={goalButton(goal === "RELATIONSHIP")}><HeartHandshake className="size-3.5" />Conectar</button><button type="button" disabled={Boolean(fan.commercialGuard)} title={fan.commercialGuard ? "Deshabilitado por una señal comercial negativa reciente" : undefined} onClick={() => setGoal("SUBSCRIPTION")} className={goalButton(goal === "SUBSCRIPTION", Boolean(fan.commercialGuard))}><Users className="size-3.5" />Suscripción</button><button type="button" disabled={ppvBlocked} title={ppvBlocked ? "Primero necesita una preferencia o intención de compra explícita" : undefined} onClick={() => setGoal("PPV")} className={goalButton(goal === "PPV", ppvBlocked)}><TrendingUp className="size-3.5" />PPV</button></div>
         <div className="rounded-2xl border border-white/8 bg-black/15 p-4"><div className="mb-3 flex items-center gap-2 text-xs font-medium text-violet-300"><Sparkles className="size-3.5" />Borrador contextual</div><p className="text-sm leading-6 text-zinc-300">{draft}</p><div className="mt-4 flex gap-2"><button type="button" onClick={() => void copyDraft()} className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-xs font-semibold text-zinc-300 transition hover:bg-white/5"><Copy className="size-3.5" />Copiar</button><Link href={`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}`} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-violet-500 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-400"><MessageCircle className="size-3.5" />Abrir chat</Link></div></div>
         {fan.interests.length ? <div><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Señales de los últimos 4 días</p><div className="mt-2 flex flex-wrap gap-2">{fan.interests.map((interest) => <span key={interest} className="rounded-full border border-white/8 bg-white/[.035] px-2.5 py-1 text-[10px] text-zinc-400">{interest}</span>)}</div>{fan.recentSignals[0] ? <p className="mt-2 line-clamp-2 text-[10px] italic leading-4 text-zinc-600">Evidencia: “{fan.recentSignals[0].evidence}”</p> : null}</div> : null}
         <div><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Por qué lo recomendamos</p><ul className="mt-2 space-y-2">{fan.reasons.map((reason) => <li key={reason} className="flex gap-2 text-[11px] leading-5 text-zinc-500"><span className="mt-2 size-1 shrink-0 rounded-full bg-violet-400" />{reason}</li>)}</ul></div>
@@ -152,6 +155,7 @@ function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanInte
 function buildDraft(fan: FanIntelligenceView, goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV") {
   const name = fan.displayName.split(/\s+/)[0] || "{{nombre}}";
   if (fan.commercialGuard) return `${name}, gracias por decírmelo. No te preocupes; no te enviaré ninguna oferta ahora 💜`;
+  if (goal === "PPV" && fan.conversationContext.stage !== "OFFER_READY") return intentionalMessages(fan)[0].text;
   const interest = fan.interests[0];
   const recentSignal = fan.recentSignals[0];
   if (goal === "PPV") return recentSignal
@@ -289,12 +293,21 @@ function strategyForFan(fan: FanIntelligenceView): StrategyRecommendation {
     templateName: "Siguiente contenido recomendado", templateType: "PPV", templateKeywords: ["recomendado", "ppv", "especial", "siguiente"],
     steps: ["Retomar un gusto o compra previa.", "Conversar y validar interés sin enviar precio todavía.", "Presentar una vista gratuita y explicar por qué encaja con él.", "Detener la secuencia si compra o pide no recibir ofertas."],
   };
+  if (fan.segment === "HIGH_POTENTIAL" && fan.conversationContext.stage !== "OFFER_READY") return {
+    workflowName: fan.conversationContext.stage === "DISCOVERY" ? "Conversación y descubrimiento" : "Construir relación antes de vender",
+    summary: fan.conversationContext.stage === "DISCOVERY"
+      ? "Conversa contigo, pero el tema actual no demuestra interés en contenido. Conoce sus gustos antes de ofrecer algo."
+      : "Todavía no existe suficiente contexto comercial. Primero consigue una conversación auténtica.",
+    goals: [], triggers: ["MESSAGE_RECEIVED", "MANUAL"], workflowKeywords: ["conversación", "descubrimiento", "relación", "interés"],
+    templateName: "Pregunta natural para conocer gustos", templateType: "TEXT", templateKeywords: ["pregunta", "gustos", "conversación", "interés"], templateMessageIndex: 0,
+    steps: ["Continuar el tema actual sin cambiar bruscamente a una venta.", "Hacer una pregunta natural sobre sus gustos.", "Esperar una preferencia explícita relacionada con contenido.", "Solo entonces decidir entre suscripción o PPV."],
+  };
   if (fan.segment === "HIGH_POTENTIAL") return {
-    workflowName: "Primera conversión desde conversación",
-    summary: "Convierte una relación activa en la primera compra o suscripción sin romper el tono natural del chat.",
+    workflowName: "Primera oferta desde interés confirmado",
+    summary: "Existe una preferencia o intención explícita reciente; presenta una primera oferta relacionada sin romper el tono natural del chat.",
     goals: ["FIRST_PURCHASE", "PAID_SUBSCRIPTION"], triggers: ["MESSAGE_RECEIVED", "FOLLOW_CREATED"], workflowKeywords: ["primera compra", "conversión", "potencial", "seguimiento"],
-    templateName: "Pregunta de interés antes de oferta", templateType: "TEXT", templateKeywords: ["interés", "pregunta", "conocer", "seguimiento"],
-    steps: ["Hacer una pregunta breve sobre sus gustos.", "Responder manualmente y construir contexto.", "Compartir valor gratuito o una vista previa.", "Solo con una señal positiva, recomendar suscripción o un PPV de entrada."],
+    templateName: "Primera oferta contextual", templateType: "PPV", templateKeywords: ["primera", "oferta", "contextual", "ppv"],
+    steps: ["Confirmar que la señal reciente corresponde al contenido disponible.", "Pedir permiso o introducir una vista previa relevante.", "Mostrar claramente qué es gratuito y qué está bloqueado.", "Detener la oferta si pierde interés, rechaza o pide espacio."],
   };
   if (fan.segment === "AT_RISK") return {
     workflowName: "Reactivación suave",
@@ -333,8 +346,8 @@ function findMatchingTemplate(strategy: StrategyRecommendation, templates: Templ
 }
 
 function ResourceMatch({ icon, label, recommendation, match, href, onPreview }: { icon: ReactNode; label: string; recommendation: string; match: string | null; href?: string; onPreview: () => void }) {
-  const content = <><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white/5 text-violet-300">{icon}</span><span className="min-w-0 flex-1"><span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-600">{label} recomendado</span><span className="mt-0.5 block truncate text-[11px] text-zinc-300">{recommendation}</span><span className={`mt-1 block truncate text-[9px] ${match ? "text-emerald-300" : "text-amber-300"}`}>{match ? `Coincidencia encontrada: ${match}` : "No existe uno compatible · Ver ejemplo"}</span></span><ChevronRight className="size-3.5 shrink-0 text-zinc-700" /></>;
-  const className = "flex w-full cursor-pointer items-center gap-3 rounded-xl border border-white/8 bg-black/10 p-3 text-left transition hover:border-violet-400/20 hover:bg-violet-400/[.04]";
+  const content = <><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white/5 text-violet-300">{icon}</span><span className="min-w-0 flex-1 overflow-hidden"><span className="block text-[9px] font-semibold uppercase tracking-wider text-zinc-600">{label} recomendado</span><span className="mt-0.5 block truncate text-[11px] text-zinc-300">{recommendation}</span><span className={`mt-1 block break-words text-[9px] leading-4 ${match ? "text-emerald-300" : "text-amber-300"}`}>{match ? `Coincidencia encontrada: ${match}` : "No existe uno compatible · Ver ejemplo"}</span></span><ChevronRight className="size-3.5 shrink-0 text-zinc-700" /></>;
+  const className = "flex min-w-0 max-w-full cursor-pointer items-center gap-3 overflow-hidden rounded-xl border border-white/8 bg-black/10 p-3 text-left transition hover:border-violet-400/20 hover:bg-violet-400/[.04]";
   return match && href ? <Link href={href} className={className}>{content}</Link> : <button type="button" onClick={onPreview} className={className}>{content}</button>;
 }
 

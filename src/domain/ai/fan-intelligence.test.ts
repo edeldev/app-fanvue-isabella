@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectCommercialGuard, detectRecentConversationSignals, extractConversationInterests, scoreFanIntelligence } from "./fan-intelligence";
+import { analyzeConversationContext, detectCommercialGuard, detectRecentConversationSignals, extractConversationInterests, scoreFanIntelligence } from "./fan-intelligence";
 
 const now = new Date("2026-09-19T12:00:00.000Z");
 
@@ -40,5 +40,21 @@ describe("fan intelligence", () => {
     expect(detectCommercialGuard([
       { text: "Ahora no quiero comprar nada, gracias", sentAt: new Date("2026-09-19T10:00:00.000Z") },
     ])).toMatchObject({ code: "REJECTION" });
+  });
+
+  it("keeps a social conversation in discovery instead of inventing PPV intent", () => {
+    const messages = ["Tengo 25 años", "Vivo en Bogotá", "Jajaja, salí con amigas"].map((text, index) => ({
+      text,
+      sentAt: new Date(now.getTime() - index * 1_000),
+    }));
+
+    expect(analyzeConversationContext(messages, [], null).stage).toBe("DISCOVERY");
+  });
+
+  it("marks explicit content interest as ready for a contextual offer", () => {
+    const messages = [{ text: "Me encanta ese bikini", sentAt: now }];
+    const signals = detectRecentConversationSignals(messages, now);
+
+    expect(analyzeConversationContext(messages, signals, null).stage).toBe("OFFER_READY");
   });
 });

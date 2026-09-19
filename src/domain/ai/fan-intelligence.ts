@@ -12,6 +12,11 @@ export type CommercialGuard = {
   label: string;
   evidence: string;
 };
+export type ConversationContext = {
+  stage: "PAUSE" | "CONNECTION" | "DISCOVERY" | "OFFER_READY";
+  reason: string;
+  evidence: string | null;
+};
 
 export type FanIntelligenceSignals = {
   totalSpentMinor: number;
@@ -163,6 +168,44 @@ export function detectCommercialGuard(messages: Array<{ text: string | null; sen
     }
   }
   return null;
+}
+
+export function analyzeConversationContext(
+  messages: Array<{ text: string | null; sentAt: Date }>,
+  signals: RecentConversationSignal[],
+  guard: CommercialGuard | null,
+): ConversationContext {
+  if (guard) return { stage: "PAUSE", reason: guard.label, evidence: guard.evidence };
+  const newest = [...messages]
+    .filter((message) => message.text?.trim())
+    .sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime());
+  const buyingSignal = newest.find((message) => [
+    /quiero (?:ver|comprar|desbloquear)/i,
+    /(?:mu[eé]strame|ens[eé][nñ]ame|m[aá]ndame)/i,
+    /(?:cu[aá]nto|qu[eé] precio|precio tiene|c[oó]mo compro)/i,
+    /i want to (?:see|buy|unlock)/i,
+    /show me|send me|how much/i,
+  ].some((pattern) => pattern.test(message.text!)));
+  if (buyingSignal) return {
+    stage: "OFFER_READY",
+    reason: "Expresó intención de ver o comprar contenido.",
+    evidence: buyingSignal.text!.trim().slice(0, 180),
+  };
+  if (signals.length) return {
+    stage: "OFFER_READY",
+    reason: `Expresó una preferencia concreta: ${signals.map((signal) => signal.label).join(", ")}.`,
+    evidence: signals[0].evidence,
+  };
+  if (newest.length >= 3) return {
+    stage: "DISCOVERY",
+    reason: "Hay conversación reciente, pero todavía no expresó un gusto relacionado con contenido.",
+    evidence: newest[0].text!.trim().slice(0, 180),
+  };
+  return {
+    stage: "CONNECTION",
+    reason: "Aún no existe suficiente contexto para recomendar una venta.",
+    evidence: newest[0]?.text?.trim().slice(0, 180) ?? null,
+  };
 }
 
 function intelligenceReasons(signals: FanIntelligenceSignals, readiness: SaleReadiness) {
