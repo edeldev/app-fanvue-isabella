@@ -2,13 +2,15 @@ import { BrainCircuit, LockKeyhole, Sparkles } from "lucide-react";
 import { cookies } from "next/headers";
 import { Sidebar } from "@/components/app-shell/sidebar";
 import { Topbar } from "@/components/app-shell/topbar";
-import { extractConversationInterests, scoreFanIntelligence } from "@/domain/ai/fan-intelligence";
+import { detectRecentConversationSignals, extractConversationInterests, scoreFanIntelligence } from "@/domain/ai/fan-intelligence";
 import { FanIntelligenceDashboard, type FanIntelligenceView } from "@/features/ai/fan-intelligence-dashboard";
 import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 
 export default async function IntelligencePage() {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
+  const now = new Date();
+  const recentConversationCutoff = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1_000);
   const [records, workflows, templates] = creatorId ? await Promise.all([
     prisma.fan.findMany({
       where: {
@@ -27,9 +29,9 @@ export default async function IntelligencePage() {
           orderBy: { lastMessageAt: "desc" },
           include: {
             messages: {
-              where: { deletedAt: null },
+              where: { deletedAt: null, sentAt: { gte: recentConversationCutoff } },
               orderBy: { sentAt: "desc" },
-              take: 50,
+              take: 100,
               select: { direction: true, text: true, sentAt: true },
             },
           },
@@ -59,6 +61,7 @@ export default async function IntelligencePage() {
     const messages = fan.conversations[0]?.messages ?? [];
     const inbound = messages.filter((message) => message.direction === "INBOUND");
     const outbound = messages.filter((message) => message.direction === "OUTBOUND");
+    const recentSignals = detectRecentConversationSignals(inbound, now);
     const intelligence = scoreFanIntelligence({
       totalSpentMinor: fan.totalSpentMinor,
       purchaseCount: fan.purchases.length,
@@ -89,7 +92,16 @@ export default async function IntelligencePage() {
       isFreeTrialSubscriber: fan.isFreeTrialSubscriber,
       lastActivityAt: fan.lastActivityAt?.toISOString() ?? null,
       lastInboundText: inbound.find((message) => message.text?.trim())?.text?.trim() ?? null,
-      interests: extractConversationInterests(inbound.flatMap((message) => message.text ? [message.text] : [])),
+      recentSignals: recentSignals.map((signal) => ({
+        key: signal.key,
+        label: signal.label,
+        evidence: signal.evidence,
+        detectedAt: signal.detectedAt.toISOString(),
+      })),
+      interests: [...new Set([
+        ...recentSignals.map((signal) => signal.label),
+        ...extractConversationInterests(inbound.flatMap((message) => message.text ? [message.text] : [])),
+      ])].slice(0, 4),
       activeWorkflow: fan.enrollments[0] ? { id: fan.enrollments[0].workflow.id, name: fan.enrollments[0].workflow.name, status: fan.enrollments[0].status } : null,
     };
   }).sort((a, b) => segmentWeight(b.segment) - segmentWeight(a.segment) || Math.max(b.valueScore, b.potentialScore) - Math.max(a.valueScore, a.potentialScore));

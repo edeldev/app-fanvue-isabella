@@ -29,6 +29,7 @@ export type FanIntelligenceView = {
   isFreeTrialSubscriber: boolean;
   lastActivityAt: string | null;
   lastInboundText: string | null;
+  recentSignals: Array<{ key: "BIKINI" | "DRESS" | "LINGERIE" | "NUDE" | "COSPLAY"; label: string; evidence: string; detectedAt: string }>;
   interests: string[];
   reasons: string[];
   nextAction: string;
@@ -136,7 +137,7 @@ function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanInte
         </div>
         <div className="grid grid-cols-3 gap-2"><button type="button" onClick={() => setGoal("RELATIONSHIP")} className={goalButton(goal === "RELATIONSHIP")}><HeartHandshake className="size-3.5" />Conectar</button><button type="button" onClick={() => setGoal("SUBSCRIPTION")} className={goalButton(goal === "SUBSCRIPTION")}><Users className="size-3.5" />Suscripción</button><button type="button" onClick={() => setGoal("PPV")} className={goalButton(goal === "PPV")}><TrendingUp className="size-3.5" />PPV</button></div>
         <div className="rounded-2xl border border-white/8 bg-black/15 p-4"><div className="mb-3 flex items-center gap-2 text-xs font-medium text-violet-300"><Sparkles className="size-3.5" />Borrador contextual</div><p className="text-sm leading-6 text-zinc-300">{draft}</p><div className="mt-4 flex gap-2"><button type="button" onClick={() => void copyDraft()} className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-xs font-semibold text-zinc-300 transition hover:bg-white/5"><Copy className="size-3.5" />Copiar</button><Link href={`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}`} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-violet-500 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-400"><MessageCircle className="size-3.5" />Abrir chat</Link></div></div>
-        {fan.interests.length ? <div><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Intereses detectados</p><div className="mt-2 flex flex-wrap gap-2">{fan.interests.map((interest) => <span key={interest} className="rounded-full border border-white/8 bg-white/[.035] px-2.5 py-1 text-[10px] text-zinc-400">{interest}</span>)}</div></div> : null}
+        {fan.interests.length ? <div><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Señales de los últimos 4 días</p><div className="mt-2 flex flex-wrap gap-2">{fan.interests.map((interest) => <span key={interest} className="rounded-full border border-white/8 bg-white/[.035] px-2.5 py-1 text-[10px] text-zinc-400">{interest}</span>)}</div>{fan.recentSignals[0] ? <p className="mt-2 line-clamp-2 text-[10px] italic leading-4 text-zinc-600">Evidencia: “{fan.recentSignals[0].evidence}”</p> : null}</div> : null}
         <div><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Por qué lo recomendamos</p><ul className="mt-2 space-y-2">{fan.reasons.map((reason) => <li key={reason} className="flex gap-2 text-[11px] leading-5 text-zinc-500"><span className="mt-2 size-1 shrink-0 rounded-full bg-violet-400" />{reason}</li>)}</ul></div>
         {recommendedTemplates.length ? <div><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Plantillas compatibles</p><div className="mt-2 space-y-2">{recommendedTemplates.map((template) => <div key={template.name} className="rounded-xl border border-white/7 bg-white/[.025] px-3 py-2"><p className="truncate text-[11px] text-zinc-300">{template.name}</p><p className="mt-0.5 text-[9px] text-zinc-600">{template.category} · {template.type}</p></div>)}</div></div> : null}
       </div>
@@ -149,15 +150,24 @@ function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanInte
 function buildDraft(fan: FanIntelligenceView, goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV") {
   const name = fan.displayName.split(/\s+/)[0] || "{{nombre}}";
   const interest = fan.interests[0];
-  if (goal === "PPV") return fan.lastInboundText
-    ? `${name}, me quedé pensando en lo que dijiste${interest ? ` sobre ${interest}` : ""}… y tengo algo que encaja demasiado bien 👀 ¿Quieres ver primero un pequeño adelanto?`
-    : `${name}, elegí una vista previa que creo que podría sorprenderte 👀 ¿Te enseño el adelanto y tú me dices si quieres descubrir el resto?`;
+  const recentSignal = fan.recentSignals[0];
+  if (goal === "PPV") return recentSignal
+    ? contextualPpvMessage(name, recentSignal.key)
+    : `${name}, guardé algo que prefiero no mostrar completo de entrada 👀 Te enseño primero un pequeño adelanto y tú decides si quieres descubrir el resto.`;
   if (goal === "SUBSCRIPTION") return fan.isFreeTrialSubscriber
     ? `${name}, quiero que aproveches tu prueba para descubrir lo que realmente te gusta. ${interest ? `Como te interesa ${interest}, puedo enseñarte dónde encontrar más contenido así.` : "¿Qué te gustaría explorar antes de que termine?"}`
-    : fan.lastInboundText
-      ? `${name}, por lo que me has contado${interest ? ` sobre ${interest}` : ""}, hay una parte de mi contenido para suscriptores que creo que te va a gustar mucho 👀 ¿Quieres que te cuente qué incluye?`
+    : recentSignal
+      ? `${name}, me acordé de que te llamó la atención ${interest}. Hay una parte de mi suscripción que sigue justo por ahí 👀 ¿Quieres que te cuente qué incluye?`
       : `${name}, hay una parte de mi contenido que casi nunca enseño fuera de la suscripción 👀 ¿Quieres que te cuente qué incluye antes de decidir?`;
   return intentionalMessages(fan)[0].text;
+}
+
+function contextualPpvMessage(name: string, signal: FanIntelligenceView["recentSignals"][number]["key"]) {
+  if (signal === "DRESS") return `${name}, ¿recuerdas el vestido que te gustó? Preparé algo que empieza justo con él… pero esta vez no se queda puesto hasta el final 👀 Te dejo primero la vista previa; tú decides si quieres ver el resto 💜`;
+  if (signal === "BIKINI") return `${name}, me acordé de que te gustó el bikini 👀 Preparé algo que empieza justo ahí… pero esta vez el bikini no se queda hasta el final. Mira primero el adelanto y dime si quieres descubrir el resto 💜`;
+  if (signal === "LINGERIE") return `${name}, me acordé de lo que dijiste sobre la lencería 👀 Elegí algo que empieza sutil… y se vuelve mucho más interesante después de la vista previa. Tú decides si quieres ver el resto 💜`;
+  if (signal === "NUDE") return `${name}, me acordé de que te gusta cuando dejo menos a la imaginación 👀 Preparé un adelanto pequeño; lo que sigue es justo la parte que no quise revelar aquí 💜`;
+  return `${name}, me acordé de que te gustó el cosplay 👀 Elegí uno que empieza con el personaje… pero la vista previa no revela cómo termina. Tú decides si quieres ver el resto 💜`;
 }
 
 type StrategyRecommendation = {
@@ -176,23 +186,24 @@ type IntentionalMessage = { intent: string; when: string; avoid: string; text: s
 function intentionalMessages(fan: FanIntelligenceView): IntentionalMessage[] {
   const name = fan.displayName.split(/\s+/)[0] || "{{nombre}}";
   const interest = fan.interests[0];
+  const recentSignal = fan.recentSignals[0];
   const interestReference = interest ? `lo que me contaste sobre ${interest}` : "lo que más disfrutas ver aquí";
-  const subscriptionReveal = fan.lastInboundText
-    ? `${name}, por lo que me has contado${interest ? ` sobre ${interest}` : ""}, hay una parte de mi contenido para suscriptores que creo que te va a gustar mucho 👀 ¿Quieres que te cuente qué incluye?`
+  const subscriptionReveal = recentSignal
+    ? `${name}, me acordé de que te llamó la atención ${interest}. Hay una parte de mi suscripción que sigue justo por ahí 👀 ¿Quieres que te cuente qué incluye?`
     : `${name}, hay una parte de mi contenido que casi nunca enseño fuera de la suscripción 👀 ¿Quieres que te cuente qué incluye antes de decidir?`;
-  const ppvReveal = fan.lastInboundText
-    ? `${name}, elegí esto pensando en lo que me dijiste${interest ? ` sobre ${interest}` : ""}. Mira primero el adelanto… el resto es justo la parte que no quise revelar aquí 👀💜`
+  const ppvReveal = recentSignal
+    ? contextualPpvMessage(name, recentSignal.key)
     : `${name}, elegí una de mis vistas previas favoritas para ti. Mira primero el adelanto… el resto es justo la parte que no quise revelar aquí 👀💜`;
   const discovery: IntentionalMessage = {
     intent: "Conseguir una respuesta auténtica y descubrir una preferencia útil.",
-    when: fan.lastInboundText ? "Como continuación natural de la conversación" : "Primer contacto o después de 24 h sin conversación",
+    when: fan.lastInboundText ? "Como continuación natural de una conversación de los últimos 4 días" : "Primer contacto o después de 24 h sin conversación",
     avoid: "ya recibió una pregunta parecida o acaba de responder otro tema",
     text: fan.lastInboundText ? `${name}, me quedé pensando en ${interestReference} 😊 ¿qué parte es la que más te gusta?` : `${name}, gracias por estar aquí 😊 Quiero conocerte de verdad: ¿qué tipo de contenido te gustaría encontrar conmigo?`,
   };
   if (fan.segment === "NURTURE") return [
     discovery,
     { intent: "Demostrar que su respuesta fue escuchada, sin vender.", when: "2–3 días después, solo si respondió", avoid: "no respondió al primer mensaje", text: `${name}, me acordé de ${interestReference}. Estoy preparando cosas nuevas y me dio curiosidad: ¿prefieres algo más espontáneo o más producido?` },
-    { intent: "Pedir permiso para explicar la suscripción.", when: fan.lastInboundText ? "Después de dos intercambios reales o una señal positiva" : "Como invitación inicial, sin afirmar que ya conversaron", avoid: "respuestas cortas, silencio después de una invitación reciente o rechazo", text: subscriptionReveal },
+    { intent: "Pedir permiso para explicar la suscripción.", when: recentSignal ? "Después de una señal explícita detectada en los últimos 4 días" : "Como invitación inicial, sin afirmar que ya conversaron", avoid: "respuestas cortas, silencio después de una invitación reciente o rechazo", text: subscriptionReveal },
   ];
   if (fan.segment === "HIGH_POTENTIAL") return [
     discovery,

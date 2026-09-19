@@ -1,6 +1,12 @@
 export const intelligenceSegments = ["HIGH_VALUE", "MID_VALUE", "HIGH_POTENTIAL", "NURTURE", "AT_RISK"] as const;
 export type IntelligenceSegment = (typeof intelligenceSegments)[number];
 export type SaleReadiness = "HOT" | "WARM" | "COLD";
+export type RecentConversationSignal = {
+  key: "BIKINI" | "DRESS" | "LINGERIE" | "NUDE" | "COSPLAY";
+  label: string;
+  evidence: string;
+  detectedAt: Date;
+};
 
 export type FanIntelligenceSignals = {
   totalSpentMinor: number;
@@ -27,6 +33,17 @@ export type FanIntelligence = {
 };
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
+const conversationSignalPatterns: Array<{
+  key: RecentConversationSignal["key"];
+  label: string;
+  patterns: RegExp[];
+}> = [
+  { key: "BIKINI", label: "bikini", patterns: [/\bbikini\b/i, /traje de ba(?:n|ñ)o/i, /\bba(?:n|ñ)ador/i] },
+  { key: "DRESS", label: "vestido", patterns: [/\bvestido/i, /\bdress\b/i] },
+  { key: "LINGERIE", label: "lencería", patterns: [/lencer[ií]a/i, /\blingerie\b/i, /ropa interior/i] },
+  { key: "NUDE", label: "contenido sin ropa", patterns: [/sin ropa/i, /desnud/i, /\bnude\b/i, /\bnaked\b/i] },
+  { key: "COSPLAY", label: "cosplay", patterns: [/\bcosplay\b/i, /disfraz/i] },
+];
 
 export function scoreFanIntelligence(signals: FanIntelligenceSignals, now = new Date()): FanIntelligence {
   const daysSinceInbound = ageInDays(signals.lastInboundAt, now);
@@ -96,6 +113,31 @@ export function extractConversationInterests(texts: string[], limit = 4) {
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, limit)
     .map(([word]) => word);
+}
+
+export function detectRecentConversationSignals(
+  messages: Array<{ text: string | null; sentAt: Date }>,
+  now = new Date(),
+  windowDays = 4,
+) {
+  const cutoff = now.getTime() - windowDays * DAY_MS;
+  const detected = new Map<RecentConversationSignal["key"], RecentConversationSignal>();
+  [...messages]
+    .filter((message) => message.text?.trim() && message.sentAt.getTime() >= cutoff && message.sentAt <= now)
+    .sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime())
+    .forEach((message) => {
+      for (const signal of conversationSignalPatterns) {
+        if (!detected.has(signal.key) && signal.patterns.some((pattern) => pattern.test(message.text!))) {
+          detected.set(signal.key, {
+            key: signal.key,
+            label: signal.label,
+            evidence: message.text!.trim().slice(0, 180),
+            detectedAt: message.sentAt,
+          });
+        }
+      }
+    });
+  return [...detected.values()].slice(0, 3);
 }
 
 function intelligenceReasons(signals: FanIntelligenceSignals, readiness: SaleReadiness) {

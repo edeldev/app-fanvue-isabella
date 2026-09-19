@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractConversationInterests, scoreFanIntelligence } from "./fan-intelligence";
+import { detectRecentConversationSignals, extractConversationInterests, scoreFanIntelligence } from "./fan-intelligence";
 
 const now = new Date("2026-09-19T12:00:00.000Z");
 
@@ -18,5 +18,21 @@ describe("fan intelligence", () => {
 
   it("extracts repeated interests without common words", () => {
     expect(extractConversationInterests(["Me gusta mucho el cosplay", "Tienes más cosplay y fotografía?"])).toEqual(["cosplay"]);
+  });
+
+  it("detects explicit interests only inside the recent four-day window", () => {
+    const signals = detectRecentConversationSignals([
+      { text: "Qué bonito bikini, y también me gusta verte sin ropa", sentAt: new Date("2026-09-18T12:00:00.000Z") },
+      { text: "Me gustó ese vestido", sentAt: new Date("2026-09-10T12:00:00.000Z") },
+    ], now);
+
+    expect(signals.map((signal) => signal.key)).toEqual(["BIKINI", "NUDE"]);
+    expect(signals.some((signal) => signal.key === "DRESS")).toBe(false);
+  });
+
+  it("does not infer an interest from a generic recent message", () => {
+    expect(detectRecentConversationSignals([
+      { text: "Hola, cómo estás?", sentAt: new Date("2026-09-19T10:00:00.000Z") },
+    ], now)).toEqual([]);
   });
 });
