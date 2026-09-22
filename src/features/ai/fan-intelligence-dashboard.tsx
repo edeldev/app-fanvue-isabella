@@ -2,9 +2,10 @@
 
 import { BarChart3, Bot, Check, ChevronDown, ChevronRight, Clock3, Copy, FileText, HeartHandshake, MessageCircle, Route, Search, ShieldCheck, ShoppingBag, Sparkles, Target, ThumbsDown, ThumbsUp, TrendingUp, UserRoundSearch, Users, X } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { enqueueSnackbar } from "notistack";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { selectNonRepeatedRecommendation, type IntelligenceSegment, type SaleReadiness } from "@/domain/ai/fan-intelligence";
 
@@ -53,8 +54,9 @@ type FunnelCoverage = { trigger: string; label: string; published: number; descr
 type TemplateOption = { id: string; name: string; category: string; type: string };
 type WorkflowOption = { id: string; name: string; status: string; triggerEvent: string; goalType: string; steps: number };
 type FeedbackReason = "WRONG_CONTEXT" | "WRONG_TONE" | "TOO_EARLY" | "REPEATED";
+type IntelligenceRange = "7" | "30" | "90" | "all";
 type RecommendationAnalytics = {
-  windowDays: number;
+  range: IntelligenceRange;
   used: number;
   helpful: number;
   rejected: number;
@@ -75,7 +77,7 @@ const segmentMeta: Record<IntelligenceSegment, { label: string; description: str
 const segmentOrder: IntelligenceSegment[] = ["HIGH_VALUE", "MID_VALUE", "HIGH_POTENTIAL", "NURTURE", "AT_RISK"];
 const money = new Intl.NumberFormat("es-MX", { style: "currency", currency: "USD" });
 
-export function FanIntelligenceDashboard({ fans, recommendationAnalytics, funnelCoverage, templates, workflows }: { fans: FanIntelligenceView[]; recommendationAnalytics: RecommendationAnalytics; funnelCoverage: FunnelCoverage[]; templates: TemplateOption[]; workflows: WorkflowOption[] }) {
+export function FanIntelligenceDashboard({ fans, analyticsRange, funnelCoverage, templates, workflows }: { fans: FanIntelligenceView[]; analyticsRange: IntelligenceRange; funnelCoverage: FunnelCoverage[]; templates: TemplateOption[]; workflows: WorkflowOption[] }) {
   const [query, setQuery] = useState("");
   const [segment, setSegment] = useState<IntelligenceSegment | "ALL">("ALL");
   const [selectedId, setSelectedId] = useState(fans[0]?.id ?? "");
@@ -99,7 +101,7 @@ export function FanIntelligenceDashboard({ fans, recommendationAnalytics, funnel
       })}
     </section>
 
-    <RecommendationPerformance analytics={recommendationAnalytics} />
+    <RecommendationPerformance fans={fans} range={analyticsRange} />
 
     <section className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(22rem,.75fr)]">
       <div className="min-w-0 self-start overflow-hidden rounded-3xl border border-white/8 bg-white/[.025]">
@@ -467,11 +469,42 @@ function goalButton(active: boolean, disabled = false) {
   return `flex flex-col items-center gap-1.5 rounded-xl border px-2 py-2.5 text-[10px] font-medium transition ${disabled ? "cursor-not-allowed border-white/5 bg-white/[.015] text-zinc-700 opacity-60" : active ? "cursor-pointer border-violet-400/30 bg-violet-500/15 text-violet-200" : "cursor-pointer border-white/8 bg-white/[.025] text-zinc-500 hover:text-zinc-300"}`;
 }
 function FeedbackReasonButton({ label, onClick }: { label: string; onClick: () => void }) { return <button type="button" onClick={onClick} className="cursor-pointer rounded-lg border border-white/8 bg-black/10 px-2.5 py-1.5 text-[9px] text-zinc-400 transition hover:border-rose-400/20 hover:text-rose-200">{label}</button>; }
-function RecommendationPerformance({ analytics }: { analytics: RecommendationAnalytics }) {
+function RecommendationPerformance({ fans, range }: { fans: FanIntelligenceView[]; range: IntelligenceRange }) {
+  const router = useRouter();
+  const [isChangingRange, startRangeTransition] = useTransition();
+  const [goalFilter, setGoalFilter] = useState("ALL");
+  const [resultFilter, setResultFilter] = useState("ALL");
+  const [actionFilter, setActionFilter] = useState("ALL");
+  const [fanFilter, setFanFilter] = useState("");
+  const filteredHistory = useMemo(() => {
+    const normalizedFan = fanFilter.trim().toLocaleLowerCase("es-MX");
+    return fans.flatMap((fan) => fan.recommendationHistory.map((item) => ({ ...item, fanName: fan.displayName, fanUsername: fan.username }))).filter((item) => {
+      const matchesFan = !normalizedFan || `${item.fanName} ${item.fanUsername ?? ""}`.toLocaleLowerCase("es-MX").includes(normalizedFan);
+      const matchesGoal = goalFilter === "ALL" || item.goal === goalFilter;
+      const matchesAction = actionFilter === "ALL" || item.action === actionFilter;
+      const matchesResult = resultFilter === "ALL"
+        || (resultFilter === "REPLY" && item.observedOutcomes.replied)
+        || (resultFilter === "PURCHASE" && item.observedOutcomes.purchased)
+        || (resultFilter === "SUBSCRIPTION" && item.observedOutcomes.subscribed)
+        || (resultFilter === "NONE" && !item.observedOutcomes.replied && !item.observedOutcomes.purchased && !item.observedOutcomes.subscribed);
+      return matchesFan && matchesGoal && matchesAction && matchesResult;
+    });
+  }, [actionFilter, fanFilter, fans, goalFilter, resultFilter]);
+  const analytics = useMemo(() => buildRecommendationAnalytics(filteredHistory, range), [filteredHistory, range]);
   const responseRate = percentage(analytics.replied, analytics.used);
   const commercialResults = analytics.purchased + analytics.subscribed;
-  return <section className="overflow-hidden rounded-3xl border border-white/8 bg-gradient-to-br from-violet-500/[.06] via-white/[.02] to-transparent"><div className="flex flex-col gap-2 border-b border-white/7 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-xl bg-violet-500/10 text-violet-300"><BarChart3 className="size-4" /></span><div><h2 className="text-sm font-semibold text-white">Rendimiento del copiloto</h2><p className="mt-0.5 text-[10px] text-zinc-500">Recomendaciones copiadas durante los últimos {analytics.windowDays} días.</p></div></div><p className="text-[9px] text-zinc-600">Resultados observados hasta 7 días después · No implica causalidad</p></div><div className="grid gap-px bg-white/7 sm:grid-cols-2 xl:grid-cols-5"><MetricCard label="Usadas" value={String(analytics.used)} detail={`${analytics.helpful} útiles · ${analytics.rejected} descartadas`} /><MetricCard label="Con respuesta posterior" value={String(analytics.replied)} detail={`${responseRate}% de las usadas`} /><MetricCard label="Compras posteriores" value={String(analytics.purchased)} detail={analytics.revenueMinor > 0 ? `${money.format(analytics.revenueMinor / 100)} observado` : "Sin ingreso posterior"} /><MetricCard label="Suscripciones posteriores" value={String(analytics.subscribed)} detail="Incluye pruebas gratuitas" /><MetricCard label="Señales comerciales" value={String(commercialResults)} detail="Compras + suscripciones" /></div><div className="grid gap-3 p-4 md:grid-cols-3">{analytics.byGoal.map((item) => <GoalPerformance key={item.goal} item={item} />)}</div></section>;
+  const hasFilters = goalFilter !== "ALL" || resultFilter !== "ALL" || actionFilter !== "ALL" || Boolean(fanFilter);
+  function changeRange(nextRange: IntelligenceRange) { startRangeTransition(() => router.replace(nextRange === "30" ? "/intelligence" : `/intelligence?aiRange=${nextRange}`, { scroll: false })); }
+  function clearFilters() { setGoalFilter("ALL"); setResultFilter("ALL"); setActionFilter("ALL"); setFanFilter(""); }
+  return <section className={`overflow-hidden rounded-3xl border border-white/8 bg-gradient-to-br from-violet-500/[.06] via-white/[.02] to-transparent transition ${isChangingRange ? "opacity-60" : ""}`}><div className="flex flex-col gap-3 border-b border-white/7 px-5 py-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-xl bg-violet-500/10 text-violet-300"><BarChart3 className="size-4" /></span><div><h2 className="text-sm font-semibold text-white">Rendimiento del copiloto</h2><p className="mt-0.5 text-[10px] text-zinc-500">Recomendaciones registradas {rangeDescription(range)}.</p></div></div><div className="flex flex-wrap gap-1.5">{(["7", "30", "90", "all"] as const).map((option) => <button key={option} type="button" disabled={isChangingRange} onClick={() => changeRange(option)} className={`cursor-pointer rounded-lg px-3 py-1.5 text-[9px] font-semibold transition disabled:cursor-wait ${range === option ? "bg-violet-500 text-white" : "border border-white/8 bg-black/10 text-zinc-500 hover:text-zinc-300"}`}>{option === "all" ? "Todo" : `${option} días`}</button>)}</div></div><div className="grid gap-2 border-b border-white/7 bg-black/10 p-4 sm:grid-cols-2 xl:grid-cols-[1.2fr_repeat(3,minmax(0,1fr))_auto]"><label className="flex h-9 items-center gap-2 rounded-xl border border-white/8 bg-[#111319] px-3 focus-within:border-violet-400/30"><Search className="size-3.5 text-zinc-600" /><span className="sr-only">Filtrar por fan</span><input value={fanFilter} onChange={(event) => setFanFilter(event.target.value)} placeholder="Fan específico…" className="min-w-0 flex-1 bg-transparent text-[10px] text-white outline-none placeholder:text-zinc-700" /></label><AnalyticsSelect label="Objetivo" value={goalFilter} onChange={setGoalFilter} options={[["ALL", "Todos los objetivos"], ["RELATIONSHIP", "Conectar"], ["SUBSCRIPTION", "Suscripción"], ["PPV", "PPV"]]} /><AnalyticsSelect label="Resultado" value={resultFilter} onChange={setResultFilter} options={[["ALL", "Todos los resultados"], ["REPLY", "Con respuesta"], ["PURCHASE", "Con compra"], ["SUBSCRIPTION", "Con suscripción"], ["NONE", "Sin resultado"]]} /><AnalyticsSelect label="Estado" value={actionFilter} onChange={setActionFilter} options={[["ALL", "Todos los estados"], ["COPIED", "Copiada"], ["HELPFUL", "Útil"], ["NOT_HELPFUL", "Descartada"]]} />{hasFilters ? <button type="button" onClick={clearFilters} className="h-9 cursor-pointer rounded-xl border border-white/8 px-3 text-[9px] font-semibold text-zinc-400 transition hover:bg-white/5 hover:text-white">Limpiar</button> : <div />}</div><div className="grid gap-px bg-white/7 sm:grid-cols-2 xl:grid-cols-5"><MetricCard label="Usadas" value={String(analytics.used)} detail={`${analytics.helpful} útiles · ${analytics.rejected} descartadas`} /><MetricCard label="Con respuesta posterior" value={String(analytics.replied)} detail={`${responseRate}% de las usadas`} /><MetricCard label="Compras posteriores" value={String(analytics.purchased)} detail={analytics.revenueMinor > 0 ? `${money.format(analytics.revenueMinor / 100)} observado` : "Sin ingreso posterior"} /><MetricCard label="Suscripciones posteriores" value={String(analytics.subscribed)} detail="Incluye pruebas gratuitas" /><MetricCard label="Señales comerciales" value={String(commercialResults)} detail="Compras + suscripciones" /></div><div className="grid gap-3 p-4 md:grid-cols-3">{analytics.byGoal.map((item) => <GoalPerformance key={item.goal} item={item} />)}</div><p className="border-t border-white/6 px-5 py-3 text-[9px] leading-4 text-zinc-600">Los resultados muestran eventos ocurridos hasta 7 días después de copiar una recomendación. Una respuesta, compra o suscripción posterior no demuestra por sí sola que la recomendación la causó.</p></section>;
 }
+function AnalyticsSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<[string, string]> }) { return <label><span className="sr-only">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-9 w-full cursor-pointer rounded-xl border border-white/8 bg-[#111319] px-3 text-[10px] text-zinc-400 outline-none transition focus:border-violet-400/30">{options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}</select></label>; }
+function buildRecommendationAnalytics(history: FanIntelligenceView["recommendationHistory"], range: IntelligenceRange): RecommendationAnalytics {
+  const used = history.filter((item) => item.action === "COPIED");
+  const goals = ["RELATIONSHIP", "SUBSCRIPTION", "PPV"] as const;
+  return { range, used: used.length, helpful: history.filter((item) => item.action === "HELPFUL").length, rejected: history.filter((item) => item.action === "NOT_HELPFUL").length, replied: used.filter((item) => item.observedOutcomes.replied).length, purchased: used.filter((item) => item.observedOutcomes.purchased).length, subscribed: used.filter((item) => item.observedOutcomes.subscribed).length, revenueMinor: used.reduce((total, item) => total + item.observedOutcomes.revenueMinor, 0), byGoal: goals.map((goal) => { const recommendations = used.filter((item) => item.goal === goal); return { goal, used: recommendations.length, replied: recommendations.filter((item) => item.observedOutcomes.replied).length, purchased: recommendations.filter((item) => item.observedOutcomes.purchased).length, subscribed: recommendations.filter((item) => item.observedOutcomes.subscribed).length }; }) };
+}
+function rangeDescription(range: IntelligenceRange) { return range === "all" ? "durante todo el historial disponible" : `durante los últimos ${range} días`; }
 function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) { return <div className="bg-[#15171d]/75 px-5 py-4"><p className="text-[10px] font-medium text-zinc-500">{label}</p><p className="mt-1 text-2xl font-semibold tracking-tight text-white">{value}</p><p className="mt-1 text-[9px] text-zinc-600">{detail}</p></div>; }
 function GoalPerformance({ item }: { item: RecommendationAnalytics["byGoal"][number] }) { return <div className="rounded-2xl border border-white/7 bg-black/10 p-4"><div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold text-zinc-300">{goalLabel(item.goal)}</p><span className="rounded-full bg-violet-400/10 px-2 py-1 text-[9px] font-semibold text-violet-300">{item.used} usadas</span></div><div className="mt-3 grid grid-cols-3 gap-2 text-center"><GoalSignal value={item.replied} label="Respuestas" /><GoalSignal value={item.purchased} label="Compras" /><GoalSignal value={item.subscribed} label="Suscripciones" /></div></div>; }
 function GoalSignal({ value, label }: { value: number; label: string }) { return <div className="rounded-xl bg-white/[.025] px-2 py-2"><p className="text-sm font-semibold text-white">{value}</p><p className="mt-0.5 truncate text-[8px] text-zinc-600">{label}</p></div>; }
