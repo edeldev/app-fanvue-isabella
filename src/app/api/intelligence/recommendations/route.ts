@@ -7,6 +7,8 @@ const bodySchema = z.object({
   fanId: z.string().min(1).max(100),
   text: z.string().trim().min(1).max(1_500),
   goal: z.enum(["RELATIONSHIP", "SUBSCRIPTION", "PPV"]),
+  action: z.enum(["COPIED", "HELPFUL", "NOT_HELPFUL"]).default("COPIED"),
+  reason: z.enum(["WRONG_CONTEXT", "WRONG_TONE", "TOO_EARLY", "REPEATED"]).optional(),
 });
 
 export async function POST(request: Request) {
@@ -22,13 +24,17 @@ export async function POST(request: Request) {
   });
   if (!fan) return Response.json({ error: "Fan no encontrado." }, { status: 404 });
 
+  const event = {
+    COPIED: { eventType: "AI_RECOMMENDATION_USED", explanation: "Se copió una recomendación del copiloto para revisión manual." },
+    HELPFUL: { eventType: "AI_RECOMMENDATION_HELPFUL", explanation: "La recomendación del copiloto fue marcada como útil." },
+    NOT_HELPFUL: { eventType: "AI_RECOMMENDATION_REJECTED", explanation: "La recomendación del copiloto fue descartada manualmente." },
+  }[parsed.data.action];
   await prisma.automationLog.create({
     data: {
       creatorId,
       fanId: fan.id,
-      eventType: "AI_RECOMMENDATION_USED",
-      explanation: "Se copió una recomendación del copiloto para revisión manual.",
-      metadata: { text: parsed.data.text, goal: parsed.data.goal },
+      ...event,
+      metadata: { text: parsed.data.text, goal: parsed.data.goal, action: parsed.data.action, reason: parsed.data.reason },
     },
   });
 

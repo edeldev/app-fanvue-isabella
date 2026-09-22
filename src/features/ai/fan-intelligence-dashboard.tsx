@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Check, ChevronRight, Copy, FileText, HeartHandshake, MessageCircle, Route, Search, ShieldCheck, Sparkles, Target, TrendingUp, UserRoundSearch, Users, X } from "lucide-react";
+import { Bot, Check, ChevronRight, Copy, FileText, HeartHandshake, MessageCircle, Route, Search, ShieldCheck, Sparkles, Target, ThumbsDown, ThumbsUp, TrendingUp, UserRoundSearch, Users, X } from "lucide-react";
 import Link from "next/link";
 import { enqueueSnackbar } from "notistack";
 import type { ReactNode } from "react";
@@ -42,6 +42,7 @@ export type FanIntelligenceView = {
 type FunnelCoverage = { trigger: string; label: string; published: number; description: string };
 type TemplateOption = { id: string; name: string; category: string; type: string };
 type WorkflowOption = { id: string; name: string; status: string; triggerEvent: string; goalType: string; steps: number };
+type FeedbackReason = "WRONG_CONTEXT" | "WRONG_TONE" | "TOO_EARLY" | "REPEATED";
 
 const segmentMeta: Record<IntelligenceSegment, { label: string; description: string; className: string }> = {
   HIGH_VALUE: { label: "Alto valor", description: "Mayor gasto y compras confirmadas", className: "border-amber-400/25 bg-amber-400/8 text-amber-200" },
@@ -115,6 +116,8 @@ function FanRow({ fan, selected, onSelect }: { fan: FanIntelligenceView; selecte
 function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanIntelligenceView; goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV"; setGoal: (goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV") => void; templates: TemplateOption[]; workflows: WorkflowOption[] }) {
   const [preview, setPreview] = useState<"WORKFLOW" | "TEMPLATE" | null>(null);
   const [usedRecommendationTexts, setUsedRecommendationTexts] = useState(fan.recentRecommendationTexts);
+  const [showFeedbackReasons, setShowFeedbackReasons] = useState(false);
+  const [helpfulDraft, setHelpfulDraft] = useState<string | null>(null);
   const draft = buildDraft(fan, goal, usedRecommendationTexts);
   const strategy = strategyForFan(fan);
   const matchingWorkflow = findMatchingWorkflow(strategy, workflows);
@@ -123,12 +126,29 @@ function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanInte
   async function copyDraft() {
     await navigator.clipboard.writeText(draft);
     setUsedRecommendationTexts((current) => [draft, ...current]);
-    void fetch("/api/intelligence/recommendations", {
+    void recordRecommendation("COPIED", draft);
+    enqueueSnackbar("Borrador copiado. Revísalo antes de enviarlo.", { variant: "success" });
+  }
+  function recordRecommendation(action: "COPIED" | "HELPFUL" | "NOT_HELPFUL", text: string, reason?: FeedbackReason) {
+    return fetch("/api/intelligence/recommendations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fanId: fan.id, text: draft, goal }),
+      body: JSON.stringify({ fanId: fan.id, text, goal, action, reason }),
     });
-    enqueueSnackbar("Borrador copiado. Revísalo antes de enviarlo.", { variant: "success" });
+  }
+  function markHelpful() {
+    setHelpfulDraft(draft);
+    setShowFeedbackReasons(false);
+    void recordRecommendation("HELPFUL", draft);
+    enqueueSnackbar("Gracias. Guardamos que esta recomendación sí corresponde.", { variant: "success" });
+  }
+  function rejectDraft(reason?: FeedbackReason) {
+    const rejected = draft;
+    setHelpfulDraft(null);
+    setShowFeedbackReasons(false);
+    setUsedRecommendationTexts((current) => [rejected, ...current]);
+    void recordRecommendation("NOT_HELPFUL", rejected, reason);
+    enqueueSnackbar("Recomendación descartada. Preparamos otra opción.", { variant: "info" });
   }
   const ppvBlocked = Boolean(fan.commercialGuard) || fan.conversationContext.stage !== "OFFER_READY";
   return <div className="min-w-0 space-y-4 overflow-x-hidden xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto xl:overscroll-contain xl:pr-1">
@@ -149,7 +169,7 @@ function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanInte
         {fan.commercialGuard ? <div className="rounded-2xl border border-rose-400/15 bg-rose-400/[.045] p-4"><p className="text-xs font-semibold text-rose-200">Pausa comercial: {fan.commercialGuard.label}</p><p className="mt-1 text-[10px] italic leading-4 text-zinc-600">“{fan.commercialGuard.evidence}”</p></div> : null}
         <div className="rounded-2xl border border-white/8 bg-black/10 p-4"><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Lectura de la conversación</p><p className="mt-2 text-xs leading-5 text-zinc-300">{fan.conversationContext.reason}</p>{fan.conversationContext.evidence ? <p className="mt-1 line-clamp-2 text-[10px] italic leading-4 text-zinc-600">“{fan.conversationContext.evidence}”</p> : null}</div>
         <div className="grid grid-cols-3 gap-2"><button type="button" onClick={() => setGoal("RELATIONSHIP")} className={goalButton(goal === "RELATIONSHIP")}><HeartHandshake className="size-3.5" />Conectar</button><button type="button" disabled={Boolean(fan.commercialGuard)} title={fan.commercialGuard ? "Deshabilitado por una señal comercial negativa reciente" : undefined} onClick={() => setGoal("SUBSCRIPTION")} className={goalButton(goal === "SUBSCRIPTION", Boolean(fan.commercialGuard))}><Users className="size-3.5" />Suscripción</button><button type="button" disabled={ppvBlocked} title={ppvBlocked ? "Primero necesita una preferencia o intención de compra explícita" : undefined} onClick={() => setGoal("PPV")} className={goalButton(goal === "PPV", ppvBlocked)}><TrendingUp className="size-3.5" />PPV</button></div>
-        <div className="rounded-2xl border border-white/8 bg-black/15 p-4"><div className="mb-3 flex items-center gap-2 text-xs font-medium text-violet-300"><Sparkles className="size-3.5" />Borrador contextual</div><p className="text-sm leading-6 text-zinc-300">{draft}</p><div className="mt-4 flex gap-2"><button type="button" onClick={() => void copyDraft()} className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-xs font-semibold text-zinc-300 transition hover:bg-white/5"><Copy className="size-3.5" />Copiar</button><Link href={`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}`} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-violet-500 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-400"><MessageCircle className="size-3.5" />Abrir chat</Link></div></div>
+        <div className="rounded-2xl border border-white/8 bg-black/15 p-4"><div className="mb-3 flex items-center gap-2 text-xs font-medium text-violet-300"><Sparkles className="size-3.5" />Borrador contextual</div><p className="text-sm leading-6 text-zinc-300">{draft}</p><div className="mt-4 flex gap-2"><button type="button" onClick={() => void copyDraft()} className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-xs font-semibold text-zinc-300 transition hover:bg-white/5"><Copy className="size-3.5" />Copiar</button><Link href={`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}`} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-violet-500 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-400"><MessageCircle className="size-3.5" />Abrir chat</Link></div><div className="mt-3 flex items-center justify-between gap-3 border-t border-white/6 pt-3"><p className="text-[10px] text-zinc-600">¿Esta recomendación corresponde?</p><div className="flex gap-1.5"><button type="button" onClick={markHelpful} aria-label="Buena recomendación" className={`grid size-8 cursor-pointer place-items-center rounded-lg border transition ${helpfulDraft === draft ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300" : "border-white/8 text-zinc-600 hover:border-emerald-400/20 hover:text-emerald-300"}`}><ThumbsUp className="size-3.5" /></button><button type="button" onClick={() => setShowFeedbackReasons((current) => !current)} aria-label="La recomendación no corresponde" className="grid size-8 cursor-pointer place-items-center rounded-lg border border-white/8 text-zinc-600 transition hover:border-rose-400/20 hover:text-rose-300"><ThumbsDown className="size-3.5" /></button></div></div>{showFeedbackReasons ? <div className="mt-3 rounded-xl border border-rose-400/10 bg-rose-400/[.035] p-3"><p className="text-[10px] font-medium text-rose-200">¿Qué no corresponde? <span className="text-zinc-600">Opcional</span></p><div className="mt-2 flex flex-wrap gap-1.5"><FeedbackReasonButton label="Contexto" onClick={() => rejectDraft("WRONG_CONTEXT")} /><FeedbackReasonButton label="Tono" onClick={() => rejectDraft("WRONG_TONE")} /><FeedbackReasonButton label="Muy pronto" onClick={() => rejectDraft("TOO_EARLY")} /><FeedbackReasonButton label="Repetido" onClick={() => rejectDraft("REPEATED")} /><FeedbackReasonButton label="Sin motivo" onClick={() => rejectDraft()} /></div></div> : null}</div>
         {fan.interests.length ? <div><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Señales de los últimos 4 días</p><div className="mt-2 flex flex-wrap gap-2">{fan.interests.map((interest) => <span key={interest} className="rounded-full border border-white/8 bg-white/[.035] px-2.5 py-1 text-[10px] text-zinc-400">{interest}</span>)}</div>{fan.recentSignals[0] ? <p className="mt-2 line-clamp-2 text-[10px] italic leading-4 text-zinc-600">Evidencia: “{fan.recentSignals[0].evidence}”</p> : null}</div> : null}
         <div><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Por qué lo recomendamos</p><ul className="mt-2 space-y-2">{fan.reasons.map((reason) => <li key={reason} className="flex gap-2 text-[11px] leading-5 text-zinc-500"><span className="mt-2 size-1 shrink-0 rounded-full bg-violet-400" />{reason}</li>)}</ul></div>
         {recommendedTemplates.length ? <div><p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Plantillas compatibles</p><div className="mt-2 space-y-2">{recommendedTemplates.map((template) => <div key={template.name} className="rounded-xl border border-white/7 bg-white/[.025] px-3 py-2"><p className="truncate text-[11px] text-zinc-300">{template.name}</p><p className="mt-0.5 text-[9px] text-zinc-600">{template.category} · {template.type}</p></div>)}</div></div> : null}
@@ -417,6 +437,7 @@ function readableGoal(goal: string) { return ({ FIRST_PURCHASE: "Primera compra"
 function goalButton(active: boolean, disabled = false) {
   return `flex flex-col items-center gap-1.5 rounded-xl border px-2 py-2.5 text-[10px] font-medium transition ${disabled ? "cursor-not-allowed border-white/5 bg-white/[.015] text-zinc-700 opacity-60" : active ? "cursor-pointer border-violet-400/30 bg-violet-500/15 text-violet-200" : "cursor-pointer border-white/8 bg-white/[.025] text-zinc-500 hover:text-zinc-300"}`;
 }
+function FeedbackReasonButton({ label, onClick }: { label: string; onClick: () => void }) { return <button type="button" onClick={onClick} className="cursor-pointer rounded-lg border border-white/8 bg-black/10 px-2.5 py-1.5 text-[9px] text-zinc-400 transition hover:border-rose-400/20 hover:text-rose-200">{label}</button>; }
 function MiniScore({ label, value }: { label: string; value: number }) { return <div><div className="h-1 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-violet-400" style={{ width: `${value}%` }} /></div><p className="mt-1 text-[9px] text-zinc-600">{label} {value}</p></div>; }
 function readinessLabel(readiness: SaleReadiness) { return readiness === "HOT" ? "Momento activo" : readiness === "WARM" ? "Interés reciente" : "Sin señal reciente"; }
 function isNearHighValue(fan: FanIntelligenceView) { return fan.segment === "MID_VALUE" && fan.totalSpentMinor >= 3_000 && fan.totalSpentMinor < 5_000 && Math.max(fan.potentialScore, fan.relationshipScore) >= 70; }

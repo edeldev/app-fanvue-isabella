@@ -44,7 +44,7 @@ export default async function IntelligencePage() {
           select: { status: true, workflow: { select: { id: true, name: true } } },
         },
         automationLogs: {
-          where: { eventType: "AI_RECOMMENDATION_USED", occurredAt: { gte: memoryCutoff } },
+          where: { eventType: { in: ["AI_RECOMMENDATION_USED", "AI_RECOMMENDATION_HELPFUL", "AI_RECOMMENDATION_REJECTED"] }, occurredAt: { gte: memoryCutoff } },
           orderBy: { occurredAt: "desc" },
           take: 30,
           select: { metadata: true },
