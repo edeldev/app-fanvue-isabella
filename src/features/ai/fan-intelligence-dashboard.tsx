@@ -6,7 +6,7 @@ import { enqueueSnackbar } from "notistack";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import type { IntelligenceSegment, SaleReadiness } from "@/domain/ai/fan-intelligence";
+import { selectNonRepeatedRecommendation, type IntelligenceSegment, type SaleReadiness } from "@/domain/ai/fan-intelligence";
 
 export type FanIntelligenceView = {
   id: string;
@@ -35,6 +35,7 @@ export type FanIntelligenceView = {
   interests: string[];
   reasons: string[];
   nextAction: string;
+  recentRecommendationTexts: string[];
   activeWorkflow: { id: string; name: string; status: string } | null;
 };
 
@@ -113,13 +114,20 @@ function FanRow({ fan, selected, onSelect }: { fan: FanIntelligenceView; selecte
 
 function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanIntelligenceView; goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV"; setGoal: (goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV") => void; templates: TemplateOption[]; workflows: WorkflowOption[] }) {
   const [preview, setPreview] = useState<"WORKFLOW" | "TEMPLATE" | null>(null);
-  const draft = buildDraft(fan, goal);
+  const [usedRecommendationTexts, setUsedRecommendationTexts] = useState(fan.recentRecommendationTexts);
+  const draft = buildDraft(fan, goal, usedRecommendationTexts);
   const strategy = strategyForFan(fan);
   const matchingWorkflow = findMatchingWorkflow(strategy, workflows);
   const matchingTemplate = findMatchingTemplate(strategy, templates);
   const recommendedTemplates = templates.filter((template) => goal === "PPV" ? template.type.toLocaleUpperCase() === "PPV" : template.type.toLocaleUpperCase() !== "PPV").slice(0, 3);
   async function copyDraft() {
     await navigator.clipboard.writeText(draft);
+    setUsedRecommendationTexts((current) => [draft, ...current]);
+    void fetch("/api/intelligence/recommendations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fanId: fan.id, text: draft, goal }),
+    });
     enqueueSnackbar("Borrador copiado. Revísalo antes de enviarlo.", { variant: "success" });
   }
   const ppvBlocked = Boolean(fan.commercialGuard) || fan.conversationContext.stage !== "OFFER_READY";
@@ -152,30 +160,53 @@ function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanInte
   </div>;
 }
 
-function buildDraft(fan: FanIntelligenceView, goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV") {
+function buildDraft(fan: FanIntelligenceView, goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV", recentTexts: string[]) {
   const name = fan.displayName.split(/\s+/)[0] || "{{nombre}}";
-  if (fan.commercialGuard) return `${name}, gracias por decírmelo. No te preocupes; no te enviaré ninguna oferta ahora 💜`;
-  if (goal === "PPV" && fan.conversationContext.stage !== "OFFER_READY") return intentionalMessages(fan)[0].text;
+  if (fan.commercialGuard) return selectNonRepeatedRecommendation([
+    `${name}, gracias por decírmelo. No te preocupes; no te enviaré ninguna oferta ahora 💜`,
+    `${name}, entendido 💜 Voy a respetar lo que me dijiste y dejamos las ofertas en pausa.`,
+  ], recentTexts);
+  if (goal === "PPV" && fan.conversationContext.stage !== "OFFER_READY") return selectNonRepeatedRecommendation(relationshipDrafts(fan, name), recentTexts);
   const interest = fan.interests[0];
   const recentSignal = fan.recentSignals[0];
-  if (goal === "PPV") return recentSignal
-    ? contextualPpvMessage(name, recentSignal.key)
-    : `${name}, guardé algo que prefiero no mostrar completo de entrada 👀 Te enseño primero un pequeño adelanto y tú decides si quieres descubrir el resto.`;
-  if (goal === "SUBSCRIPTION") return fan.isFreeTrialSubscriber
-    ? `${name}, quiero que aproveches tu prueba para descubrir lo que realmente te gusta. ${interest ? `Como te interesa ${interest}, puedo enseñarte dónde encontrar más contenido así.` : "¿Qué te gustaría explorar antes de que termine?"}`
+  if (goal === "PPV") return selectNonRepeatedRecommendation(recentSignal
+    ? contextualPpvMessages(name, recentSignal.key)
+    : [
+      `${name}, guardé algo que prefiero no mostrar completo de entrada 👀 Te enseño primero un pequeño adelanto y tú decides si quieres descubrir el resto.`,
+      `${name}, tengo un adelanto que dice lo suficiente para despertar curiosidad… pero no tanto como para arruinar la sorpresa 👀 ¿Quieres verlo?`,
+    ], recentTexts);
+  if (goal === "SUBSCRIPTION") return selectNonRepeatedRecommendation(fan.isFreeTrialSubscriber
+    ? [
+      `${name}, quiero que aproveches tu prueba para descubrir lo que realmente te gusta. ${interest ? `Como te interesa ${interest}, puedo enseñarte dónde encontrar más contenido así.` : "¿Qué te gustaría explorar antes de que termine?"}`,
+      `${name}, antes de que termine tu prueba quiero ayudarte a encontrar la parte que más vaya contigo 💜 ¿Qué te gustaría descubrir primero?`,
+    ]
     : recentSignal
-      ? `${name}, me acordé de que te llamó la atención ${interest}. Hay una parte de mi suscripción que sigue justo por ahí 👀 ¿Quieres que te cuente qué incluye?`
-      : `${name}, hay una parte de mi contenido que casi nunca enseño fuera de la suscripción 👀 ¿Quieres que te cuente qué incluye antes de decidir?`;
-  return intentionalMessages(fan)[0].text;
+      ? [
+        `${name}, me acordé de que te llamó la atención ${interest}. Hay una parte de mi suscripción que sigue justo por ahí 👀 ¿Quieres que te cuente qué incluye?`,
+        `${name}, dentro de la suscripción tengo algo que conecta mucho con ${interest} 👀 Si quieres, te explico qué encontrarás antes de que decidas.`,
+      ]
+      : [
+        `${name}, hay una parte de mi contenido que casi nunca enseño fuera de la suscripción 👀 ¿Quieres que te cuente qué incluye antes de decidir?`,
+        `${name}, mi suscripción tiene un lado que quizá todavía no has descubierto 💜 ¿Quieres que te explique qué incluye, sin compromiso?`,
+      ], recentTexts);
+  return selectNonRepeatedRecommendation(relationshipDrafts(fan, name), recentTexts);
 }
 
-function contextualPpvMessage(name: string, signal: FanIntelligenceView["recentSignals"][number]["key"]) {
-  if (signal === "DRESS") return `${name}, ¿recuerdas el vestido que te gustó? Preparé algo que empieza justo con él… pero esta vez no se queda puesto hasta el final 👀 Te dejo primero la vista previa; tú decides si quieres ver el resto 💜`;
-  if (signal === "BIKINI") return `${name}, me acordé de que te gustó el bikini 👀 Preparé algo que empieza justo ahí… pero esta vez el bikini no se queda hasta el final. Mira primero el adelanto y dime si quieres descubrir el resto 💜`;
-  if (signal === "LINGERIE") return `${name}, me acordé de lo que dijiste sobre la lencería 👀 Elegí algo que empieza sutil… y se vuelve mucho más interesante después de la vista previa. Tú decides si quieres ver el resto 💜`;
-  if (signal === "NUDE") return `${name}, me acordé de que te gusta cuando dejo menos a la imaginación 👀 Preparé un adelanto pequeño; lo que sigue es justo la parte que no quise revelar aquí 💜`;
-  if (signal === "COSPLAY") return `${name}, me acordé de que te gustó el cosplay 👀 Elegí uno que empieza con el personaje… pero la vista previa no revela cómo termina. Tú decides si quieres ver el resto 💜`;
-  return `${name}, me acordé de lo que me dijiste y creo que esto va justo con ese lado atrevido que te gusta 👀 Mira primero el adelanto… lo mejor es precisamente lo que no quise revelar aquí 💜`;
+function relationshipDrafts(fan: FanIntelligenceView, name: string) {
+  return [
+    intentionalMessages(fan)[0].text,
+    `${name}, me dio curiosidad saber algo de ti 😊 ¿qué tipo de contenido te alegra más encontrar cuando entras aquí?`,
+    `${name}, hoy no vengo a venderte nada; quiero conocerte mejor 💜 ¿qué te gustaría ver más de mí últimamente?`,
+  ];
+}
+
+function contextualPpvMessages(name: string, signal: FanIntelligenceView["recentSignals"][number]["key"]) {
+  if (signal === "DRESS") return [`${name}, ¿recuerdas el vestido que te gustó? Preparé algo que empieza justo con él… pero esta vez no se queda puesto hasta el final 👀 Te dejo primero la vista previa; tú decides si quieres ver el resto 💜`, `${name}, ese vestido que mencionaste me dio una idea 👀 El adelanto empieza elegante; lo que sigue cambia por completo el tono. ¿Quieres descubrirlo?`];
+  if (signal === "BIKINI") return [`${name}, me acordé de que te gustó el bikini 👀 Preparé algo que empieza justo ahí… pero esta vez el bikini no se queda hasta el final. Mira primero el adelanto y dime si quieres descubrir el resto 💜`, `${name}, tu comentario sobre el bikini me inspiró algo nuevo 👀 Te dejo una pequeña muestra; el resto tiene justo el giro que estás imaginando 💜`];
+  if (signal === "LINGERIE") return [`${name}, me acordé de lo que dijiste sobre la lencería 👀 Elegí algo que empieza sutil… y se vuelve mucho más interesante después de la vista previa. Tú decides si quieres ver el resto 💜`, `${name}, tomé en cuenta lo que dijiste de la lencería y preparé un adelanto muy a tu estilo 👀 Lo demás prefiero que lo descubras tú 💜`];
+  if (signal === "NUDE") return [`${name}, me acordé de que te gusta cuando dejo menos a la imaginación 👀 Preparé un adelanto pequeño; lo que sigue es justo la parte que no quise revelar aquí 💜`, `${name}, sé que te gusta cuando la imaginación dura poco 👀 Esta vista previa solo insinúa; el resto ya no se guarda tanto 💜`];
+  if (signal === "COSPLAY") return [`${name}, me acordé de que te gustó el cosplay 👀 Elegí uno que empieza con el personaje… pero la vista previa no revela cómo termina. Tú decides si quieres ver el resto 💜`, `${name}, tu gusto por el cosplay me dio una idea distinta 👀 Mira el personaje en la vista previa; la transformación completa está después 💜`];
+  return [`${name}, me acordé de lo que me dijiste y creo que esto va justo con ese lado atrevido que te gusta 👀 Mira primero el adelanto… lo mejor es precisamente lo que no quise revelar aquí 💜`, `${name}, tu mensaje me dejó clarísimo qué lado mío te da curiosidad 👀 Preparé un adelanto inspirado en eso; el resto habla por sí solo 💜`];
 }
 
 type StrategyRecommendation = {
@@ -202,7 +233,7 @@ function intentionalMessages(fan: FanIntelligenceView): IntentionalMessage[] {
     ? `${name}, me acordé de que te llamó la atención ${interest}. Hay una parte de mi suscripción que sigue justo por ahí 👀 ¿Quieres que te cuente qué incluye?`
     : `${name}, hay una parte de mi contenido que casi nunca enseño fuera de la suscripción 👀 ¿Quieres que te cuente qué incluye antes de decidir?`;
   const ppvReveal = recentSignal
-    ? contextualPpvMessage(name, recentSignal.key)
+    ? contextualPpvMessages(name, recentSignal.key)[0]
     : `${name}, elegí una de mis vistas previas favoritas para ti. Mira primero el adelanto… el resto es justo la parte que no quise revelar aquí 👀💜`;
   const discovery: IntentionalMessage = {
     intent: "Conseguir una respuesta auténtica y descubrir una preferencia útil.",

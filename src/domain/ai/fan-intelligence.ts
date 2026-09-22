@@ -209,6 +209,34 @@ export function analyzeConversationContext(
   };
 }
 
+export function selectNonRepeatedRecommendation(candidates: string[], recentTexts: string[]) {
+  const normalizedRecent = recentTexts.map(normalizeRecommendationText).filter(Boolean);
+  return candidates.find((candidate) => {
+    const normalizedCandidate = normalizeRecommendationText(candidate);
+    return normalizedRecent.every((recent) => similarity(normalizedCandidate, recent) < 0.68);
+  }) ?? candidates[candidates.length - 1] ?? "";
+}
+
+function normalizeRecommendationText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("es-MX")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function similarity(first: string, second: string) {
+  if (!first || !second) return 0;
+  if (first === second) return 1;
+  const firstWords = new Set(first.split(" "));
+  const secondWords = new Set(second.split(" "));
+  const intersection = [...firstWords].filter((word) => secondWords.has(word)).length;
+  const union = new Set([...firstWords, ...secondWords]).size;
+  return union ? intersection / union : 0;
+}
+
 function intelligenceReasons(signals: FanIntelligenceSignals, readiness: SaleReadiness) {
   const reasons: string[] = [];
   if (signals.totalSpentMinor >= 5_000) reasons.push(`Ha gastado $${(signals.totalSpentMinor / 100).toFixed(2)}.`);

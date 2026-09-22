@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeConversationContext, detectCommercialGuard, detectRecentConversationSignals, extractConversationInterests, scoreFanIntelligence } from "./fan-intelligence";
+import { analyzeConversationContext, detectCommercialGuard, detectRecentConversationSignals, extractConversationInterests, scoreFanIntelligence, selectNonRepeatedRecommendation } from "./fan-intelligence";
 
 const now = new Date("2026-09-19T12:00:00.000Z");
 
@@ -69,5 +69,16 @@ describe("fan intelligence", () => {
     expect(guard).toBeNull();
     expect(signals.map((signal) => signal.key)).toEqual(expect.arrayContaining(["LINGERIE", "EROTIC"]));
     expect(analyzeConversationContext(messages, signals, guard).stage).toBe("OFFER_READY");
+  });
+
+  it("chooses a different recommendation when a similar message was already used", () => {
+    const candidates = [
+      "Muddy, preparé una vista previa especial para ti, ¿quieres verla?",
+      "Muddy, guardé un adelanto diferente y quiero saber qué te parece.",
+    ];
+
+    expect(selectNonRepeatedRecommendation(candidates, [
+      "Muddy preparé una vista previa especial para ti. ¿Quieres verla?",
+    ])).toBe(candidates[1]);
   });
 });

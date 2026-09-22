@@ -10,7 +10,8 @@ import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creato
 export default async function IntelligencePage() {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
   const now = new Date();
-  const recentConversationCutoff = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1_000);
+  const contextCutoff = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1_000);
+  const memoryCutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1_000);
   const [records, workflows, templates] = creatorId ? await Promise.all([
     prisma.fan.findMany({
       where: {
@@ -29,7 +30,7 @@ export default async function IntelligencePage() {
           orderBy: { lastMessageAt: "desc" },
           include: {
             messages: {
-              where: { deletedAt: null, sentAt: { gte: recentConversationCutoff } },
+              where: { deletedAt: null, sentAt: { gte: memoryCutoff } },
               orderBy: { sentAt: "desc" },
               take: 100,
               select: { direction: true, text: true, sentAt: true },
@@ -41,6 +42,12 @@ export default async function IntelligencePage() {
           orderBy: { startedAt: "desc" },
           take: 1,
           select: { status: true, workflow: { select: { id: true, name: true } } },
+        },
+        automationLogs: {
+          where: { eventType: "AI_RECOMMENDATION_USED", occurredAt: { gte: memoryCutoff } },
+          orderBy: { occurredAt: "desc" },
+          take: 30,
+          select: { metadata: true },
         },
       },
       take: 500,
@@ -61,9 +68,10 @@ export default async function IntelligencePage() {
     const messages = fan.conversations[0]?.messages ?? [];
     const inbound = messages.filter((message) => message.direction === "INBOUND");
     const outbound = messages.filter((message) => message.direction === "OUTBOUND");
-    const recentSignals = detectRecentConversationSignals(inbound, now);
-    const commercialGuard = detectCommercialGuard(inbound);
-    const conversationContext = analyzeConversationContext(inbound, recentSignals, commercialGuard);
+    const recentInbound = inbound.filter((message) => message.sentAt >= contextCutoff);
+    const recentSignals = detectRecentConversationSignals(recentInbound, now);
+    const commercialGuard = detectCommercialGuard(recentInbound);
+    const conversationContext = analyzeConversationContext(recentInbound, recentSignals, commercialGuard);
     const intelligence = scoreFanIntelligence({
       totalSpentMinor: fan.totalSpentMinor,
       purchaseCount: fan.purchases.length,
@@ -93,7 +101,7 @@ export default async function IntelligencePage() {
       isSubscriber: fan.isSubscriber,
       isFreeTrialSubscriber: fan.isFreeTrialSubscriber,
       lastActivityAt: fan.lastActivityAt?.toISOString() ?? null,
-      lastInboundText: inbound.find((message) => message.text?.trim())?.text?.trim() ?? null,
+      lastInboundText: recentInbound.find((message) => message.text?.trim())?.text?.trim() ?? null,
       recentSignals: recentSignals.map((signal) => ({
         key: signal.key,
         label: signal.label,
@@ -103,6 +111,10 @@ export default async function IntelligencePage() {
       commercialGuard,
       conversationContext,
       interests: recentSignals.map((signal) => signal.label),
+      recentRecommendationTexts: [...new Set([
+        ...outbound.flatMap((message) => message.text?.trim() ? [message.text.trim()] : []),
+        ...fan.automationLogs.flatMap((log) => recommendationText(log.metadata)),
+      ])].slice(0, 100),
       activeWorkflow: fan.enrollments[0] ? { id: fan.enrollments[0].workflow.id, name: fan.enrollments[0].workflow.name, status: fan.enrollments[0].status } : null,
     };
   }).sort((a, b) => segmentWeight(b.segment) - segmentWeight(a.segment) || Math.max(b.valueScore, b.potentialScore) - Math.max(a.valueScore, a.potentialScore));
@@ -125,6 +137,12 @@ export default async function IntelligencePage() {
       </main>
     </div>
   </div>;
+}
+
+function recommendationText(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return [];
+  const text = (metadata as Record<string, unknown>).text;
+  return typeof text === "string" && text.trim() ? [text.trim()] : [];
 }
 
 function segmentWeight(segment: FanIntelligenceView["segment"]) {
