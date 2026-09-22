@@ -2,7 +2,7 @@ export const intelligenceSegments = ["HIGH_VALUE", "MID_VALUE", "HIGH_POTENTIAL"
 export type IntelligenceSegment = (typeof intelligenceSegments)[number];
 export type SaleReadiness = "HOT" | "WARM" | "COLD";
 export type RecentConversationSignal = {
-  key: "BIKINI" | "DRESS" | "LINGERIE" | "NUDE" | "COSPLAY";
+  key: "BIKINI" | "DRESS" | "LINGERIE" | "NUDE" | "COSPLAY" | "EROTIC";
   label: string;
   evidence: string;
   detectedAt: Date;
@@ -50,9 +50,10 @@ const conversationSignalPatterns: Array<{
 }> = [
   { key: "BIKINI", label: "bikini", patterns: [/\bbikini\b/i, /traje de ba(?:n|ñ)o/i, /\bba(?:n|ñ)ador/i] },
   { key: "DRESS", label: "vestido", patterns: [/\bvestido/i, /\bdress\b/i] },
-  { key: "LINGERIE", label: "lencería", patterns: [/lencer[ií]a/i, /\blingerie\b/i, /ropa interior/i] },
+  { key: "LINGERIE", label: "lencería", patterns: [/lencer[ií]a/i, /\blingerie\b/i, /ropa interior/i, /\bpant(?:y|ys|ies)\b/i] },
   { key: "NUDE", label: "contenido sin ropa", patterns: [/sin ropa/i, /desnud/i, /\bnude\b/i, /\bnaked\b/i] },
   { key: "COSPLAY", label: "cosplay", patterns: [/\bcosplay\b/i, /disfraz/i] },
+  { key: "EROTIC", label: "contenido atrevido", patterns: [/me excit/i, /excitaci[oó]n/i, /qu[eé] rico/i, /me encanta verte/i, /\bculo\b/i, /\btetas?\b/i, /\bbooty\b/i] },
 ];
 
 export function scoreFanIntelligence(signals: FanIntelligenceSignals, now = new Date()): FanIntelligence {
@@ -156,8 +157,8 @@ export function detectCommercialGuard(messages: Array<{ text: string | null; sen
     .sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime())
     .slice(0, 5);
   const guards: Array<{ code: CommercialGuard["code"]; label: string; patterns: RegExp[] }> = [
-    { code: "REJECTION", label: "Rechazó recibir ofertas", patterns: [/no me interesa/i, /no quiero/i, /no gracias/i, /no me mandes/i, /deja de enviar/i, /\bstop\b/i, /not interested/i] },
-    { code: "NOT_NOW", label: "Pidió tiempo o espacio", patterns: [/ahora no/i, /quiz[aá]s luego/i, /despu[eé]s/i, /dame tiempo/i, /necesito espacio/i, /estoy ocupad/i, /not now/i, /maybe later/i] },
+    { code: "REJECTION", label: "Rechazó recibir ofertas", patterns: [/no me interesa/i, /no quiero (?:comprar|ver|recibir|ofertas?|mensajes?|nada)/i, /no gracias/i, /no me mandes/i, /deja de enviar/i, /\bstop\b/i, /not interested/i] },
+    { code: "NOT_NOW", label: "Pidió tiempo o espacio", patterns: [/\bahora no\b/i, /quiz[aá]s (?:luego|despu[eé]s)/i, /(?:te|yo te) (?:digo|aviso) despu[eé]s/i, /despu[eé]s (?:hablamos|vemos)/i, /(?:hablamos|vemos|te digo|te aviso) m[aá]s tarde/i, /dame tiempo/i, /necesito espacio/i, /estoy ocupad/i, /not now/i, /maybe later/i] },
     { code: "BUDGET_CONCERN", label: "Expresó una objeción de precio", patterns: [/no tengo dinero/i, /no puedo pagar/i, /muy caro/i, /demasiado caro/i, /sin dinero/i, /can'?t afford/i, /too expensive/i] },
   ];
   for (const message of newest) {

@@ -29,7 +29,7 @@ export type FanIntelligenceView = {
   isFreeTrialSubscriber: boolean;
   lastActivityAt: string | null;
   lastInboundText: string | null;
-  recentSignals: Array<{ key: "BIKINI" | "DRESS" | "LINGERIE" | "NUDE" | "COSPLAY"; label: string; evidence: string; detectedAt: string }>;
+  recentSignals: Array<{ key: "BIKINI" | "DRESS" | "LINGERIE" | "NUDE" | "COSPLAY" | "EROTIC"; label: string; evidence: string; detectedAt: string }>;
   commercialGuard: { code: "REJECTION" | "NOT_NOW" | "BUDGET_CONCERN"; label: string; evidence: string } | null;
   conversationContext: { stage: "PAUSE" | "CONNECTION" | "DISCOVERY" | "OFFER_READY"; reason: string; evidence: string | null };
   interests: string[];
@@ -90,7 +90,7 @@ export function FanIntelligenceDashboard({ fans, funnelCoverage, templates, work
           {!filtered.length ? <div className="p-12 text-center"><UserRoundSearch className="mx-auto size-8 text-zinc-700" /><p className="mt-3 text-sm text-zinc-500">No encontramos fans con estos filtros.</p></div> : null}
         </div>
       </div>
-      <aside className="min-w-0 self-start">{selected ? <FanCopilot fan={selected} goal={goal} setGoal={setGoal} templates={templates} workflows={workflows} /> : <div className="rounded-3xl border border-dashed border-white/10 p-10 text-center text-sm text-zinc-600">Selecciona un fan para abrir su copiloto.</div>}</aside>
+      <aside className="min-w-0 self-start">{selected ? <FanCopilot key={selected.id} fan={selected} goal={goal} setGoal={setGoal} templates={templates} workflows={workflows} /> : <div className="rounded-3xl border border-dashed border-white/10 p-10 text-center text-sm text-zinc-600">Selecciona un fan para abrir su copiloto.</div>}</aside>
     </section>
 
     <section className="rounded-3xl border border-white/8 bg-gradient-to-br from-violet-500/[.07] to-transparent p-5 sm:p-6">
@@ -174,7 +174,8 @@ function contextualPpvMessage(name: string, signal: FanIntelligenceView["recentS
   if (signal === "BIKINI") return `${name}, me acordé de que te gustó el bikini 👀 Preparé algo que empieza justo ahí… pero esta vez el bikini no se queda hasta el final. Mira primero el adelanto y dime si quieres descubrir el resto 💜`;
   if (signal === "LINGERIE") return `${name}, me acordé de lo que dijiste sobre la lencería 👀 Elegí algo que empieza sutil… y se vuelve mucho más interesante después de la vista previa. Tú decides si quieres ver el resto 💜`;
   if (signal === "NUDE") return `${name}, me acordé de que te gusta cuando dejo menos a la imaginación 👀 Preparé un adelanto pequeño; lo que sigue es justo la parte que no quise revelar aquí 💜`;
-  return `${name}, me acordé de que te gustó el cosplay 👀 Elegí uno que empieza con el personaje… pero la vista previa no revela cómo termina. Tú decides si quieres ver el resto 💜`;
+  if (signal === "COSPLAY") return `${name}, me acordé de que te gustó el cosplay 👀 Elegí uno que empieza con el personaje… pero la vista previa no revela cómo termina. Tú decides si quieres ver el resto 💜`;
+  return `${name}, me acordé de lo que me dijiste y creo que esto va justo con ese lado atrevido que te gusta 👀 Mira primero el adelanto… lo mejor es precisamente lo que no quise revelar aquí 💜`;
 }
 
 type StrategyRecommendation = {

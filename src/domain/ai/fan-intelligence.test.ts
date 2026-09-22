@@ -57,4 +57,17 @@ describe("fan intelligence", () => {
 
     expect(analyzeConversationContext(messages, signals, null).stage).toBe("OFFER_READY");
   });
+
+  it("does not confuse flirtatious use of después with a request for space", () => {
+    const messages = [{
+      text: "Tienes un culo perfecto, darle besitos sería una excitación total y te quitaría tus pantys... después tú me dices para dónde sigo",
+      sentAt: now,
+    }];
+    const guard = detectCommercialGuard(messages);
+    const signals = detectRecentConversationSignals(messages, now);
+
+    expect(guard).toBeNull();
+    expect(signals.map((signal) => signal.key)).toEqual(expect.arrayContaining(["LINGERIE", "EROTIC"]));
+    expect(analyzeConversationContext(messages, signals, guard).stage).toBe("OFFER_READY");
+  });
 });
