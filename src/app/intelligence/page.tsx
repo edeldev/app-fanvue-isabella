@@ -26,6 +26,10 @@ export default async function IntelligencePage() {
           select: { amountMinor: true, source: true, purchasedAt: true },
           orderBy: { purchasedAt: "desc" },
         },
+        subscriptions: {
+          select: { startedAt: true, isFreeTrial: true, amountPaidMinor: true },
+          orderBy: { startedAt: "desc" },
+        },
         conversations: {
           take: 1,
           orderBy: { lastMessageAt: "desc" },
@@ -48,7 +52,7 @@ export default async function IntelligencePage() {
           where: { eventType: { in: ["AI_RECOMMENDATION_USED", "AI_RECOMMENDATION_HELPFUL", "AI_RECOMMENDATION_REJECTED"] }, occurredAt: { gte: memoryCutoff } },
           orderBy: { occurredAt: "desc" },
           take: 30,
-          select: { metadata: true },
+          select: { id: true, eventType: true, explanation: true, metadata: true, occurredAt: true },
         },
       },
       take: 500,
@@ -116,6 +120,34 @@ export default async function IntelligencePage() {
         ...outbound.flatMap((message) => message.text?.trim() ? [message.text.trim()] : []),
         ...fan.automationLogs.flatMap((log) => recommendationText(log.metadata)),
       ])].slice(0, 100),
+      recommendationHistory: fan.automationLogs.map((log) => {
+        const metadata = recommendationMetadata(log.metadata);
+        const outcomeDeadline = new Date(log.occurredAt.getTime() + 7 * 24 * 60 * 60 * 1_000);
+        const reply = inbound
+          .filter((message) => message.sentAt > log.occurredAt && message.sentAt <= outcomeDeadline)
+          .sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime())[0];
+        const purchase = fan.purchases
+          .filter((item) => item.purchasedAt > log.occurredAt && item.purchasedAt <= outcomeDeadline)
+          .sort((a, b) => a.purchasedAt.getTime() - b.purchasedAt.getTime())[0];
+        const subscription = fan.subscriptions
+          .filter((item) => item.startedAt > log.occurredAt && item.startedAt <= outcomeDeadline)
+          .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime())[0];
+        return {
+          id: log.id,
+          action: recommendationAction(log.eventType),
+          goal: metadata.goal,
+          text: metadata.text,
+          reason: metadata.reason,
+          occurredAt: log.occurredAt.toISOString(),
+          outcome: purchase
+            ? { type: "PURCHASE" as const, occurredAt: purchase.purchasedAt.toISOString(), amountMinor: purchase.amountMinor, isFreeTrial: false }
+            : subscription
+              ? { type: "SUBSCRIPTION" as const, occurredAt: subscription.startedAt.toISOString(), amountMinor: subscription.amountPaidMinor ?? 0, isFreeTrial: subscription.isFreeTrial }
+              : reply
+                ? { type: "REPLY" as const, occurredAt: reply.sentAt.toISOString(), amountMinor: 0, isFreeTrial: false }
+                : null,
+        };
+      }),
       activeWorkflow: fan.enrollments[0] ? { id: fan.enrollments[0].workflow.id, name: fan.enrollments[0].workflow.name, status: fan.enrollments[0].status } : null,
     };
   }).sort((a, b) => segmentWeight(b.segment) - segmentWeight(a.segment) || Math.max(b.valueScore, b.potentialScore) - Math.max(a.valueScore, a.potentialScore));
@@ -145,6 +177,22 @@ function recommendationText(metadata: unknown) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return [];
   const text = (metadata as Record<string, unknown>).text;
   return typeof text === "string" && text.trim() ? [text.trim()] : [];
+}
+
+function recommendationMetadata(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return { text: "Recomendación sin texto disponible", goal: "RELATIONSHIP", reason: null };
+  const value = metadata as Record<string, unknown>;
+  return {
+    text: typeof value.text === "string" ? value.text : "Recomendación sin texto disponible",
+    goal: typeof value.goal === "string" ? value.goal : "RELATIONSHIP",
+    reason: typeof value.reason === "string" ? value.reason : null,
+  };
+}
+
+function recommendationAction(eventType: string) {
+  if (eventType === "AI_RECOMMENDATION_HELPFUL") return "HELPFUL" as const;
+  if (eventType === "AI_RECOMMENDATION_REJECTED") return "NOT_HELPFUL" as const;
+  return "COPIED" as const;
 }
 
 function segmentWeight(segment: FanIntelligenceView["segment"]) {
