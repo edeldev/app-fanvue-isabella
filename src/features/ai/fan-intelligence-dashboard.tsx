@@ -115,9 +115,13 @@ function FanRow({ fan, selected, onSelect }: { fan: FanIntelligenceView; selecte
 
 function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanIntelligenceView; goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV"; setGoal: (goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV") => void; templates: TemplateOption[]; workflows: WorkflowOption[] }) {
   const [preview, setPreview] = useState<"WORKFLOW" | "TEMPLATE" | null>(null);
-  const [usedRecommendationTexts, setUsedRecommendationTexts] = useState(fan.recentRecommendationTexts);
+  const [locallyUsedTexts, setLocallyUsedTexts] = useState<string[]>([]);
   const [showFeedbackReasons, setShowFeedbackReasons] = useState(false);
   const [helpfulDraft, setHelpfulDraft] = useState<string | null>(null);
+  const usedRecommendationTexts = useMemo(
+    () => [...new Set([...fan.recentRecommendationTexts, ...locallyUsedTexts])],
+    [fan.recentRecommendationTexts, locallyUsedTexts],
+  );
   const draft = buildDraft(fan, goal, usedRecommendationTexts);
   const strategy = strategyForFan(fan);
   const matchingWorkflow = findMatchingWorkflow(strategy, workflows);
@@ -125,7 +129,7 @@ function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanInte
   const recommendedTemplates = templates.filter((template) => goal === "PPV" ? template.type.toLocaleUpperCase() === "PPV" : template.type.toLocaleUpperCase() !== "PPV").slice(0, 3);
   async function copyDraft() {
     await navigator.clipboard.writeText(draft);
-    setUsedRecommendationTexts((current) => [draft, ...current]);
+    setLocallyUsedTexts((current) => [draft, ...current]);
     void recordRecommendation("COPIED", draft);
     enqueueSnackbar("Borrador copiado. Revísalo antes de enviarlo.", { variant: "success" });
   }
@@ -146,7 +150,7 @@ function FanCopilot({ fan, goal, setGoal, templates, workflows }: { fan: FanInte
     const rejected = draft;
     setHelpfulDraft(null);
     setShowFeedbackReasons(false);
-    setUsedRecommendationTexts((current) => [rejected, ...current]);
+    setLocallyUsedTexts((current) => [rejected, ...current]);
     void recordRecommendation("NOT_HELPFUL", rejected, reason);
     enqueueSnackbar("Recomendación descartada. Preparamos otra opción.", { variant: "info" });
   }

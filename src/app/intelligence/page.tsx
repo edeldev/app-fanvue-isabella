@@ -1,6 +1,7 @@
 import { BrainCircuit, LockKeyhole, Sparkles } from "lucide-react";
 import { cookies } from "next/headers";
 import { Sidebar } from "@/components/app-shell/sidebar";
+import { IntelligenceLiveRefresh } from "@/components/intelligence-live-refresh";
 import { Topbar } from "@/components/app-shell/topbar";
 import { analyzeConversationContext, detectCommercialGuard, detectRecentConversationSignals, scoreFanIntelligence } from "@/domain/ai/fan-intelligence";
 import { FanIntelligenceDashboard, type FanIntelligenceView } from "@/features/ai/fan-intelligence-dashboard";
@@ -126,6 +127,7 @@ export default async function IntelligencePage() {
   ];
 
   return <div className="flex min-h-screen bg-[#101218] text-zinc-100">
+    <IntelligenceLiveRefresh />
     <Sidebar />
     <div className="min-w-0 flex-1"><Topbar />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-[1580px] px-4 py-6 sm:px-5 sm:py-8 md:px-8">

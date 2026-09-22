@@ -11,6 +11,31 @@ const bodySchema = z.object({
   reason: z.enum(["WRONG_CONTEXT", "WRONG_TONE", "TOO_EARLY", "REPEATED"]).optional(),
 });
 
+export async function GET() {
+  const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
+  if (!creatorId) return Response.json({ error: "Sesión no autorizada." }, { status: 401 });
+
+  const [messages, fans, subscriptions, purchases, recommendations] = await Promise.all([
+    prisma.message.aggregate({ where: { creatorId }, _max: { updatedAt: true } }),
+    prisma.fan.aggregate({ where: { creatorId, isCreatorAccount: false }, _max: { updatedAt: true } }),
+    prisma.subscription.aggregate({ where: { creatorId }, _max: { updatedAt: true } }),
+    prisma.purchase.aggregate({ where: { creatorId }, _max: { updatedAt: true } }),
+    prisma.automationLog.aggregate({
+      where: { creatorId, eventType: { in: ["AI_RECOMMENDATION_USED", "AI_RECOMMENDATION_HELPFUL", "AI_RECOMMENDATION_REJECTED"] } },
+      _max: { occurredAt: true },
+    }),
+  ]);
+  const latest = [
+    messages._max.updatedAt,
+    fans._max.updatedAt,
+    subscriptions._max.updatedAt,
+    purchases._max.updatedAt,
+    recommendations._max.occurredAt,
+  ].reduce<Date | null>((current, value) => !value || (current && current >= value) ? current : value, null);
+
+  return Response.json({ revision: latest?.toISOString() ?? "empty" });
+}
+
 export async function POST(request: Request) {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
   if (!creatorId) return Response.json({ error: "Sesión no autorizada." }, { status: 401 });
