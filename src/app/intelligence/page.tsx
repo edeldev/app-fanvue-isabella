@@ -139,6 +139,12 @@ export default async function IntelligencePage() {
           text: metadata.text,
           reason: metadata.reason,
           occurredAt: log.occurredAt.toISOString(),
+          observedOutcomes: {
+            replied: Boolean(reply),
+            purchased: Boolean(purchase),
+            subscribed: Boolean(subscription),
+            revenueMinor: purchase?.amountMinor ?? 0,
+          },
           outcome: purchase
             ? { type: "PURCHASE" as const, occurredAt: purchase.purchasedAt.toISOString(), amountMinor: purchase.amountMinor, isFreeTrial: false }
             : subscription
@@ -152,6 +158,7 @@ export default async function IntelligencePage() {
     };
   }).sort((a, b) => segmentWeight(b.segment) - segmentWeight(a.segment) || Math.max(b.valueScore, b.potentialScore) - Math.max(a.valueScore, a.potentialScore));
   const triggerCounts = new Map<string, number>();
+  const recommendationAnalytics = buildRecommendationAnalytics(fans);
   workflows.filter((workflow) => workflow.status === "PUBLISHED").forEach((workflow) => triggerCounts.set(workflow.triggerEvent, (triggerCounts.get(workflow.triggerEvent) ?? 0) + 1));
   const funnelCoverage = [
     { trigger: "FOLLOW_CREATED", label: "Nuevos seguidores", published: triggerCounts.get("FOLLOW_CREATED") ?? 0, description: "Agradece el follow, conoce sus intereses y construye confianza antes de vender." },
@@ -167,7 +174,7 @@ export default async function IntelligencePage() {
           <div><div className="mb-2 flex items-center gap-2 text-violet-400"><BrainCircuit className="size-4" /><p className="text-xs font-medium uppercase tracking-[.18em]">Inteligencia de relación</p></div><h1 className="text-3xl font-semibold tracking-tight text-white">IA de fans</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">Prioriza relaciones con datos reales, entiende el contexto y prepara el siguiente mensaje sin convertir la conversación en spam.</p></div>
           <div className="flex items-center gap-3 rounded-2xl border border-emerald-400/15 bg-emerald-400/[.05] px-4 py-3"><LockKeyhole className="size-4 text-emerald-300" /><div><p className="text-xs font-semibold text-emerald-200">Modo copiloto</p><p className="mt-0.5 text-[10px] text-zinc-600">Nunca envía ni cobra sin aprobación</p></div></div>
         </div>
-        {!creatorId ? <div className="rounded-3xl border border-dashed border-white/10 p-12 text-center"><Sparkles className="mx-auto size-8 text-violet-400" /><h2 className="mt-3 font-semibold text-white">Conecta Fanvue para analizar tus relaciones</h2><a href="/api/auth/fanvue" className="mt-5 inline-flex rounded-xl bg-violet-500 px-4 py-2.5 text-xs font-semibold text-white">Conectar Fanvue</a></div> : <FanIntelligenceDashboard fans={fans} funnelCoverage={funnelCoverage} templates={templates} workflows={workflows.map((workflow) => ({ id: workflow.id, name: workflow.name, status: workflow.status, triggerEvent: workflow.triggerEvent, goalType: workflow.goalType, steps: workflow._count.steps }))} />}
+        {!creatorId ? <div className="rounded-3xl border border-dashed border-white/10 p-12 text-center"><Sparkles className="mx-auto size-8 text-violet-400" /><h2 className="mt-3 font-semibold text-white">Conecta Fanvue para analizar tus relaciones</h2><a href="/api/auth/fanvue" className="mt-5 inline-flex rounded-xl bg-violet-500 px-4 py-2.5 text-xs font-semibold text-white">Conectar Fanvue</a></div> : <FanIntelligenceDashboard fans={fans} recommendationAnalytics={recommendationAnalytics} funnelCoverage={funnelCoverage} templates={templates} workflows={workflows.map((workflow) => ({ id: workflow.id, name: workflow.name, status: workflow.status, triggerEvent: workflow.triggerEvent, goalType: workflow.goalType, steps: workflow._count.steps }))} />}
       </main>
     </div>
   </div>;
@@ -197,4 +204,30 @@ function recommendationAction(eventType: string) {
 
 function segmentWeight(segment: FanIntelligenceView["segment"]) {
   return { HIGH_VALUE: 5, MID_VALUE: 4, HIGH_POTENTIAL: 3, NURTURE: 2, AT_RISK: 1 }[segment];
+}
+
+function buildRecommendationAnalytics(fans: FanIntelligenceView[]) {
+  const history = fans.flatMap((fan) => fan.recommendationHistory);
+  const used = history.filter((item) => item.action === "COPIED");
+  const goals = ["RELATIONSHIP", "SUBSCRIPTION", "PPV"] as const;
+  return {
+    windowDays: 30,
+    used: used.length,
+    helpful: history.filter((item) => item.action === "HELPFUL").length,
+    rejected: history.filter((item) => item.action === "NOT_HELPFUL").length,
+    replied: used.filter((item) => item.observedOutcomes.replied).length,
+    purchased: used.filter((item) => item.observedOutcomes.purchased).length,
+    subscribed: used.filter((item) => item.observedOutcomes.subscribed).length,
+    revenueMinor: used.reduce((total, item) => total + item.observedOutcomes.revenueMinor, 0),
+    byGoal: goals.map((goal) => {
+      const recommendations = used.filter((item) => item.goal === goal);
+      return {
+        goal,
+        used: recommendations.length,
+        replied: recommendations.filter((item) => item.observedOutcomes.replied).length,
+        purchased: recommendations.filter((item) => item.observedOutcomes.purchased).length,
+        subscribed: recommendations.filter((item) => item.observedOutcomes.subscribed).length,
+      };
+    }),
+  };
 }

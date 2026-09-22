@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Check, ChevronDown, ChevronRight, Clock3, Copy, FileText, HeartHandshake, MessageCircle, Route, Search, ShieldCheck, ShoppingBag, Sparkles, Target, ThumbsDown, ThumbsUp, TrendingUp, UserRoundSearch, Users, X } from "lucide-react";
+import { BarChart3, Bot, Check, ChevronDown, ChevronRight, Clock3, Copy, FileText, HeartHandshake, MessageCircle, Route, Search, ShieldCheck, ShoppingBag, Sparkles, Target, ThumbsDown, ThumbsUp, TrendingUp, UserRoundSearch, Users, X } from "lucide-react";
 import Link from "next/link";
 import { enqueueSnackbar } from "notistack";
 import type { ReactNode } from "react";
@@ -43,6 +43,7 @@ export type FanIntelligenceView = {
     text: string;
     reason: string | null;
     occurredAt: string;
+    observedOutcomes: { replied: boolean; purchased: boolean; subscribed: boolean; revenueMinor: number };
     outcome: { type: "REPLY" | "PURCHASE" | "SUBSCRIPTION"; occurredAt: string; amountMinor: number; isFreeTrial: boolean } | null;
   }>;
   activeWorkflow: { id: string; name: string; status: string } | null;
@@ -52,6 +53,17 @@ type FunnelCoverage = { trigger: string; label: string; published: number; descr
 type TemplateOption = { id: string; name: string; category: string; type: string };
 type WorkflowOption = { id: string; name: string; status: string; triggerEvent: string; goalType: string; steps: number };
 type FeedbackReason = "WRONG_CONTEXT" | "WRONG_TONE" | "TOO_EARLY" | "REPEATED";
+type RecommendationAnalytics = {
+  windowDays: number;
+  used: number;
+  helpful: number;
+  rejected: number;
+  replied: number;
+  purchased: number;
+  subscribed: number;
+  revenueMinor: number;
+  byGoal: Array<{ goal: "RELATIONSHIP" | "SUBSCRIPTION" | "PPV"; used: number; replied: number; purchased: number; subscribed: number }>;
+};
 
 const segmentMeta: Record<IntelligenceSegment, { label: string; description: string; className: string }> = {
   HIGH_VALUE: { label: "Alto valor", description: "Mayor gasto y compras confirmadas", className: "border-amber-400/25 bg-amber-400/8 text-amber-200" },
@@ -63,7 +75,7 @@ const segmentMeta: Record<IntelligenceSegment, { label: string; description: str
 const segmentOrder: IntelligenceSegment[] = ["HIGH_VALUE", "MID_VALUE", "HIGH_POTENTIAL", "NURTURE", "AT_RISK"];
 const money = new Intl.NumberFormat("es-MX", { style: "currency", currency: "USD" });
 
-export function FanIntelligenceDashboard({ fans, funnelCoverage, templates, workflows }: { fans: FanIntelligenceView[]; funnelCoverage: FunnelCoverage[]; templates: TemplateOption[]; workflows: WorkflowOption[] }) {
+export function FanIntelligenceDashboard({ fans, recommendationAnalytics, funnelCoverage, templates, workflows }: { fans: FanIntelligenceView[]; recommendationAnalytics: RecommendationAnalytics; funnelCoverage: FunnelCoverage[]; templates: TemplateOption[]; workflows: WorkflowOption[] }) {
   const [query, setQuery] = useState("");
   const [segment, setSegment] = useState<IntelligenceSegment | "ALL">("ALL");
   const [selectedId, setSelectedId] = useState(fans[0]?.id ?? "");
@@ -86,6 +98,8 @@ export function FanIntelligenceDashboard({ fans, funnelCoverage, templates, work
         </button>;
       })}
     </section>
+
+    <RecommendationPerformance analytics={recommendationAnalytics} />
 
     <section className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(22rem,.75fr)]">
       <div className="min-w-0 self-start overflow-hidden rounded-3xl border border-white/8 bg-white/[.025]">
@@ -453,6 +467,15 @@ function goalButton(active: boolean, disabled = false) {
   return `flex flex-col items-center gap-1.5 rounded-xl border px-2 py-2.5 text-[10px] font-medium transition ${disabled ? "cursor-not-allowed border-white/5 bg-white/[.015] text-zinc-700 opacity-60" : active ? "cursor-pointer border-violet-400/30 bg-violet-500/15 text-violet-200" : "cursor-pointer border-white/8 bg-white/[.025] text-zinc-500 hover:text-zinc-300"}`;
 }
 function FeedbackReasonButton({ label, onClick }: { label: string; onClick: () => void }) { return <button type="button" onClick={onClick} className="cursor-pointer rounded-lg border border-white/8 bg-black/10 px-2.5 py-1.5 text-[9px] text-zinc-400 transition hover:border-rose-400/20 hover:text-rose-200">{label}</button>; }
+function RecommendationPerformance({ analytics }: { analytics: RecommendationAnalytics }) {
+  const responseRate = percentage(analytics.replied, analytics.used);
+  const commercialResults = analytics.purchased + analytics.subscribed;
+  return <section className="overflow-hidden rounded-3xl border border-white/8 bg-gradient-to-br from-violet-500/[.06] via-white/[.02] to-transparent"><div className="flex flex-col gap-2 border-b border-white/7 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-xl bg-violet-500/10 text-violet-300"><BarChart3 className="size-4" /></span><div><h2 className="text-sm font-semibold text-white">Rendimiento del copiloto</h2><p className="mt-0.5 text-[10px] text-zinc-500">Recomendaciones copiadas durante los últimos {analytics.windowDays} días.</p></div></div><p className="text-[9px] text-zinc-600">Resultados observados hasta 7 días después · No implica causalidad</p></div><div className="grid gap-px bg-white/7 sm:grid-cols-2 xl:grid-cols-5"><MetricCard label="Usadas" value={String(analytics.used)} detail={`${analytics.helpful} útiles · ${analytics.rejected} descartadas`} /><MetricCard label="Con respuesta posterior" value={String(analytics.replied)} detail={`${responseRate}% de las usadas`} /><MetricCard label="Compras posteriores" value={String(analytics.purchased)} detail={analytics.revenueMinor > 0 ? `${money.format(analytics.revenueMinor / 100)} observado` : "Sin ingreso posterior"} /><MetricCard label="Suscripciones posteriores" value={String(analytics.subscribed)} detail="Incluye pruebas gratuitas" /><MetricCard label="Señales comerciales" value={String(commercialResults)} detail="Compras + suscripciones" /></div><div className="grid gap-3 p-4 md:grid-cols-3">{analytics.byGoal.map((item) => <GoalPerformance key={item.goal} item={item} />)}</div></section>;
+}
+function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) { return <div className="bg-[#15171d]/75 px-5 py-4"><p className="text-[10px] font-medium text-zinc-500">{label}</p><p className="mt-1 text-2xl font-semibold tracking-tight text-white">{value}</p><p className="mt-1 text-[9px] text-zinc-600">{detail}</p></div>; }
+function GoalPerformance({ item }: { item: RecommendationAnalytics["byGoal"][number] }) { return <div className="rounded-2xl border border-white/7 bg-black/10 p-4"><div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold text-zinc-300">{goalLabel(item.goal)}</p><span className="rounded-full bg-violet-400/10 px-2 py-1 text-[9px] font-semibold text-violet-300">{item.used} usadas</span></div><div className="mt-3 grid grid-cols-3 gap-2 text-center"><GoalSignal value={item.replied} label="Respuestas" /><GoalSignal value={item.purchased} label="Compras" /><GoalSignal value={item.subscribed} label="Suscripciones" /></div></div>; }
+function GoalSignal({ value, label }: { value: number; label: string }) { return <div className="rounded-xl bg-white/[.025] px-2 py-2"><p className="text-sm font-semibold text-white">{value}</p><p className="mt-0.5 truncate text-[8px] text-zinc-600">{label}</p></div>; }
+function percentage(value: number, total: number) { return total > 0 ? Math.round((value / total) * 100) : 0; }
 function RecommendationHistory({ items, expanded, onToggle }: { items: FanIntelligenceView["recommendationHistory"]; expanded: boolean; onToggle: () => void }) {
   const visible = expanded ? items : items.slice(0, 3);
   const actionMeta = {
