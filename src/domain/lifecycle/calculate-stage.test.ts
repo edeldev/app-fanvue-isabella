@@ -50,6 +50,11 @@ describe("calculateFanLifecycleStage", () => {
       .toBe("FOLLOWER");
   });
 
+  it("clasifica como VIP al alcanzar cien dólares confirmados", () => {
+    expect(calculateFanLifecycleStage({ ...base, totalSpentMinor: 10_000 }, undefined, now).stage)
+      .toBe("VIP");
+  });
+
   it("clasifica reactivación cuando vuelve tras una suscripción terminada", () => {
     expect(calculateFanLifecycleStage({
       ...base,

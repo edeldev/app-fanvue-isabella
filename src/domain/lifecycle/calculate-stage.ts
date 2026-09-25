@@ -28,7 +28,7 @@ export const DEFAULT_LIFECYCLE_RULES: FanLifecycleRules = {
   engagedWithinDays: 30,
   engagedMessageCount: 3,
   highValueMinor: 5_000,
-  vipValueMinor: 15_000,
+  vipValueMinor: 10_000,
 };
 
 const withinDays = (value: Date | null, days: number, now: Date) =>
