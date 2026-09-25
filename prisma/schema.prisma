@@ -177,6 +177,8 @@ model Fan {
   isCreatorAccount         Boolean               @default(false)
   isMuted                  Boolean               @default(false)
   isOnline                 Boolean               @default(false)
+  isArchived               Boolean               @default(false)
+  lastSeenOnFanvueAt       DateTime?
   presenceChangedAt        DateTime?
   isTopSpender             Boolean               @default(false)
   totalSpentMinor          Int                   @default(0)
@@ -208,6 +210,7 @@ model Fan {
   @@index([creatorId, isFollower])
   @@index([creatorId, lastActivityAt])
   @@index([creatorId, lifecycleStage, lastActivityAt])
+  @@index([creatorId, isArchived, lastActivityAt])
 }
 
 model Tag {

@@ -58,8 +58,8 @@ const fanInsightSchema = z.object({ spending: z.object({ total: z.object({ total
 async function upsertFan(creatorId: string, person: z.infer<typeof personSchema>) {
   return prisma.fan.upsert({
     where: { creatorId_fanvueUserId: { creatorId, fanvueUserId: person.uuid } },
-    update: { username: person.handle, displayName: person.display_name, avatarUrl: person.avatar_url },
-    create: { creatorId, fanvueUserId: person.uuid, username: person.handle, displayName: person.display_name, avatarUrl: person.avatar_url },
+    update: { username: person.handle, displayName: person.display_name, avatarUrl: person.avatar_url, isArchived: false, lastSeenOnFanvueAt: new Date() },
+    create: { creatorId, fanvueUserId: person.uuid, username: person.handle, displayName: person.display_name, avatarUrl: person.avatar_url, isArchived: false, lastSeenOnFanvueAt: new Date() },
   });
 }
 

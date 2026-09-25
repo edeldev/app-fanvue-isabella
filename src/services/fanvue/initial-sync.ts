@@ -58,6 +58,16 @@ export async function runInitialFanvueSync(creatorId: string): Promise<InitialSy
     ...subscribers.map((fan) => fan.uuid),
     ...expiredSubscribers.map((fan) => fan.uuid),
   ]).size;
+  const currentContactIds = [...new Set([
+    ...followers.map((fan) => fan.uuid),
+    ...subscribers.map((fan) => fan.uuid),
+    ...chats.map((chat) => chat.user.uuid),
+    ...expiredSubscribers.map((fan) => fan.uuid),
+    ...freeTrialSubscribers.map((fan) => fan.uuid),
+    ...autoRenewingSubscribers.map((fan) => fan.uuid),
+    ...nonRenewingSubscribers.map((fan) => fan.uuid),
+    ...mutedFans.map((fan) => fan.uuid),
+  ])];
 
   await prisma.creator.update({
     where: { id: creatorId },
@@ -173,8 +183,19 @@ export async function runInitialFanvueSync(creatorId: string): Promise<InitialSy
       }
   });
 
+  await prisma.$transaction([
+    prisma.fan.updateMany({
+      where: { creatorId, fanvueUserId: { in: currentContactIds } },
+      data: { isArchived: false, lastSeenOnFanvueAt: presenceObservedAt },
+    }),
+    prisma.fan.updateMany({
+      where: { creatorId, fanvueUserId: { notIn: currentContactIds } },
+      data: { isArchived: true, isOnline: false },
+    }),
+  ]);
+
   const audience = await prisma.fan.findMany({
-    where: { creatorId, isCreatorAccount: false, OR: [{ isFollower: true }, { isSubscriber: true }, { isExpiredSubscriber: true }] },
+    where: { creatorId, isCreatorAccount: false, isArchived: false, OR: [{ isFollower: true }, { isSubscriber: true }, { isExpiredSubscriber: true }] },
     select: { id: true, fanvueUserId: true },
   });
   for (let index = 0; index < audience.length; index += 20) {
