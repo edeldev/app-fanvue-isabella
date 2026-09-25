@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { fanvueRequest } from "@/lib/fanvue/client";
 import { prisma } from "@/lib/prisma";
 import { getValidFanvueAccessToken } from "./get-access-token";
@@ -7,6 +8,7 @@ import { pauseEnrollmentsOnFanReply, recordFanReplyInActiveWorkflows } from "@/s
 import { fetchAllCursorPages } from "@/lib/fanvue/pagination";
 import { creatorListPageSchema } from "@/lib/fanvue/sync-schemas";
 import { completeMatchingWorkflowGoals } from "@/services/workflows/complete-workflow-goals";
+import { recalculateFanLifecycle } from "@/services/lifecycle/recalculate-fan-lifecycle";
 
 const personSchema = z.object({
   uuid: z.string(),
@@ -25,7 +27,11 @@ const fanStatusDataSchema = z.object({
   object: z.literal("fan_status"), change_type: z.enum(["presence", "mute"]),
   state: z.enum(["online", "offline", "muted", "unmuted"]), changed_at: z.string(), fan: personSchema,
 });
-const followDataSchema = z.object({ created_at: z.string().nullable().optional(), follower: personSchema });
+const followDataSchema = z.object({
+  created_at: z.string().nullable().optional(),
+  follower: personSchema,
+  tracking: z.unknown().optional(),
+});
 const postEngagementDataSchema = z.object({
   id: z.string().nullable(),
   post_uuid: z.string(),
@@ -127,15 +133,31 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
   if (type === "creator.follow.created") {
     const data = followDataSchema.parse(unknownData);
     const fan = await upsertFan(creatorId, data.follower);
-    await prisma.fan.update({ where: { id: fan.id }, data: { isFollower: true, isCreatorAccount: false } });
+    const occurredAt = new Date(data.created_at ?? context?.timestamp ?? Date.now());
+    const tracking = data.tracking && typeof data.tracking === "object" && !Array.isArray(data.tracking)
+      ? data.tracking as Record<string, unknown>
+      : null;
+    const acquisitionSource = [tracking?.source, tracking?.campaign, tracking?.link_url]
+      .find((value): value is string => typeof value === "string" && value.length > 0);
+    await prisma.fan.update({
+      where: { id: fan.id },
+      data: {
+        isFollower: true,
+        isCreatorAccount: false,
+        followedAt: occurredAt,
+        acquisitionSource,
+        acquisitionMetadata: tracking ? tracking as Prisma.InputJsonObject : undefined,
+      },
+    });
     await recordEngagementEvent({
       creatorId,
       fanId: fan.id,
       type: "FOLLOW_CREATED",
-      occurredAt: new Date(data.created_at ?? context?.timestamp ?? Date.now()),
+      occurredAt,
       context,
-      payload: {},
+      payload: { acquisitionSource: acquisitionSource ?? null },
     });
+    await recalculateFanLifecycle(creatorId, fan.id, "FOLLOW_WEBHOOK");
     await triggerWorkflowForFan(creatorId, fan.id, "FOLLOW_CREATED");
     return;
   }
@@ -152,6 +174,7 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
       context,
       payload: { postUuid: data.post_uuid, commentId: data.id, commentText: data.comment_text },
     });
+    await recalculateFanLifecycle(creatorId, fan.id, "POST_ENGAGEMENT_WEBHOOK");
     return;
   }
 
@@ -176,6 +199,8 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
       await recordFanReplyInActiveWorkflows(creatorId, fan.id, data.uuid, repliedAt);
       await pauseEnrollmentsOnFanReply(creatorId, fan.id, data.uuid, repliedAt);
       await triggerWorkflowForFan(creatorId, fan.id, "MESSAGE_RECEIVED");
+      await prisma.fan.update({ where: { id: fan.id }, data: { lastActivityAt: repliedAt } });
+      await recalculateFanLifecycle(creatorId, fan.id, "MESSAGE_WEBHOOK");
     }
     return;
   }
@@ -221,6 +246,7 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
       await completeMatchingWorkflowGoals(creatorId, fan.id, { kind: "PAID_SUBSCRIPTION" }, { subscriptionId: data.id, occurredAt: data.created_at ?? new Date().toISOString() });
     }
     await triggerWorkflowForFan(creatorId, fan.id, trigger);
+    await recalculateFanLifecycle(creatorId, fan.id, "SUBSCRIPTION_WEBHOOK");
     return;
   }
 
@@ -240,6 +266,7 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
       const isPpv = !isTip && Boolean(data.message_uuid || data.post_uuid);
       await completeMatchingWorkflowGoals(creatorId, fan.id, { kind: "PAYMENT", amountMinor: data.gross, totalSpentMinor, paidPurchasesCount, isTip, isPpv }, { paymentId: data.id, source: data.source, amountMinor: data.gross, totalSpentMinor });
     }
+    await recalculateFanLifecycle(creatorId, fan.id, "PAYMENT_WEBHOOK");
     return;
   }
 
@@ -256,5 +283,6 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
     });
     await prisma.purchase.updateMany({ where: { creatorId, fanvuePaymentId: paymentId }, data: { reversedAt: new Date(data.created_at ?? Date.now()) } });
     await refreshFanSpending(creatorId, fan.id, fan.fanvueUserId);
+    await recalculateFanLifecycle(creatorId, fan.id, "REVERSAL_WEBHOOK");
   }
 }

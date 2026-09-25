@@ -6,6 +6,7 @@ import { verifyFanvueWebhookSignature } from "@/lib/fanvue/webhook-signature";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { handleFanvueWebhook } from "@/services/fanvue/webhook-handler";
+import { creatorUuidFromWebhookData } from "@/lib/fanvue/webhook-envelope";
 
 type WebhookEnvelope = {
   id?: string;
@@ -37,14 +38,19 @@ export async function POST(request: Request) {
   const parsed = parseEnvelope(rawBody);
   if (!parsed) return NextResponse.json({ error: "Evento no válido" }, { status: 400 });
 
+  const fanvueCreatorId = creatorUuidFromWebhookData(parsed.envelope.data);
+  if (!fanvueCreatorId) {
+    return NextResponse.json({ error: "El evento no identifica al creador" }, { status: 400 });
+  }
   const credential = await prisma.integrationCredential.findFirst({
-    where: { provider: "FANVUE" },
+    where: { provider: "FANVUE", creator: { fanvueUserId: fanvueCreatorId } },
     select: { creatorId: true },
-    orderBy: { updatedAt: "desc" },
   });
-  if (!credential) return NextResponse.json({ error: "Fanvue no está conectado" }, { status: 409 });
+  if (!credential) return NextResponse.json({ error: "El creador de Fanvue no está conectado" }, { status: 409 });
 
-  const providerEventId = parsed.envelope.id ?? createHash("sha256").update(rawBody).digest("hex");
+  const providerEventId = parsed.envelope.type === "creator.message.read"
+    ? createHash("sha256").update(rawBody).digest("hex")
+    : parsed.envelope.id ?? createHash("sha256").update(rawBody).digest("hex");
   const existing = await prisma.webhookEvent.findUnique({
     where: { creatorId_providerEventId: { creatorId: credential.creatorId, providerEventId } },
     select: { id: true },
