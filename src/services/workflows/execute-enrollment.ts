@@ -47,6 +47,13 @@ export async function executeEnrollmentUntilBlocked(creatorId: string, enrollmen
 async function executeEnrollmentStep(creatorId: string, enrollmentId: string, now = new Date()) {
   const enrollment = await loadEnrollment(creatorId, enrollmentId);
   if (!enrollment) throw new Error("ENROLLMENT_NOT_FOUND");
+  if (enrollment.fan.automationPaused) {
+    await prisma.workflowEnrollment.updateMany({
+      where: { id: enrollment.id, creatorId, status: { in: ["ACTIVE", "WAITING"] } },
+      data: { status: "PAUSED", pausedAt: now, pausedFromStatus: enrollment.status, pauseReason: "FAN_PROFILE_PAUSE", nextRunAt: null },
+    });
+    throw new Error("FAN_AUTOMATION_PAUSED");
+  }
   if (enrollment.status === "PAUSED") throw new Error("ENROLLMENT_PAUSED");
   if (!(["ACTIVE", "WAITING"] as const).includes(enrollment.status as "ACTIVE" | "WAITING")) throw new Error("ENROLLMENT_NOT_EXECUTABLE");
   if (!enrollment.currentStep) throw new Error("ENROLLMENT_STEP_NOT_FOUND");
@@ -379,7 +386,7 @@ function loadEnrollment(creatorId: string, enrollmentId: string) {
   return prisma.workflowEnrollment.findFirst({
     where: { id: enrollmentId, creatorId },
     include: {
-      fan: { select: { fanvueUserId: true, displayName: true, username: true, isFollower: true, isSubscriber: true, isFreeTrialSubscriber: true, isAutoRenewingSubscriber: true, isNonRenewingSubscriber: true, isExpiredSubscriber: true, isCreatorAccount: true, isMuted: true, isOnline: true, isTopSpender: true, totalSpentMinor: true, _count: { select: { purchases: { where: { reversedAt: null, amountMinor: { gt: 0 } } } } } } },
+      fan: { select: { fanvueUserId: true, displayName: true, username: true, isFollower: true, isSubscriber: true, isFreeTrialSubscriber: true, isAutoRenewingSubscriber: true, isNonRenewingSubscriber: true, isExpiredSubscriber: true, isCreatorAccount: true, isMuted: true, isOnline: true, isTopSpender: true, totalSpentMinor: true, automationPaused: true, _count: { select: { purchases: { where: { reversedAt: null, amountMinor: { gt: 0 } } } } } } },
       currentStep: { include: { messageTemplate: true } },
       workflow: { include: { creator: { select: { settings: { select: { maximumRetries: true, minimumDelaySeconds: true } } } }, steps: { orderBy: { position: "asc" }, select: { id: true, position: true, name: true, type: true, config: true } } } },
     },
