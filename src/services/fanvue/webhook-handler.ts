@@ -9,6 +9,7 @@ import { fetchAllCursorPages } from "@/lib/fanvue/pagination";
 import { creatorListPageSchema } from "@/lib/fanvue/sync-schemas";
 import { completeMatchingWorkflowGoals } from "@/services/workflows/complete-workflow-goals";
 import { recalculateFanLifecycle } from "@/services/lifecycle/recalculate-fan-lifecycle";
+import { refreshFanMemory } from "@/services/intelligence/refresh-fan-memory";
 
 const personSchema = z.object({
   uuid: z.string(),
@@ -200,6 +201,7 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
       await pauseEnrollmentsOnFanReply(creatorId, fan.id, data.uuid, repliedAt);
       await triggerWorkflowForFan(creatorId, fan.id, "MESSAGE_RECEIVED");
       await prisma.fan.update({ where: { id: fan.id }, data: { lastActivityAt: repliedAt } });
+      await refreshFanMemory(creatorId, fan.id);
       await recalculateFanLifecycle(creatorId, fan.id, "MESSAGE_WEBHOOK");
     }
     return;

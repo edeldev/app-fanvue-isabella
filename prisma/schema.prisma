@@ -104,6 +104,16 @@ enum FanLifecycleStage {
   REACTIVATED
 }
 
+enum FanMemoryType {
+  FACT
+  INFERENCE
+}
+
+enum FanMemoryStatus {
+  ACTIVE
+  DISMISSED
+}
+
 enum ResumeStrategy {
   MANUAL
   AFTER_5_MINUTES
@@ -148,6 +158,7 @@ model Creator {
   tags                   Tag[]
   fanTags                FanTag[]
   fanNotes               FanNote[]
+  fanMemories            FanMemory[]
 }
 
 model Fan {
@@ -191,6 +202,7 @@ model Fan {
   executions               AutomationExecution[]
   tags                     FanTag[]
   notes                    FanNote[]
+  memories                 FanMemory[]
 
   @@unique([creatorId, fanvueUserId])
   @@index([creatorId, isFollower])
@@ -237,6 +249,31 @@ model FanNote {
   fan       Fan      @relation(fields: [fanId], references: [id], onDelete: Cascade)
 
   @@index([creatorId, fanId, createdAt])
+}
+
+model FanMemory {
+  id              String          @id @default(cuid())
+  creatorId       String
+  fanId           String
+  category        String
+  key             String
+  value           String
+  type            FanMemoryType   @default(INFERENCE)
+  status          FanMemoryStatus @default(ACTIVE)
+  confidence      Float           @default(0.5)
+  source          String
+  evidence        String?
+  sourceMessageId String?
+  observedAt      DateTime
+  confirmedAt     DateTime?
+  dismissedAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  creator         Creator         @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  fan             Fan             @relation(fields: [fanId], references: [id], onDelete: Cascade)
+
+  @@unique([fanId, category, key])
+  @@index([creatorId, fanId, status, observedAt])
 }
 
 model Subscription {

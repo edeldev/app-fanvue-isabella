@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getValidFanvueAccessToken } from "./get-access-token";
 import { isFreshFanvueOnline } from "@/domain/fans/filters";
 import { recalculateFanLifecycle } from "@/services/lifecycle/recalculate-fan-lifecycle";
+import { refreshFanMemory } from "@/services/intelligence/refresh-fan-memory";
 
 export interface InitialSyncResult {
   followers: number;
@@ -185,6 +186,7 @@ export async function runInitialFanvueSync(creatorId: string): Promise<InitialSy
       data: { totalSpentMinor: insights.results[fan.fanvueUserId]?.spending.total.total ?? 0 },
     })));
     await Promise.all(batch.map((fan) => recalculateFanLifecycle(creatorId, fan.id, "INITIAL_SYNC")));
+    await Promise.all(batch.map((fan) => refreshFanMemory(creatorId, fan.id)));
   }
 
   await prisma.automationLog.create({
