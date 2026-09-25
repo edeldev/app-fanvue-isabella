@@ -4,15 +4,18 @@ import { Sidebar } from "@/components/app-shell/sidebar";
 import { IntelligenceLiveRefresh } from "@/components/intelligence-live-refresh";
 import { Topbar } from "@/components/app-shell/topbar";
 import { analyzeConversationContext, detectCommercialGuard, detectRecentConversationSignals, scoreFanIntelligence } from "@/domain/ai/fan-intelligence";
+import { calculateNextBestAction } from "@/domain/ai/next-best-action";
 import { FanIntelligenceDashboard, type FanIntelligenceView } from "@/features/ai/fan-intelligence-dashboard";
 import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 
 type IntelligenceRange = "7" | "30" | "90" | "all";
 
-export default async function IntelligencePage({ searchParams }: { searchParams: Promise<{ aiRange?: string | string[] }> }) {
+export default async function IntelligencePage({ searchParams }: { searchParams: Promise<{ aiRange?: string | string[]; fan?: string | string[] }> }) {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
-  const requestedRange = (await searchParams).aiRange;
+  const resolvedSearchParams = await searchParams;
+  const requestedRange = resolvedSearchParams.aiRange;
+  const requestedFan = Array.isArray(resolvedSearchParams.fan) ? resolvedSearchParams.fan[0] : resolvedSearchParams.fan;
   const range: IntelligenceRange = typeof requestedRange === "string" && ["7", "30", "90", "all"].includes(requestedRange) ? requestedRange as IntelligenceRange : "30";
   const now = new Date();
   const contextCutoff = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1_000);
@@ -24,7 +27,13 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
       where: {
         creatorId,
         isCreatorAccount: false,
-        OR: [{ isFollower: true }, { isSubscriber: true }, { isFreeTrialSubscriber: true }, { isExpiredSubscriber: true }],
+        OR: [
+          { isFollower: true },
+          { isSubscriber: true },
+          { isFreeTrialSubscriber: true },
+          { isExpiredSubscriber: true },
+          ...(requestedFan ? [{ id: requestedFan }, { fanvueUserId: requestedFan }] : []),
+        ],
       },
       include: {
         purchases: {
@@ -59,6 +68,10 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
           orderBy: { occurredAt: "desc" },
           take: range === "all" ? 500 : 250,
           select: { id: true, eventType: true, explanation: true, metadata: true, occurredAt: true },
+        },
+        memories: {
+          where: { status: "ACTIVE" },
+          select: { category: true, key: true, value: true, evidence: true, confidence: true },
         },
       },
       take: 500,
@@ -96,6 +109,19 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
       isFreeTrialSubscriber: fan.isFreeTrialSubscriber,
       isAutoRenewingSubscriber: fan.isAutoRenewingSubscriber,
     });
+    const plan = calculateNextBestAction({
+      name: fan.displayName?.split(/\s+/)[0] || fan.username || "Hola",
+      lifecycleStage: fan.lifecycleStage,
+      isFollower: fan.isFollower,
+      isSubscriber: fan.isSubscriber,
+      isFreeTrialSubscriber: fan.isFreeTrialSubscriber,
+      totalSpentMinor: fan.totalSpentMinor,
+      inboundMessages: inbound.length,
+      lastInboundAt: inbound[0]?.sentAt ?? fan.conversations[0]?.lastInboundAt ?? null,
+      lastOutboundAt: outbound[0]?.sentAt ?? fan.conversations[0]?.lastOutboundAt ?? null,
+      hasActiveWorkflow: Boolean(fan.enrollments[0]),
+      memories: fan.memories,
+    });
     return {
       id: fan.id,
       fanvueUserId: fan.fanvueUserId,
@@ -103,6 +129,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
       username: fan.username,
       avatarUrl: fan.avatarUrl,
       ...intelligence,
+      plan,
       totalSpentMinor: fan.totalSpentMinor,
       purchaseCount: fan.purchases.length,
       tipCount: fan.purchases.filter((purchase) => purchase.source.toLocaleLowerCase() === "tip").length,
@@ -162,7 +189,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
       }),
       activeWorkflow: fan.enrollments[0] ? { id: fan.enrollments[0].workflow.id, name: fan.enrollments[0].workflow.name, status: fan.enrollments[0].status } : null,
     };
-  }).sort((a, b) => segmentWeight(b.segment) - segmentWeight(a.segment) || Math.max(b.valueScore, b.potentialScore) - Math.max(a.valueScore, a.potentialScore));
+  }).sort((a, b) => planWeight(b.plan.kind) - planWeight(a.plan.kind) || segmentWeight(b.segment) - segmentWeight(a.segment) || Math.max(b.valueScore, b.potentialScore) - Math.max(a.valueScore, a.potentialScore));
   const triggerCounts = new Map<string, number>();
   workflows.filter((workflow) => workflow.status === "PUBLISHED").forEach((workflow) => triggerCounts.set(workflow.triggerEvent, (triggerCounts.get(workflow.triggerEvent) ?? 0) + 1));
   const funnelCoverage = [
@@ -179,7 +206,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
           <div><div className="mb-2 flex items-center gap-2 text-violet-400"><BrainCircuit className="size-4" /><p className="text-xs font-medium uppercase tracking-[.18em]">Inteligencia de relación</p></div><h1 className="text-3xl font-semibold tracking-tight text-white">IA de fans</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">Prioriza relaciones con datos reales, entiende el contexto y prepara el siguiente mensaje sin convertir la conversación en spam.</p></div>
           <div className="flex items-center gap-3 rounded-2xl border border-emerald-400/15 bg-emerald-400/[.05] px-4 py-3"><LockKeyhole className="size-4 text-emerald-300" /><div><p className="text-xs font-semibold text-emerald-200">Modo copiloto</p><p className="mt-0.5 text-[10px] text-zinc-600">Nunca envía ni cobra sin aprobación</p></div></div>
         </div>
-        {!creatorId ? <div className="rounded-3xl border border-dashed border-white/10 p-12 text-center"><Sparkles className="mx-auto size-8 text-violet-400" /><h2 className="mt-3 font-semibold text-white">Conecta Fanvue para analizar tus relaciones</h2><a href="/api/auth/fanvue" className="mt-5 inline-flex rounded-xl bg-violet-500 px-4 py-2.5 text-xs font-semibold text-white">Conectar Fanvue</a></div> : <FanIntelligenceDashboard fans={fans} analyticsRange={range} funnelCoverage={funnelCoverage} templates={templates} workflows={workflows.map((workflow) => ({ id: workflow.id, name: workflow.name, status: workflow.status, triggerEvent: workflow.triggerEvent, goalType: workflow.goalType, steps: workflow._count.steps }))} />}
+        {!creatorId ? <div className="rounded-3xl border border-dashed border-white/10 p-12 text-center"><Sparkles className="mx-auto size-8 text-violet-400" /><h2 className="mt-3 font-semibold text-white">Conecta Fanvue para analizar tus relaciones</h2><a href="/api/auth/fanvue" className="mt-5 inline-flex rounded-xl bg-violet-500 px-4 py-2.5 text-xs font-semibold text-white">Conectar Fanvue</a></div> : <FanIntelligenceDashboard fans={fans} initialFanId={requestedFan} analyticsRange={range} funnelCoverage={funnelCoverage} templates={templates} workflows={workflows.map((workflow) => ({ id: workflow.id, name: workflow.name, status: workflow.status, triggerEvent: workflow.triggerEvent, goalType: workflow.goalType, steps: workflow._count.steps }))} />}
       </main>
     </div>
   </div>;
@@ -209,4 +236,8 @@ function recommendationAction(eventType: string) {
 
 function segmentWeight(segment: FanIntelligenceView["segment"]) {
   return { HIGH_VALUE: 5, MID_VALUE: 4, HIGH_POTENTIAL: 3, NURTURE: 2, AT_RISK: 1 }[segment];
+}
+
+function planWeight(kind: FanIntelligenceView["plan"]["kind"]) {
+  return { REPLY: 8, RETENTION: 7, FIRST_CONTACT: 6, REACTIVATION: 5, PPV: 4, SUBSCRIPTION: 3, DISCOVER: 2, WAIT: 1 }[kind];
 }

@@ -75,7 +75,7 @@ export function calculateNextBestAction(input: NextBestActionInput): NextBestAct
   };
   if (input.inboundMessages === 0 && input.isFollower && !input.lastOutboundAt) return {
     kind: "FIRST_CONTACT",
-    title: "Iniciar el primer contacto",
+    title: input.hasActiveWorkflow ? "Dejar la bienvenida en manos del workflow" : "Iniciar el primer contacto",
     reason: input.hasActiveWorkflow
       ? "Es un seguidor sin conversación; ya tiene un workflow que puede encargarse de la bienvenida."
       : "Es un seguidor sin conversación ni workflow activo.",
