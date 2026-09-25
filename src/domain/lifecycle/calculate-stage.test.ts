@@ -12,7 +12,7 @@ const base: FanLifecycleFacts = {
   totalSpentMinor: 0,
   paidPurchasesCount: 0,
   inboundMessagesCount: 0,
-  hasContentInterest: false,
+  hasPurchaseIntent: false,
   lastActivityAt: null,
   activeSubscriptionStartedAt: null,
   wasReactivatedRecently: false,
@@ -63,7 +63,7 @@ describe("calculateFanLifecycleStage", () => {
     expect(calculateFanLifecycleStage({
       ...base,
       inboundMessagesCount: 1,
-      hasContentInterest: true,
+      hasPurchaseIntent: true,
       lastActivityAt: now,
     }, undefined, now).stage).toBe("ENGAGED");
   });
@@ -71,6 +71,11 @@ describe("calculateFanLifecycleStage", () => {
   it("clasifica como VIP al alcanzar cien dólares confirmados", () => {
     expect(calculateFanLifecycleStage({ ...base, totalSpentMinor: 10_000 }, undefined, now).stage)
       .toBe("VIP");
+  });
+
+  it("no convierte en VIP un top spender que no llega a cien dólares", () => {
+    expect(calculateFanLifecycleStage({ ...base, isTopSpender: true, totalSpentMinor: 1_300 }, undefined, now).stage)
+      .toBe("FOLLOWER");
   });
 
   it("clasifica reactivación cuando vuelve tras una suscripción terminada", () => {

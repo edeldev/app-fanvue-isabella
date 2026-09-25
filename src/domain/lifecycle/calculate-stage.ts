@@ -10,7 +10,7 @@ export type FanLifecycleFacts = {
   totalSpentMinor: number;
   paidPurchasesCount: number;
   inboundMessagesCount: number;
-  hasContentInterest: boolean;
+  hasPurchaseIntent: boolean;
   lastActivityAt: Date | null;
   activeSubscriptionStartedAt: Date | null;
   wasReactivatedRecently: boolean;
@@ -50,8 +50,8 @@ export function calculateFanLifecycleStage(
     return { stage: "REACTIVATED", reason: "Volvió a tener una suscripción activa después de una suscripción terminada." };
   }
 
-  if ((facts.isTopSpender && facts.totalSpentMinor > 0) || facts.totalSpentMinor >= rules.vipValueMinor) {
-    return { stage: "VIP", reason: "Alcanzó el nivel VIP por gasto confirmado o clasificación de top spender." };
+  if (facts.totalSpentMinor >= rules.vipValueMinor) {
+    return { stage: "VIP", reason: "Alcanzó el nivel VIP por gasto confirmado de USD 100 o más." };
   }
 
   if (facts.totalSpentMinor >= rules.highValueMinor) {
@@ -77,10 +77,10 @@ export function calculateFanLifecycleStage(
 
   if (
     facts.inboundMessagesCount > 0 &&
-    facts.hasContentInterest &&
+    facts.hasPurchaseIntent &&
     withinDays(facts.lastActivityAt, rules.engagedWithinDays, now)
   ) {
-    return { stage: "ENGAGED", reason: "Expresó recientemente interés por contenido o intención de ver o comprar más." };
+    return { stage: "ENGAGED", reason: "Expresó recientemente intención de ver, comprar o desbloquear contenido." };
   }
 
   return {

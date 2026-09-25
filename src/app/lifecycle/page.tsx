@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { ArrowRight, ContactRound, Search } from "lucide-react";
-import type { FanLifecycleStage } from "@prisma/client";
+import type { FanLifecycleStage, Prisma } from "@prisma/client";
 import { Sidebar } from "@/components/app-shell/sidebar";
 import { Topbar } from "@/components/app-shell/topbar";
 import { lifecyclePresentation, lifecycleStages } from "@/domain/lifecycle/presentation";
@@ -20,23 +20,57 @@ export default async function LifecyclePage({ searchParams }: { searchParams: Se
   const stage = lifecycleStages.includes(rawStage as FanLifecycleStage) ? rawStage as FanLifecycleStage : null;
   const segment = (["PAID", "TRIAL", "VIP"] as const).includes(rawSegment as AudienceSegment) ? rawSegment as AudienceSegment : null;
   const q = (Array.isArray(params.q) ? params.q[0] : params.q)?.trim().slice(0, 80) ?? "";
-  const segmentWhere = segment === "PAID"
+  const segmentWhere: Prisma.FanWhereInput = segment === "PAID"
     ? { isSubscriber: true, isFreeTrialSubscriber: false }
     : segment === "TRIAL"
       ? { isSubscriber: true, isFreeTrialSubscriber: true }
       : segment === "VIP"
-        ? { OR: [{ lifecycleStage: "VIP" as const }, { totalSpentMinor: { gte: 10_000 } }, { isTopSpender: true, totalSpentMinor: { gt: 0 } }] }
+        ? { totalSpentMinor: { gte: 10_000 } }
         : {};
-  const [counts, paidSubscribers, trialSubscribers, vipFans, fans] = creatorId ? await Promise.all([
-    prisma.fan.groupBy({ by: ["lifecycleStage"], where: { creatorId, isCreatorAccount: false }, _count: { _all: true } }),
+  const ppvPurchases = creatorId ? await prisma.purchase.groupBy({
+    by: ["fanId"],
+    where: { creatorId, amountMinor: { gt: 0 }, reversedAt: null, source: { in: ["message", "post"] } },
+    _count: { _all: true },
+  }) : [];
+  const firstBuyerIds = ppvPurchases.filter((item) => item._count._all === 1).flatMap((item) => item.fanId ? [item.fanId] : []);
+  const repeatBuyerIds = ppvPurchases.filter((item) => item._count._all >= 2).flatMap((item) => item.fanId ? [item.fanId] : []);
+  const stageWhere: Prisma.FanWhereInput = stage === "FOLLOWER"
+    ? { isFollower: true }
+    : stage === "ENGAGED"
+      ? { memories: { some: { status: "ACTIVE", category: "PURCHASE_INTENT" } } }
+      : stage === "FIRST_BUYER"
+        ? { id: { in: firstBuyerIds } }
+        : stage === "REPEAT_BUYER"
+          ? { id: { in: repeatBuyerIds } }
+          : stage === "HIGH_VALUE"
+            ? { totalSpentMinor: { gte: 5_000, lt: 10_000 } }
+            : stage
+              ? { lifecycleStage: stage }
+              : {};
+  const cardWhere: Record<FanLifecycleStage, Prisma.FanWhereInput> = {
+    FOLLOWER: { isFollower: true },
+    NEW_SUBSCRIBER: { lifecycleStage: "NEW_SUBSCRIBER" },
+    ENGAGED: { memories: { some: { status: "ACTIVE", category: "PURCHASE_INTENT" } } },
+    FIRST_BUYER: { id: { in: firstBuyerIds } },
+    REPEAT_BUYER: { id: { in: repeatBuyerIds } },
+    HIGH_VALUE: { totalSpentMinor: { gte: 5_000, lt: 10_000 } },
+    VIP: { totalSpentMinor: { gte: 10_000 } },
+    NON_RENEWING: { isSubscriber: true, isNonRenewingSubscriber: true },
+    EXPIRED: { isSubscriber: false, isExpiredSubscriber: true },
+    REACTIVATED: { lifecycleStage: "REACTIVATED" },
+  };
+  const visibleLifecycleStages = lifecycleStages.filter((item) => item !== "NEW_SUBSCRIBER" && item !== "VIP");
+  const baseWhere = creatorId ? { creatorId, isCreatorAccount: false } : null;
+  const [cardCounts, paidSubscribers, trialSubscribers, vipFans, fans] = creatorId && baseWhere ? await Promise.all([
+    Promise.all(visibleLifecycleStages.map((item) => prisma.fan.count({ where: { ...baseWhere, ...cardWhere[item] } }))),
     prisma.fan.count({ where: { creatorId, isCreatorAccount: false, isSubscriber: true, isFreeTrialSubscriber: false } }),
     prisma.fan.count({ where: { creatorId, isCreatorAccount: false, isSubscriber: true, isFreeTrialSubscriber: true } }),
-    prisma.fan.count({ where: { creatorId, isCreatorAccount: false, OR: [{ lifecycleStage: "VIP" }, { totalSpentMinor: { gte: 10_000 } }, { isTopSpender: true, totalSpentMinor: { gt: 0 } }] } }),
+    prisma.fan.count({ where: { creatorId, isCreatorAccount: false, totalSpentMinor: { gte: 10_000 } } }),
     prisma.fan.findMany({
       where: {
         creatorId,
         isCreatorAccount: false,
-        ...(stage ? { lifecycleStage: stage } : {}),
+        ...stageWhere,
         ...segmentWhere,
         ...(q ? { OR: [{ displayName: { contains: q, mode: "insensitive" } }, { username: { contains: q, mode: "insensitive" } }] } : {}),
       },
@@ -44,17 +78,16 @@ export default async function LifecyclePage({ searchParams }: { searchParams: Se
       take: 100,
       include: { tags: { include: { tag: true } } },
     }),
-  ]) : [[], 0, 0, 0, []];
-  const countMap = new Map(counts.map((item) => [item.lifecycleStage, item._count._all]));
-  const visibleLifecycleStages = lifecycleStages.filter((item) => item !== "NEW_SUBSCRIBER" && item !== "VIP");
+  ]) : [visibleLifecycleStages.map(() => 0), 0, 0, 0, []];
+  const countMap = new Map(visibleLifecycleStages.map((item, index) => [item, cardCounts[index] ?? 0]));
 
   return <div className="flex min-h-screen bg-[#101218] text-zinc-100"><Sidebar /><div className="min-w-0 flex-1"><Topbar />
     <main id="main-content" className="mx-auto max-w-[1500px] px-4 py-8 md:px-8">
-      <div className="mb-8"><p className="mb-2 text-xs font-semibold uppercase tracking-[.2em] text-violet-400">Relación completa</p><h1 className="text-3xl font-semibold text-white">Fan Lifecycle</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">Una vista operativa desde el primer follow hasta retención y reactivación. Cada cambio queda explicado en el historial del fan.</p></div>
+      <div className="mb-8"><p className="mb-2 text-xs font-semibold uppercase tracking-[.2em] text-violet-400">Relación completa</p><h1 className="text-3xl font-semibold text-white">Fan Lifecycle</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">Una vista operativa desde el primer follow hasta retención y reactivación. Los segmentos pueden coincidir: un fan puede ser comprador recurrente y tener su suscripción vencida al mismo tiempo.</p></div>
       <div className="mb-4 grid gap-3 md:grid-cols-3">{[
         { value: "PAID", label: "Suscriptores de pago", description: "Acceso activo sin prueba gratuita", count: paidSubscribers, className: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300" },
         { value: "TRIAL", label: "Suscriptores de prueba", description: "Prueba gratuita activa", count: trialSubscribers, className: "border-sky-400/25 bg-sky-400/10 text-sky-300" },
-        { value: "VIP", label: "VIP", description: "USD 100+ o top spender con gasto", count: vipFans, className: "border-amber-400/25 bg-amber-400/10 text-amber-300" },
+        { value: "VIP", label: "VIP", description: "USD 100 o más de gasto confirmado", count: vipFans, className: "border-amber-400/25 bg-amber-400/10 text-amber-300" },
       ].map((item) => <Link key={item.value} href={segment === item.value ? "/lifecycle" : `/lifecycle?segment=${item.value}`} className={`rounded-2xl border p-5 transition hover:-translate-y-0.5 ${segment === item.value ? item.className : "border-white/8 bg-white/[.025]"}`}><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold">{item.label}</p><p className="mt-1 text-xs text-zinc-600">{item.description}</p></div><p className="text-2xl font-semibold text-white">{item.count}</p></div></Link>)}</div>
       <div className="mb-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{visibleLifecycleStages.map((item) => { const meta = lifecyclePresentation[item]; const active = stage === item; return <Link key={item} href={active ? "/lifecycle" : `/lifecycle?stage=${item}`} className={`rounded-2xl border p-4 transition hover:-translate-y-0.5 ${active ? meta.tone : "border-white/8 bg-white/[.025] hover:border-white/15"}`}><p className="text-2xl font-semibold text-white">{countMap.get(item) ?? 0}</p><p className="mt-1 text-sm font-medium">{meta.label}</p><p className="mt-2 text-xs leading-5 text-zinc-600">{meta.description}</p></Link>; })}</div>
       <section className="overflow-hidden rounded-2xl border border-white/8 bg-white/[.025]">
