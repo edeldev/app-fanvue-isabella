@@ -17,6 +17,11 @@ export async function recalculateFanLifecycle(
         orderBy: { lastMessageAt: "desc" },
         include: { messages: { where: { direction: "INBOUND", deletedAt: null }, select: { id: true } } },
       },
+      memories: {
+        where: { status: "ACTIVE", category: { in: ["INTEREST", "PURCHASE_INTENT"] } },
+        select: { id: true },
+        take: 1,
+      },
     },
   });
   if (!fan) return null;
@@ -41,6 +46,7 @@ export async function recalculateFanLifecycle(
     totalSpentMinor: fan.totalSpentMinor,
     paidPurchasesCount: fan.purchases.length,
     inboundMessagesCount: fan.conversations[0]?.messages.length ?? 0,
+    hasContentInterest: fan.memories.length > 0,
     lastActivityAt: fan.lastActivityAt,
     activeSubscriptionStartedAt: activeSubscription?.startedAt ?? null,
     wasReactivatedRecently,

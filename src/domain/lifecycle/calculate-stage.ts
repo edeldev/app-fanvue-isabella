@@ -10,6 +10,7 @@ export type FanLifecycleFacts = {
   totalSpentMinor: number;
   paidPurchasesCount: number;
   inboundMessagesCount: number;
+  hasContentInterest: boolean;
   lastActivityAt: Date | null;
   activeSubscriptionStartedAt: Date | null;
   wasReactivatedRecently: boolean;
@@ -18,7 +19,6 @@ export type FanLifecycleFacts = {
 export type FanLifecycleRules = {
   newSubscriberDays: number;
   engagedWithinDays: number;
-  engagedMessageCount: number;
   highValueMinor: number;
   vipValueMinor: number;
 };
@@ -26,7 +26,6 @@ export type FanLifecycleRules = {
 export const DEFAULT_LIFECYCLE_RULES: FanLifecycleRules = {
   newSubscriberDays: 7,
   engagedWithinDays: 30,
-  engagedMessageCount: 3,
   highValueMinor: 5_000,
   vipValueMinor: 10_000,
 };
@@ -77,10 +76,11 @@ export function calculateFanLifecycleStage(
   }
 
   if (
-    facts.inboundMessagesCount >= rules.engagedMessageCount &&
+    facts.inboundMessagesCount > 0 &&
+    facts.hasContentInterest &&
     withinDays(facts.lastActivityAt, rules.engagedWithinDays, now)
   ) {
-    return { stage: "ENGAGED", reason: "Ha conversado y mostrado actividad recientemente." };
+    return { stage: "ENGAGED", reason: "Expresó recientemente interés por contenido o intención de ver o comprar más." };
   }
 
   return {

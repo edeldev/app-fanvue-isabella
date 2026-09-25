@@ -185,8 +185,8 @@ export async function runInitialFanvueSync(creatorId: string): Promise<InitialSy
       where: { id: fan.id },
       data: { totalSpentMinor: insights.results[fan.fanvueUserId]?.spending.total.total ?? 0 },
     })));
-    await Promise.all(batch.map((fan) => recalculateFanLifecycle(creatorId, fan.id, "INITIAL_SYNC")));
     await Promise.all(batch.map((fan) => refreshFanMemory(creatorId, fan.id)));
+    await Promise.all(batch.map((fan) => recalculateFanLifecycle(creatorId, fan.id, "INITIAL_SYNC")));
   }
 
   await prisma.automationLog.create({
