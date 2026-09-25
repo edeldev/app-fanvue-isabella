@@ -139,20 +139,34 @@ export default async function MessagesPage({ searchParams }: Props) {
         orderBy: [{ category: "asc" }, { name: "asc" }],
       })
     : [];
-  const selected =
+  const selectedConversation =
     creatorId && params.fan
       ? await prisma.conversation.findFirst({
           where: {
             creatorId,
             fan: {
-              fanvueUserId: params.fan,
               isCreatorAccount: false,
-              OR: audience,
+              AND: [
+                { OR: audience },
+                { OR: [{ id: params.fan }, { fanvueUserId: params.fan }] },
+              ],
             },
           },
           include: { fan: true },
         })
       : null;
+  const selectedFan = creatorId && params.fan && !selectedConversation
+    ? await prisma.fan.findFirst({
+        where: {
+          creatorId,
+          isCreatorAccount: false,
+          OR: [{ id: params.fan }, { fanvueUserId: params.fan }],
+        },
+      })
+    : null;
+  const selected = selectedConversation ?? (selectedFan
+    ? { id: `new-${selectedFan.id}`, unreadMessagesCount: 0, fan: selectedFan }
+    : null);
   let messages: Array<{
     uuid: string;
     text: string | null;
@@ -290,7 +304,7 @@ export default async function MessagesPage({ searchParams }: Props) {
     if (filter !== "all") next.set("filter", filter);
     return next.size ? `/messages?${next}` : "/messages";
   };
-  const conversationIsOpen = Boolean(params.fan);
+  const conversationIsOpen = Boolean(selected);
 
   return (
     <div className="flex min-h-screen bg-[#101218] text-zinc-100 md:h-dvh md:overflow-hidden">
