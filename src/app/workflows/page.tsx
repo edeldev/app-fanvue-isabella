@@ -176,6 +176,7 @@ export default async function WorkflowsPage({ searchParams }: { searchParams: Pr
       type: step.type as
         | "SEND_MESSAGE"
         | "WAIT"
+        | "WAIT_FOR_REPLY"
         | "SEND_PPV"
         | "CONDITION"
         | "CHANGE_WORKFLOW"

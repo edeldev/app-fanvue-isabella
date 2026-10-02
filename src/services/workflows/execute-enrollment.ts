@@ -75,6 +75,16 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
     return { outcome: "WAIT_STARTED", nextStep: step.name, shouldContinue: false };
   }
 
+  if (step.type === "WAIT_FOR_REPLY" && enrollment.status === "ACTIVE" && !enrollment.nextRunAt) {
+    const timeoutMinutes = Number(jsonRecord(step.config).timeoutMinutes);
+    const timeoutAt = new Date(now.getTime() + timeoutMinutes * 60_000);
+    await prisma.$transaction([
+      prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { status: "WAITING", nextRunAt: timeoutAt, lastResult: { reasonCode: "WAITING_FOR_FAN_REPLY", stepId: step.id, startedAt: now.toISOString(), timeoutAt: timeoutAt.toISOString() } } }),
+      prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, eventType: "WORKFLOW_REPLY_WAIT_STARTED", explanation: `${step.name}: esperando una respuesta hasta ${timeoutAt.toLocaleString("es-MX")}.`, metadata: { stepId: step.id, startedAt: now.toISOString(), timeoutAt: timeoutAt.toISOString() } } }),
+    ]);
+    return { outcome: "REPLY_WAIT_STARTED", nextStep: step.name, shouldContinue: false };
+  }
+
   if ((step.type === "SEND_MESSAGE" || step.type === "SEND_PPV") && enrollment.workflow.sendWindowEnabled) {
     const configuredDays = Array.isArray(enrollment.workflow.sendWindowDays)
       ? enrollment.workflow.sendWindowDays.filter((day): day is number => typeof day === "number")
@@ -125,6 +135,9 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
     if (step.type === "CONDITION") {
       return await executeCondition(enrollment, step, execution.id, now);
     }
+    if (step.type === "WAIT_FOR_REPLY") {
+      return await executeReplyWait(enrollment, step, execution.id, now);
+    }
     return await finishLocalStep(enrollment, step, execution.id, now);
   } catch (error) {
     const decision = workflowRetryDecision(error, execution.attempt, { maximumAttempts, minimumDelaySeconds: retrySettings?.minimumDelaySeconds });
@@ -145,6 +158,30 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
     ]);
     throw error;
   }
+}
+
+async function executeReplyWait(enrollment: LoadedEnrollment, step: NonNullable<StepRecord>, executionId: string, now: Date) {
+  const config = jsonRecord(step.config);
+  const lastResult = jsonRecord(enrollment.lastResult);
+  const startedAt = typeof lastResult.startedAt === "string" ? new Date(lastResult.startedAt) : enrollment.lastRunAt ?? enrollment.updatedAt;
+  const timeoutAt = typeof lastResult.timeoutAt === "string" ? new Date(lastResult.timeoutAt) : enrollment.nextRunAt ?? now;
+  const reply = await prisma.message.findFirst({
+    where: { creatorId: enrollment.creatorId, conversation: { fanId: enrollment.fanId }, direction: "INBOUND", deletedAt: null, sentAt: { gte: startedAt, lte: timeoutAt } },
+    orderBy: { sentAt: "asc" },
+    select: { id: true, fanvueMessageId: true, sentAt: true },
+  });
+  const replied = Boolean(reply);
+  const targetKey = String(replied ? config.repliedTargetKey : config.timeoutTargetKey);
+  const target = enrollment.workflow.steps.find((candidate) => jsonRecord(candidate.config).stepKey === targetKey);
+  if (!target || target.position <= step.position) throw new Error("WORKFLOW_REPLY_WAIT_TARGET_INVALID");
+  const schedule = scheduleNext(target, now);
+  const eventType = replied ? "WORKFLOW_REPLY_WAIT_MATCHED" : "WORKFLOW_REPLY_WAIT_TIMED_OUT";
+  await prisma.$transaction([
+    prisma.automationExecution.update({ where: { id: executionId }, data: { status: "SUCCESS", decision: "WAIT", reason: replied ? "El fan respondió dentro del plazo." : "Terminó el plazo sin respuesta.", evidence: { replied, replyMessageId: reply?.fanvueMessageId ?? null, targetStepId: target.id }, finishedAt: new Date() } }),
+    prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { ...schedule, lastRunAt: now, lastResult: { stepId: step.id, replied, replyMessageId: reply?.fanvueMessageId ?? null, targetStepId: target.id } } }),
+    prisma.automationLog.create({ data: { creatorId: enrollment.creatorId, fanId: enrollment.fanId, enrollmentId: enrollment.id, executionId, eventType, explanation: replied ? `${step.name}: el fan respondió; continúa en ${target.name}.` : `${step.name}: terminó el tiempo sin respuesta; continúa en ${target.name}.`, metadata: { replied, replyMessageId: reply?.fanvueMessageId ?? null, targetStepId: target.id } } }),
+  ]);
+  return { outcome: replied ? "REPLY_RECEIVED" : "REPLY_WAIT_TIMED_OUT", nextStep: target.name, shouldContinue: schedule.status === "ACTIVE" };
 }
 
 async function executeCondition(enrollment: LoadedEnrollment, step: NonNullable<StepRecord>, executionId: string, now: Date) {
@@ -359,7 +396,7 @@ async function prepareWorkflowSend(enrollment: LoadedEnrollment, step: NonNullab
   return { allowed: false as const, result: { outcome: reservation.reasonCode, nextStep: step.name, shouldContinue: false } };
 }
 
-function jsonRecord(value: Prisma.JsonValue): Record<string, unknown> {
+function jsonRecord(value: Prisma.JsonValue | null): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};

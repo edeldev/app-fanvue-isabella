@@ -4,7 +4,8 @@ import { fanvueRequest } from "@/lib/fanvue/client";
 import { prisma } from "@/lib/prisma";
 import { getValidFanvueAccessToken } from "./get-access-token";
 import { triggerWorkflowForFan } from "@/services/workflows/trigger-workflow";
-import { pauseEnrollmentsOnFanReply, recordFanReplyInActiveWorkflows } from "@/services/workflows/manage-enrollment";
+import { pauseEnrollmentsOnFanReply, recordFanReplyInActiveWorkflows, routeReplyWaitEnrollments } from "@/services/workflows/manage-enrollment";
+import { executeEnrollmentUntilBlocked } from "@/services/workflows/execute-enrollment";
 import { fetchAllCursorPages } from "@/lib/fanvue/pagination";
 import { creatorListPageSchema } from "@/lib/fanvue/sync-schemas";
 import { completeMatchingWorkflowGoals } from "@/services/workflows/complete-workflow-goals";
@@ -197,8 +198,12 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
     });
     if (type === "creator.message.received" && data.sender === "fan") {
       const repliedAt = data.created_at ? new Date(data.created_at) : new Date();
+      const routedEnrollments = await routeReplyWaitEnrollments(creatorId, fan.id, data.uuid, repliedAt);
       await recordFanReplyInActiveWorkflows(creatorId, fan.id, data.uuid, repliedAt);
-      await pauseEnrollmentsOnFanReply(creatorId, fan.id, data.uuid, repliedAt);
+      await pauseEnrollmentsOnFanReply(creatorId, fan.id, data.uuid, repliedAt, routedEnrollments);
+      for (const enrollmentId of routedEnrollments) {
+        try { await executeEnrollmentUntilBlocked(creatorId, enrollmentId); } catch { /* El scheduler retomará cualquier ejecución bloqueada. */ }
+      }
       await triggerWorkflowForFan(creatorId, fan.id, "MESSAGE_RECEIVED");
       await prisma.fan.update({ where: { id: fan.id }, data: { lastActivityAt: repliedAt } });
       await refreshFanMemory(creatorId, fan.id);

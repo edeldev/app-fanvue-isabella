@@ -56,7 +56,7 @@ export function resolveReplyPausePolicy({
       return { enabled: true, silenceMinutes: globalSilenceMinutes, source: "GLOBAL", stepId: step.id };
     }
     if (step.type === "END") return { enabled: false, silenceMinutes: null, source: "DISABLED", stepId: step.id };
-    if (step.type === "CONDITION" || step.type === "CHANGE_WORKFLOW") break;
+    if (step.type === "CONDITION" || step.type === "WAIT_FOR_REPLY" || step.type === "CHANGE_WORKFLOW") break;
     const config = record(step.config);
     const explicitNext = typeof config.nextTargetKey === "string" ? byKey.get(config.nextTargetKey) : null;
     const index = ordered.findIndex((candidate) => candidate.id === step?.id);
@@ -65,4 +65,3 @@ export function resolveReplyPausePolicy({
 
   return { enabled: true, silenceMinutes: globalSilenceMinutes, source: "GLOBAL", stepId: null };
 }
-

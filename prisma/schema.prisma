@@ -61,6 +61,7 @@ enum WorkflowGoalType {
 enum WorkflowStepType {
   SEND_MESSAGE
   WAIT
+  WAIT_FOR_REPLY
   SEND_OFFER
   SEND_PPV
   CONDITION

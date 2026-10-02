@@ -24,4 +24,13 @@ describe("visual workflow builder", () => {
   it("does not allow moving the final block", () => {
     expect(reorderWorkflowSteps(steps, 3, 0)).toBe(steps);
   });
+
+  it("clears reply routes that become backward", () => {
+    const replySteps: WorkflowDefinitionInput["steps"] = [
+      { name: "Respuesta", type: "WAIT_FOR_REPLY", config: { stepKey: "reply", timeoutMinutes: 10, repliedTargetKey: "message", timeoutTargetKey: "end" } },
+      { name: "Mensaje", type: "SEND_MESSAGE", messageTemplateId: "template", config: { stepKey: "message" } },
+      { name: "Finalizar", type: "END", config: { stepKey: "end" } },
+    ];
+    expect(reorderWorkflowSteps(replySteps, 1, 0)[1].config.repliedTargetKey).toBeUndefined();
+  });
 });

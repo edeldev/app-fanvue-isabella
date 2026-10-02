@@ -1,0 +1,1 @@
+ALTER TYPE "WorkflowStepType" ADD VALUE 'WAIT_FOR_REPLY';

@@ -6,7 +6,7 @@ export function clearBackwardWorkflowConnections(steps: Steps): Steps {
   const positions = new Map(steps.map((step, index) => [String(step.config.stepKey), index]));
   return steps.map((step, index) => {
     const config = { ...step.config };
-    for (const field of ["nextTargetKey", "trueTargetKey", "falseTargetKey"] as const) {
+    for (const field of ["nextTargetKey", "trueTargetKey", "falseTargetKey", "repliedTargetKey", "timeoutTargetKey"] as const) {
       const value = typeof config[field] === "string" ? config[field] : null;
       if (value && (positions.get(value) ?? -1) <= index) delete config[field];
     }

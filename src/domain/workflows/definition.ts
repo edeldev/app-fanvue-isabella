@@ -7,6 +7,7 @@ import { workflowGoalTypes } from "./conversion-goal";
 export const editableStepTypes = [
   "SEND_MESSAGE",
   "WAIT",
+  "WAIT_FOR_REPLY",
   "SEND_PPV",
   "CONDITION",
   "CHANGE_WORKFLOW",
@@ -35,6 +36,10 @@ export const workflowStepInputSchema = z.object({
   if (step.type === "WAIT") {
     const result = z.number().int().min(1).max(43_200).safeParse(step.config.durationMinutes);
     if (!result.success) context.addIssue({ code: "custom", path: ["config", "durationMinutes"], message: "La espera debe estar entre 1 minuto y 30 días." });
+  }
+  if (step.type === "WAIT_FOR_REPLY") {
+    const result = z.number().int().min(1).max(43_200).safeParse(step.config.timeoutMinutes);
+    if (!result.success) context.addIssue({ code: "custom", path: ["config", "timeoutMinutes"], message: "El tiempo para responder debe estar entre 1 minuto y 30 días." });
   }
   if (step.type === "CONDITION") {
     const legacyValid = workflowConditions.includes(String(step.config.condition) as (typeof workflowConditions)[number]);
@@ -97,8 +102,12 @@ export const workflowDefinitionInputSchema = z.object({
         context.addIssue({ code: "custom", path: ["steps", index, "config", "nextTargetKey"], message: "El siguiente paso personalizado debe estar después del actual." });
       }
     }
-    if (step.type !== "CONDITION") return;
-    for (const field of ["trueTargetKey", "falseTargetKey"] as const) {
+    const branchFields = step.type === "CONDITION"
+      ? (["trueTargetKey", "falseTargetKey"] as const)
+      : step.type === "WAIT_FOR_REPLY"
+        ? (["repliedTargetKey", "timeoutTargetKey"] as const)
+        : [];
+    for (const field of branchFields) {
       const targetIndex = keys.indexOf(typeof step.config[field] === "string" ? step.config[field] : null);
       if (targetIndex <= index) {
         context.addIssue({ code: "custom", path: ["steps", index, "config", field], message: "Selecciona un paso posterior para ambas rutas." });
@@ -112,6 +121,7 @@ export type WorkflowDefinitionInput = z.infer<typeof workflowDefinitionInputSche
 export const stepTypeLabels: Record<(typeof editableStepTypes)[number], string> = {
   SEND_MESSAGE: "Enviar mensaje",
   WAIT: "Esperar",
+  WAIT_FOR_REPLY: "Esperar respuesta",
   SEND_PPV: "Enviar PPV",
   CONDITION: "Evaluar condición",
   CHANGE_WORKFLOW: "Cambiar de flujo",

@@ -101,9 +101,41 @@ export async function recordFanReplyInActiveWorkflows(creatorId: string, fanId: 
   return 1;
 }
 
-export async function pauseEnrollmentsOnFanReply(creatorId: string, fanId: string, messageId: string, repliedAt: Date) {
+export async function routeReplyWaitEnrollments(creatorId: string, fanId: string, messageId: string, repliedAt: Date) {
   const enrollments = await prisma.workflowEnrollment.findMany({
-    where: { creatorId, fanId, OR: [{ status: { in: ["ACTIVE", "WAITING"] } }, { status: "PAUSED", nextRunAt: { not: null } }], workflow: { pauseOnFanReply: true } },
+    where: { creatorId, fanId, status: "WAITING", nextRunAt: { gte: repliedAt }, OR: [{ lockedAt: null }, { lockExpiresAt: { lt: repliedAt } }], currentStep: { type: "WAIT_FOR_REPLY" } },
+    include: { currentStep: true, workflow: { select: { steps: { orderBy: { position: "asc" } } } } },
+  });
+  const routed: string[] = [];
+  for (const enrollment of enrollments) {
+    const step = enrollment.currentStep;
+    if (!step) continue;
+    const config = record(step.config);
+    const target = enrollment.workflow.steps.find((candidate) => record(candidate.config).stepKey === config.repliedTargetKey);
+    if (!target || target.position <= step.position) continue;
+    const idempotencyKey = `${enrollment.id}:${step.id}`;
+    const updated = await prisma.$transaction(async (transaction) => {
+      const claimed = await transaction.workflowEnrollment.updateMany({
+        where: { id: enrollment.id, status: "WAITING", currentStepId: step.id, nextRunAt: { gte: repliedAt }, OR: [{ lockedAt: null }, { lockExpiresAt: { lt: repliedAt } }] },
+        data: { status: "ACTIVE", currentStepId: target.id, nextRunAt: repliedAt, lastRunAt: repliedAt, lastResult: { stepId: step.id, replied: true, replyMessageId: messageId, targetStepId: target.id } },
+      });
+      if (!claimed.count) return false;
+      await transaction.automationExecution.upsert({
+        where: { idempotencyKey },
+        update: { status: "SUCCESS", decision: "WAIT", reason: "El fan respondió dentro del plazo.", evidence: { replied: true, replyMessageId: messageId, targetStepId: target.id }, finishedAt: repliedAt },
+        create: { creatorId, fanId, enrollmentId: enrollment.id, stepId: step.id, idempotencyKey, status: "SUCCESS", decision: "WAIT", reason: "El fan respondió dentro del plazo.", evidence: { replied: true, replyMessageId: messageId, targetStepId: target.id }, startedAt: repliedAt, finishedAt: repliedAt },
+      });
+      await transaction.automationLog.create({ data: { creatorId, fanId, enrollmentId: enrollment.id, eventType: "WORKFLOW_REPLY_WAIT_MATCHED", explanation: `${step.name}: el fan respondió; continúa en ${target.name}.`, metadata: { replyMessageId: messageId, targetStepId: target.id } } });
+      return true;
+    });
+    if (updated) routed.push(enrollment.id);
+  }
+  return routed;
+}
+
+export async function pauseEnrollmentsOnFanReply(creatorId: string, fanId: string, messageId: string, repliedAt: Date, excludedEnrollmentIds: string[] = []) {
+  const enrollments = await prisma.workflowEnrollment.findMany({
+    where: { creatorId, fanId, id: excludedEnrollmentIds.length ? { notIn: excludedEnrollmentIds } : undefined, OR: [{ status: { in: ["ACTIVE", "WAITING"] } }, { status: "PAUSED", nextRunAt: { not: null } }], workflow: { pauseOnFanReply: true } },
     include: {
       currentStep: { select: { id: true } },
       workflow: {
@@ -146,6 +178,10 @@ export async function pauseEnrollmentsOnFanReply(creatorId: string, fanId: strin
     }
   });
   return paused;
+}
+
+function record(value: Prisma.JsonValue | null): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 export async function resumeEnrollmentAfterFanSilence(creatorId: string, enrollmentId: string, now: Date) {

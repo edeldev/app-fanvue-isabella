@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, ArrowUp, Flag, GitBranch, GripVertical, ImageIcon, MessageSquare, Repeat2, Save, Timer, Trash2, X, Zap } from "lucide-react";
+import { ArrowDown, ArrowUp, Flag, GitBranch, GripVertical, ImageIcon, MessageCircleQuestion, MessageSquare, Repeat2, Save, Timer, Trash2, X, Zap } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { closestCenter, DndContext, DragOverlay, KeyboardSensor, PointerSensor, useDraggable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -26,7 +26,7 @@ interface Props {
 
 const emptyStep = (type: WorkflowDefinitionInput["steps"][number]["type"]) => ({
   name: stepTypeLabels[type], type, messageTemplateId: null,
-  config: type === "WAIT" ? { durationMinutes: 60 } : type === "CONDITION" ? { condition: "IS_FOLLOWER" } : type === "SEND_MESSAGE" || type === "SEND_PPV" ? { replyPauseMode: "GLOBAL" } : {},
+  config: type === "WAIT" ? { durationMinutes: 60 } : type === "WAIT_FOR_REPLY" ? { timeoutMinutes: 30 } : type === "CONDITION" ? { condition: "IS_FOLLOWER" } : type === "SEND_MESSAGE" || type === "SEND_PPV" ? { replyPauseMode: "GLOBAL" } : {},
 });
 
 const weekDays = [{ value: 1, label: "L" }, { value: 2, label: "M" }, { value: 3, label: "X" }, { value: 4, label: "J" }, { value: 5, label: "V" }, { value: 6, label: "S" }, { value: 0, label: "D" }];
@@ -152,7 +152,7 @@ function StepList({ initialSteps, templates, publishedWorkflows }: { initialStep
 
   return <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={({ active }) => setDragging(String(active.id))} onDragCancel={() => setDragging(null)} onDragEnd={handleDragEnd}><section className="mt-6 overflow-hidden rounded-2xl border border-white/8 bg-[#101218]"><input type="hidden" name="steps" value={JSON.stringify(steps)} />
     <div className="border-b border-white/8 p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-sm font-medium text-white">Diagrama del flujo</h3><p className="mt-1 text-xs text-zinc-600">Arrastra un bloque al lienzo o toma el asa de un paso para cambiar su orden.</p></div><span className="rounded-full bg-white/5 px-3 py-1.5 text-[11px] text-zinc-500">{steps.length} bloques</span></div>
-      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">{editableStepTypes.filter((type) => type !== "END").map((type) => <PaletteBlock key={type} type={type} onClick={() => addStep(type)} />)}</div>
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">{editableStepTypes.filter((type) => type !== "END").map((type) => <PaletteBlock key={type} type={type} onClick={() => addStep(type)} />)}</div>
     </div>
     <div className="relative mx-auto max-w-3xl px-3 py-5 sm:px-6">
       <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/8 px-4 py-2 text-xs font-medium text-emerald-300"><Zap className="size-3.5" />Inicio</div>
@@ -170,6 +170,7 @@ function PaletteBlock({ type, onClick }: { type: (typeof editableStepTypes)[numb
 function stepDetail(step: WorkflowDefinitionInput["steps"][number], templates: TemplateOption[], publishedWorkflows: Pick<WorkflowView, "id" | "name">[] = []) {
   if (step.type === "SEND_MESSAGE" || step.type === "SEND_PPV") return step.messageTemplateId ? templates.find((item) => item.id === step.messageTemplateId)?.name ?? "Plantilla no disponible" : "Sin plantilla";
   if (step.type === "WAIT") return `${Number(step.config.durationMinutes ?? 60)} min de espera`;
+  if (step.type === "WAIT_FOR_REPLY") return `Hasta ${Number(step.config.timeoutMinutes ?? 30)} min por una respuesta`;
   if (step.type === "CONDITION") {
     const conditions = Array.isArray(step.config.conditions) ? step.config.conditions : [];
     if (conditions.length > 1) return `${conditions.length} condiciones · ${step.config.conditionOperator === "ANY" ? "Cualquiera (O)" : "Todas (Y)"}`;
@@ -183,14 +184,17 @@ function stepDetail(step: WorkflowDefinitionInput["steps"][number], templates: T
 function SortableStepCard({ step, index, steps, dragging, templates, publishedWorkflows, update, move, remove }: { step: WorkflowDefinitionInput["steps"][number]; index: number; steps: WorkflowDefinitionInput["steps"]; dragging: string | null; templates: TemplateOption[]; publishedWorkflows: Pick<WorkflowView, "id" | "name">[]; update: (index: number, patch: Partial<WorkflowDefinitionInput["steps"][number]>) => void; move: (index: number, offset: number) => void; remove: () => void }) {
   const id = String(step.config.stepKey);
   const detail = stepDetail(step, templates, publishedWorkflows);
-  const routes = steps.flatMap((candidate, sourceIndex) => candidate.type !== "CONDITION" ? [] : [
+  const routes = steps.flatMap<{ kind: "true" | "false" | "replied" | "timeout"; sourceIndex: number }>((candidate, sourceIndex) => candidate.type === "CONDITION" ? [
     ...(String(candidate.config.trueTargetKey ?? "") === id ? [{ kind: "true" as const, sourceIndex }] : []),
     ...(String(candidate.config.falseTargetKey ?? "") === id ? [{ kind: "false" as const, sourceIndex }] : []),
-  ]);
+  ] : candidate.type === "WAIT_FOR_REPLY" ? [
+    ...(String(candidate.config.repliedTargetKey ?? "") === id ? [{ kind: "replied" as const, sourceIndex }] : []),
+    ...(String(candidate.config.timeoutTargetKey ?? "") === id ? [{ kind: "timeout" as const, sourceIndex }] : []),
+  ] : []);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({ id, disabled: { draggable: step.type === "END" } });
   return <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className="relative z-10">
-    {routes.length ? <div className="mb-2 flex flex-wrap justify-center gap-2">{routes.map((route) => <span key={`${route.kind}-${route.sourceIndex}`} className={`rounded-full border px-2.5 py-1 text-[10px] font-medium ${route.kind === "true" ? "border-emerald-400/25 bg-emerald-400/8 text-emerald-300" : "border-red-400/25 bg-red-400/8 text-red-300"}`}>{route.kind === "true" ? "✓ Ruta: Sí cumple" : "× Ruta: No cumple"} · desde paso {route.sourceIndex + 1}</span>)}</div> : null}
-    <article className={`relative rounded-2xl border bg-[#181a21] shadow-lg shadow-black/15 transition-colors ${isDragging ? "border-violet-400/50 opacity-35" : isOver && dragging ? "border-violet-400/60 ring-2 ring-violet-400/15" : step.type === "CONDITION" ? "border-amber-400/20" : step.type === "END" ? "border-emerald-400/20" : "border-white/10"}`}>
+    {routes.length ? <div className="mb-2 flex flex-wrap justify-center gap-2">{routes.map((route) => <span key={`${route.kind}-${route.sourceIndex}`} className={`rounded-full border px-2.5 py-1 text-[10px] font-medium ${route.kind === "true" || route.kind === "replied" ? "border-emerald-400/25 bg-emerald-400/8 text-emerald-300" : route.kind === "timeout" ? "border-amber-400/25 bg-amber-400/8 text-amber-300" : "border-red-400/25 bg-red-400/8 text-red-300"}`}>{route.kind === "true" ? "✓ Ruta: Sí cumple" : route.kind === "false" ? "× Ruta: No cumple" : route.kind === "replied" ? "✓ Ruta: Respondió" : "⌛ Ruta: No respondió"} · desde paso {route.sourceIndex + 1}</span>)}</div> : null}
+    <article className={`relative rounded-2xl border bg-[#181a21] shadow-lg shadow-black/15 transition-colors ${isDragging ? "border-violet-400/50 opacity-35" : isOver && dragging ? "border-violet-400/60 ring-2 ring-violet-400/15" : step.type === "CONDITION" ? "border-amber-400/20" : step.type === "WAIT_FOR_REPLY" ? "border-sky-400/20" : step.type === "END" ? "border-emerald-400/20" : "border-white/10"}`}>
       <div className="flex items-center gap-3 border-b border-white/7 px-3 py-3 sm:px-4">
         {step.type !== "END" ? <button type="button" {...attributes} {...listeners} aria-label={`Arrastrar paso ${index + 1}`} title="Arrastra para cambiar la posición" className="touch-none cursor-grab rounded-lg p-1.5 text-zinc-600 hover:bg-white/5 hover:text-zinc-300 active:cursor-grabbing"><GripVertical className="size-4" /></button> : <span className="w-7" />}
         <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-white/5 text-violet-300"><StepIcon type={step.type} /></span>
@@ -201,9 +205,9 @@ function SortableStepCard({ step, index, steps, dragging, templates, publishedWo
         <button type="button" disabled={index >= steps.length - 2 || step.type === "END"} onClick={() => move(index, 1)} aria-label="Mover abajo" className="rounded-md p-1 text-zinc-600 hover:bg-white/5 hover:text-white disabled:opacity-20"><ArrowDown className="size-4" /></button>
         <button type="button" disabled={step.type === "END"} onClick={remove} aria-label="Eliminar paso" className="rounded-md p-1 text-zinc-600 hover:bg-red-400/8 hover:text-red-300 disabled:opacity-20"><Trash2 className="size-4" /></button>
       </div>
-      <div className="p-3 sm:p-4"><div className="mb-2 flex items-center gap-2 text-[11px] text-zinc-500 sm:hidden"><span className="rounded-md bg-white/5 px-2 py-1">{stepTypeLabels[step.type]}</span><span className="min-w-0 truncate">{detail}</span></div><StepConfig step={step} stepIndex={index} steps={steps} templates={templates} publishedWorkflows={publishedWorkflows} onChange={(patch) => update(index, patch)} />{step.type !== "CONDITION" && step.type !== "END" ? <NextStepSelect step={step} targets={steps.slice(index + 1)} firstTargetNumber={index + 2} templates={templates} publishedWorkflows={publishedWorkflows} onChange={(value) => update(index, { config: { ...step.config, nextTargetKey: value || undefined } })} /> : null}</div>
+      <div className="p-3 sm:p-4"><div className="mb-2 flex items-center gap-2 text-[11px] text-zinc-500 sm:hidden"><span className="rounded-md bg-white/5 px-2 py-1">{stepTypeLabels[step.type]}</span><span className="min-w-0 truncate">{detail}</span></div><StepConfig step={step} stepIndex={index} steps={steps} templates={templates} publishedWorkflows={publishedWorkflows} onChange={(patch) => update(index, patch)} />{step.type !== "CONDITION" && step.type !== "WAIT_FOR_REPLY" && step.type !== "END" ? <NextStepSelect step={step} targets={steps.slice(index + 1)} firstTargetNumber={index + 2} templates={templates} publishedWorkflows={publishedWorkflows} onChange={(value) => update(index, { config: { ...step.config, nextTargetKey: value || undefined } })} /> : null}</div>
     </article>
-    {index < steps.length - 1 ? <DropConnector active={dragging !== null} condition={step.type === "CONDITION"} /> : null}
+    {index < steps.length - 1 ? <DropConnector active={dragging !== null} condition={step.type === "CONDITION" || step.type === "WAIT_FOR_REPLY"} /> : null}
   </div>;
 }
 
@@ -212,7 +216,7 @@ function DropConnector({ active, condition = false }: { active: boolean; conditi
 }
 
 function StepIcon({ type }: { type: WorkflowDefinitionInput["steps"][number]["type"] }) {
-  const Icon = type === "SEND_MESSAGE" ? MessageSquare : type === "WAIT" ? Timer : type === "SEND_PPV" ? ImageIcon : type === "CONDITION" ? GitBranch : type === "CHANGE_WORKFLOW" ? Repeat2 : Flag;
+  const Icon = type === "SEND_MESSAGE" ? MessageSquare : type === "WAIT" ? Timer : type === "WAIT_FOR_REPLY" ? MessageCircleQuestion : type === "SEND_PPV" ? ImageIcon : type === "CONDITION" ? GitBranch : type === "CHANGE_WORKFLOW" ? Repeat2 : Flag;
   return <Icon className="size-3.5" />;
 }
 
@@ -223,9 +227,23 @@ function StepConfig({ step, stepIndex, steps, templates, publishedWorkflows, onC
     return <div className="mt-3 space-y-3"><select value={step.messageTemplateId ?? ""} onChange={(event) => onChange({ messageTemplateId: event.target.value || null })} className="w-full rounded-lg border border-white/8 bg-[#20222b] px-3 py-2 text-xs text-zinc-300"><option value="">{step.type === "SEND_PPV" ? "Selecciona una plantilla PPV" : "Selecciona una plantilla sin precio"}</option>{compatible.map((template) => <option key={template.id} value={template.id}>{template.name} · {template.type}{template.priceMinor ? ` · $${(template.priceMinor / 100).toFixed(2)}` : ""}</option>)}</select><div className="rounded-xl border border-white/8 bg-black/15 p-3"><div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_150px]"><label className="text-[11px] text-zinc-500">Si el fan responde antes de este envío<select value={replyPauseMode} onChange={(event) => onChange({ config: { ...step.config, replyPauseMode: event.target.value, ...(event.target.value !== "CUSTOM" ? { replySilenceMinutes: undefined } : {}) } })} className="mt-1.5 w-full rounded-lg border border-white/8 bg-[#20222b] px-3 py-2 text-xs text-zinc-300"><option value="GLOBAL">Usar silencio global</option><option value="CUSTOM">Usar tiempo personalizado</option><option value="DISABLED">No pausar este envío</option></select></label>{replyPauseMode === "CUSTOM" ? <label className="text-[11px] text-zinc-500">Minutos sin respuesta<input type="number" min={1} max={43200} value={Number(step.config.replySilenceMinutes ?? 10)} onChange={(event) => onChange({ config: { ...step.config, replyPauseMode: "CUSTOM", replySilenceMinutes: Number(event.target.value) } })} className="mt-1.5 w-full rounded-lg border border-white/8 bg-[#20222b] px-3 py-2 text-xs text-zinc-200" /></label> : null}</div><p className="mt-2 text-[10px] leading-4 text-zinc-600">Requiere activar “Pausar cuando el fan responda”. Una nueva respuesta reinicia este silencio; tus mensajes manuales no lo modifican.</p></div></div>;
   }
   if (step.type === "WAIT") return <label className="mt-3 block text-xs text-zinc-500">Minutos de espera<input type="number" min={1} max={43200} value={Number(step.config.durationMinutes ?? 60)} onChange={(event) => onChange({ config: { ...step.config, durationMinutes: Number(event.target.value) } })} className="ml-3 w-28 rounded-lg border border-white/8 bg-[#20222b] px-3 py-2 text-zinc-200" /></label>;
+  if (step.type === "WAIT_FOR_REPLY") return <ReplyWaitConfig step={step} targets={steps.slice(stepIndex + 1)} firstTargetNumber={stepIndex + 2} templates={templates} publishedWorkflows={publishedWorkflows} onChange={onChange} />;
   if (step.type === "CONDITION") return <ConditionConfig step={step} targets={steps.slice(stepIndex + 1)} firstTargetNumber={stepIndex + 2} templates={templates} publishedWorkflows={publishedWorkflows} onChange={onChange} />;
   if (step.type === "CHANGE_WORKFLOW") return <select value={String(step.config.targetWorkflowId ?? "")} onChange={(event) => onChange({ config: { ...step.config, targetWorkflowId: event.target.value } })} className="mt-3 w-full rounded-lg border border-white/8 bg-[#20222b] px-3 py-2 text-xs text-zinc-300"><option value="">Selecciona un flujo publicado</option>{publishedWorkflows.map((workflow) => <option key={workflow.id} value={workflow.id}>{workflow.name}</option>)}</select>;
   return <p className="mt-2 text-xs text-zinc-600">Cierra el enrollment y registra el resultado del flujo.</p>;
+}
+
+function ReplyWaitConfig({ step, targets, firstTargetNumber, templates, publishedWorkflows, onChange }: { step: WorkflowDefinitionInput["steps"][number]; targets: WorkflowDefinitionInput["steps"]; firstTargetNumber: number; templates: TemplateOption[]; publishedWorkflows: Pick<WorkflowView, "id" | "name">[]; onChange: (patch: Partial<typeof step>) => void }) {
+  return <div className="mt-3 grid gap-3">
+    <div className="rounded-xl border border-sky-400/15 bg-sky-400/[.035] p-3">
+      <label className="text-xs text-zinc-400">Esperar una respuesta durante<input type="number" min={1} max={43200} value={Number(step.config.timeoutMinutes ?? 30)} onChange={(event) => onChange({ config: { ...step.config, timeoutMinutes: Number(event.target.value) } })} className="mx-2 w-24 rounded-lg border border-white/8 bg-[#20222b] px-3 py-2 text-zinc-200" />minutos</label>
+      <p className="mt-2 text-[11px] leading-4 text-zinc-600">La primera respuesta del fan toma la ruta verde. Si el tiempo termina sin respuesta, toma la ruta amarilla.</p>
+    </div>
+    <div className="grid gap-2 sm:grid-cols-2">
+      <BranchSelect label="Respondió" tone="positive" value={String(step.config.repliedTargetKey ?? "")} targets={targets} firstTargetNumber={firstTargetNumber} templates={templates} publishedWorkflows={publishedWorkflows} onChange={(value) => onChange({ config: { ...step.config, repliedTargetKey: value } })} />
+      <BranchSelect label="No respondió" tone="timeout" value={String(step.config.timeoutTargetKey ?? "")} targets={targets} firstTargetNumber={firstTargetNumber} templates={templates} publishedWorkflows={publishedWorkflows} onChange={(value) => onChange({ config: { ...step.config, timeoutTargetKey: value } })} />
+    </div>
+  </div>;
 }
 
 function ConditionConfig({ step, targets, firstTargetNumber, templates, publishedWorkflows, onChange }: { step: WorkflowDefinitionInput["steps"][number]; targets: WorkflowDefinitionInput["steps"]; firstTargetNumber: number; templates: TemplateOption[]; publishedWorkflows: Pick<WorkflowView, "id" | "name">[]; onChange: (patch: Partial<typeof step>) => void }) {
@@ -243,10 +261,12 @@ function targetLabel(target: WorkflowDefinitionInput["steps"][number], number: n
   return `Paso ${number} · ${stepTypeLabels[target.type]} · ${stepDetail(target, templates, publishedWorkflows)}`;
 }
 
-function BranchSelect({ label, value, targets, firstTargetNumber, templates, publishedWorkflows, onChange }: { label: string; value: string; targets: WorkflowDefinitionInput["steps"]; firstTargetNumber: number; templates: TemplateOption[]; publishedWorkflows: Pick<WorkflowView, "id" | "name">[]; onChange: (value: string) => void }) {
-  const positive = label === "Si cumple";
+function BranchSelect({ label, tone, value, targets, firstTargetNumber, templates, publishedWorkflows, onChange }: { label: string; tone?: "positive" | "negative" | "timeout"; value: string; targets: WorkflowDefinitionInput["steps"]; firstTargetNumber: number; templates: TemplateOption[]; publishedWorkflows: Pick<WorkflowView, "id" | "name">[]; onChange: (value: string) => void }) {
+  const resolvedTone = tone ?? (label === "Si cumple" ? "positive" : "negative");
+  const positive = resolvedTone === "positive";
+  const timeout = resolvedTone === "timeout";
   const selectedIndex = targets.findIndex((target) => String(target.config.stepKey) === value);
-  return <label className={`rounded-xl border p-3 text-[11px] ${positive ? "border-emerald-400/20 bg-emerald-400/[.045] text-emerald-300" : "border-red-400/20 bg-red-400/[.035] text-red-300"}`}><span className="flex items-center gap-2 font-medium"><span className={`grid size-5 place-items-center rounded-full ${positive ? "bg-emerald-400/15" : "bg-red-400/15"}`}>{positive ? "✓" : "×"}</span>{label}</span><select value={value} required onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-lg border border-white/8 bg-[#20222b] px-3 py-2 text-xs text-zinc-300"><option value="">Selecciona el bloque de esta ruta</option>{targets.map((target, index) => <option key={String(target.config.stepKey)} value={String(target.config.stepKey)}>{targetLabel(target, firstTargetNumber + index, templates, publishedWorkflows)}</option>)}</select>{selectedIndex >= 0 ? <span className="mt-2 block leading-4 text-zinc-500">Esta ruta irá al {targetLabel(targets[selectedIndex], firstTargetNumber + selectedIndex, templates, publishedWorkflows)}.</span> : null}</label>;
+  return <label className={`rounded-xl border p-3 text-[11px] ${positive ? "border-emerald-400/20 bg-emerald-400/[.045] text-emerald-300" : timeout ? "border-amber-400/20 bg-amber-400/[.035] text-amber-300" : "border-red-400/20 bg-red-400/[.035] text-red-300"}`}><span className="flex items-center gap-2 font-medium"><span className={`grid size-5 place-items-center rounded-full ${positive ? "bg-emerald-400/15" : timeout ? "bg-amber-400/15" : "bg-red-400/15"}`}>{positive ? "✓" : timeout ? "⌛" : "×"}</span>{label}</span><select value={value} required onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-lg border border-white/8 bg-[#20222b] px-3 py-2 text-xs text-zinc-300"><option value="">Selecciona el bloque de esta ruta</option>{targets.map((target, index) => <option key={String(target.config.stepKey)} value={String(target.config.stepKey)}>{targetLabel(target, firstTargetNumber + index, templates, publishedWorkflows)}</option>)}</select>{selectedIndex >= 0 ? <span className="mt-2 block leading-4 text-zinc-500">Esta ruta irá al {targetLabel(targets[selectedIndex], firstTargetNumber + selectedIndex, templates, publishedWorkflows)}.</span> : null}</label>;
 }
 
 function NextStepSelect({ step, targets, firstTargetNumber, templates, publishedWorkflows, onChange }: { step: WorkflowDefinitionInput["steps"][number]; targets: WorkflowDefinitionInput["steps"]; firstTargetNumber: number; templates: TemplateOption[]; publishedWorkflows: Pick<WorkflowView, "id" | "name">[]; onChange: (value: string) => void }) {

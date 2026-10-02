@@ -72,4 +72,26 @@ describe("workflowDefinitionInputSchema", () => {
       ],
     }).success).toBe(true);
   });
+
+  it("accepts a reply wait with replied and timeout branches", () => {
+    expect(workflowDefinitionInputSchema.safeParse({
+      name: "Seguimiento por respuesta", priority: 1, isPrimary: true,
+      steps: [
+        { name: "Esperar respuesta", type: "WAIT_FOR_REPLY", config: { stepKey: "reply", timeoutMinutes: 30, repliedTargetKey: "answered", timeoutTargetKey: "silent" } },
+        { name: "Respondió", type: "SEND_MESSAGE", messageTemplateId: "one", config: { stepKey: "answered" } },
+        { name: "No respondió", type: "SEND_MESSAGE", messageTemplateId: "two", config: { stepKey: "silent" } },
+        { name: "Fin", type: "END", config: { stepKey: "end" } },
+      ],
+    }).success).toBe(true);
+  });
+
+  it("rejects a reply wait without both forward branches", () => {
+    expect(workflowDefinitionInputSchema.safeParse({
+      name: "Seguimiento incompleto", priority: 1, isPrimary: true,
+      steps: [
+        { name: "Esperar respuesta", type: "WAIT_FOR_REPLY", config: { stepKey: "reply", timeoutMinutes: 30, repliedTargetKey: "end" } },
+        { name: "Fin", type: "END", config: { stepKey: "end" } },
+      ],
+    }).success).toBe(false);
+  });
 });

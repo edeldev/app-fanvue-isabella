@@ -36,6 +36,7 @@ export function workflowStepContext(
       : "Sin plantilla";
   }
   if (step.type === "WAIT") return formatDuration(Number(step.config.durationMinutes));
+  if (step.type === "WAIT_FOR_REPLY") return `Hasta ${formatDuration(Number(step.config.timeoutMinutes))} por una respuesta`;
   if (step.type === "CONDITION") {
     if (Array.isArray(step.config.conditions)) {
       const labels = step.config.conditions.flatMap((value) => {
