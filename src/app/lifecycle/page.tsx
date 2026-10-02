@@ -5,6 +5,7 @@ import type { FanLifecycleStage, Prisma } from "@prisma/client";
 import { Sidebar } from "@/components/app-shell/sidebar";
 import { Topbar } from "@/components/app-shell/topbar";
 import { lifecyclePresentation, lifecycleStages } from "@/domain/lifecycle/presentation";
+import { buildPurchaseBreakdown, primaryRevenueCategory, revenueCategoryLabels } from "@/domain/fans/purchase-breakdown";
 import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 
@@ -89,6 +90,7 @@ export default async function LifecyclePage({ searchParams }: { searchParams: Se
       include: {
         tags: { include: { tag: true } },
         memories: { where: { status: "ACTIVE", category: "PURCHASE_INTENT" }, select: { id: true } },
+        purchases: { where: { amountMinor: { gt: 0 }, reversedAt: null }, select: { amountMinor: true, source: true, externalMessageId: true, externalPostId: true, reversedAt: true } },
       },
     }),
     prisma.fan.groupBy({
@@ -120,7 +122,8 @@ export default async function LifecyclePage({ searchParams }: { searchParams: Se
         {fans.length ? <div className="divide-y divide-white/6">{fans.map((fan) => {
           const duplicateUsername = Boolean(fan.username && duplicateUsernames.has(fan.username));
           const badges = tableBadges(fan, firstBuyerSet.has(fan.id), repeatBuyerSet.has(fan.id));
-          return <Link key={fan.id} href={`/lifecycle/fans/${fan.id}`} className="grid gap-4 p-5 transition hover:bg-white/[.025] md:grid-cols-[minmax(220px,.9fr)_minmax(260px,1.15fr)_minmax(240px,1fr)_auto] md:items-center"><div className="min-w-0"><p className="truncate font-medium text-zinc-100">{fan.displayName || fan.username || "Fan sin nombre"}</p><p className="mt-1 truncate text-xs text-zinc-600">@{fan.username || "sin-usuario"}</p>{duplicateUsername ? <p className="mt-1 text-[10px] text-amber-400/80">Mismo @usuario · Fanvue ID …{fan.fanvueUserId.slice(-8)}</p> : null}</div><div className="flex flex-wrap gap-1.5">{badges.map((badge) => <span key={badge.label} className={`rounded-full border px-2.5 py-1 text-[10px] font-medium ${badge.tone}`}>{badge.label}</span>)}</div><div><p className="line-clamp-2 text-xs leading-5 text-zinc-500">{tableSummary(fan, firstBuyerSet.has(fan.id), repeatBuyerSet.has(fan.id))}</p><div className="mt-2 flex flex-wrap gap-1">{fan.tags.map(({ tag }) => <span key={tag.id} className="rounded bg-white/5 px-2 py-0.5 text-[10px] text-zinc-500">{tag.name}</span>)}</div></div><div className="flex items-center gap-4"><span className="whitespace-nowrap text-sm font-semibold text-white">{money.format(fan.totalSpentMinor / 100)}</span><ArrowRight className="size-4 text-zinc-600"/></div></Link>;
+          const primaryCategory = primaryRevenueCategory(buildPurchaseBreakdown(fan.purchases));
+          return <Link key={fan.id} href={`/lifecycle/fans/${fan.id}`} className="grid gap-4 p-5 transition hover:bg-white/[.025] md:grid-cols-[minmax(220px,.9fr)_minmax(260px,1.15fr)_minmax(240px,1fr)_auto] md:items-center"><div className="min-w-0"><p className="truncate font-medium text-zinc-100">{fan.displayName || fan.username || "Fan sin nombre"}</p><p className="mt-1 truncate text-xs text-zinc-600">@{fan.username || "sin-usuario"}</p>{duplicateUsername ? <p className="mt-1 text-[10px] text-amber-400/80">Mismo @usuario · Fanvue ID …{fan.fanvueUserId.slice(-8)}</p> : null}</div><div className="flex flex-wrap gap-1.5">{badges.map((badge) => <span key={badge.label} className={`rounded-full border px-2.5 py-1 text-[10px] font-medium ${badge.tone}`}>{badge.label}</span>)}</div><div><p className="line-clamp-2 text-xs leading-5 text-zinc-500">{tableSummary(fan, firstBuyerSet.has(fan.id), repeatBuyerSet.has(fan.id))}</p><div className="mt-2 flex flex-wrap gap-1">{fan.tags.map(({ tag }) => <span key={tag.id} className="rounded bg-white/5 px-2 py-0.5 text-[10px] text-zinc-500">{tag.name}</span>)}</div></div><div className="flex items-center gap-4"><span className="text-right"><span className="block whitespace-nowrap text-sm font-semibold text-white">{money.format(fan.totalSpentMinor / 100)}</span>{primaryCategory ? <span className="mt-1 block whitespace-nowrap text-[10px] text-violet-300/70">Principal: {revenueCategoryLabels[primaryCategory]}</span> : null}</span><ArrowRight className="size-4 text-zinc-600"/></div></Link>;
         })}</div> : <div className="grid min-h-60 place-items-center text-center"><div><ContactRound className="mx-auto mb-3 size-7 text-zinc-700"/><p className="text-sm text-zinc-400">No hay fans con estos filtros.</p></div></div>}
         {filteredTotal > PAGE_SIZE ? <nav aria-label="Paginación de fans" className="flex items-center justify-between border-t border-white/8 p-4"><Link aria-disabled={page <= 1} href={pageHref(Math.max(1, page - 1))} className={`rounded-lg border px-3 py-2 text-xs ${page <= 1 ? "pointer-events-none border-white/5 text-zinc-700" : "border-white/10 text-zinc-300 hover:bg-white/5"}`}>Anterior</Link><span className="text-xs text-zinc-500">Página {Math.min(page, totalPages)} de {totalPages}</span><Link aria-disabled={page >= totalPages} href={pageHref(Math.min(totalPages, page + 1))} className={`rounded-lg border px-3 py-2 text-xs ${page >= totalPages ? "pointer-events-none border-white/5 text-zinc-700" : "border-white/10 text-zinc-300 hover:bg-white/5"}`}>Siguiente</Link></nav> : null}
       </section>
@@ -139,6 +142,7 @@ type TableFan = {
   isArchived: boolean;
   totalSpentMinor: number;
   memories: { id: string }[];
+  purchases: Array<{ amountMinor: number; source: string; externalMessageId: string | null; externalPostId: string | null; reversedAt: Date | null }>;
 };
 
 type TableBadge = { label: string; tone: string };

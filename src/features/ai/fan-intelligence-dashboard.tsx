@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { enqueueSnackbar } from "notistack";
 import type { ReactNode } from "react";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { selectNonRepeatedRecommendation, type IntelligenceSegment, type SaleReadiness } from "@/domain/ai/fan-intelligence";
 import type { NextBestAction } from "@/domain/ai/next-best-action";
@@ -92,6 +92,14 @@ export function FanIntelligenceDashboard({ fans, initialFanId, analyticsRange, f
   const selected = fans.find((fan) => fan.id === selectedId) ?? filtered[0] ?? null;
   const counts = useMemo(() => Object.fromEntries(segmentOrder.map((key) => [key, fans.filter((fan) => fan.segment === key).length])) as Record<IntelligenceSegment, number>, [fans]);
 
+  useEffect(() => {
+    if (!initialFan) return;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById(`fan-opportunity-${initialFan.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [initialFan]);
+
   return <div className="space-y-6">
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
       {segmentOrder.map((key) => {
@@ -132,7 +140,7 @@ export function FanIntelligenceDashboard({ fans, initialFanId, analyticsRange, f
 function FanRow({ fan, selected, onSelect }: { fan: FanIntelligenceView; selected: boolean; onSelect: () => void }) {
   const meta = segmentMeta[fan.segment];
   const nearHighValue = isNearHighValue(fan);
-  return <button type="button" onClick={onSelect} className={`grid w-full cursor-pointer gap-4 border-b border-white/6 p-4 text-left transition last:border-0 hover:bg-white/[.035] sm:grid-cols-[minmax(13rem,1fr)_minmax(9rem,.65fr)_minmax(12rem,.9fr)_auto] sm:items-center sm:px-5 ${selected ? "bg-violet-400/[.06]" : ""}`}>
+  return <button id={`fan-opportunity-${fan.id}`} type="button" onClick={onSelect} className={`scroll-m-24 grid w-full cursor-pointer gap-4 border-b border-white/6 p-4 text-left transition last:border-0 hover:bg-white/[.035] sm:grid-cols-[minmax(13rem,1fr)_minmax(9rem,.65fr)_minmax(12rem,.9fr)_auto] sm:items-center sm:px-5 ${selected ? "bg-violet-400/[.09] ring-1 ring-inset ring-violet-400/20" : ""}`}>
     <div className="flex min-w-0 items-center gap-3">{fan.avatarUrl ? <span className="size-10 shrink-0 rounded-full bg-cover bg-center" style={{ backgroundImage: `url(${JSON.stringify(fan.avatarUrl).slice(1, -1)})` }} /> : <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white/5 text-xs font-semibold text-zinc-500">{initials(fan.displayName)}</span>}<div className="min-w-0"><p className="truncate text-sm font-medium text-zinc-200">{fan.displayName}</p><p className="mt-1 truncate text-[10px] text-zinc-600">@{fan.username ?? "sin-usuario"}</p></div></div>
     <div><span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold ${meta.className}`}>{meta.label}</span><p className="mt-1.5 line-clamp-2 text-[10px] leading-4 text-violet-300/80">{fan.plan.title}</p>{nearHighValue ? <span className="mt-1.5 block w-fit rounded-full border border-amber-400/20 bg-amber-400/[.07] px-2 py-1 text-[9px] font-semibold text-amber-200">Próximo a alto valor · faltan {money.format((5_000 - fan.totalSpentMinor) / 100)}</span> : null}</div>
     <div className="grid grid-cols-3 gap-2"><MiniScore label="Valor" value={fan.valueScore} /><MiniScore label="Potencial" value={fan.potentialScore} /><MiniScore label="Relación" value={fan.relationshipScore} /></div>
