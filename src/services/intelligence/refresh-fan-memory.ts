@@ -14,6 +14,21 @@ export async function refreshFanMemory(creatorId: string, fanId: string) {
     },
   });
   const candidates = deriveFanMemory(conversations.flatMap((conversation) => conversation.messages));
+  const activeBoundaryKeys = candidates
+    .filter((candidate) => candidate.category === "BOUNDARY")
+    .map((candidate) => candidate.key);
+  await prisma.fanMemory.updateMany({
+    where: {
+      creatorId,
+      fanId,
+      category: "BOUNDARY",
+      source: "CONVERSATION_RULE",
+      status: "ACTIVE",
+      confirmedAt: null,
+      ...(activeBoundaryKeys.length ? { key: { notIn: activeBoundaryKeys } } : {}),
+    },
+    data: { status: "DISMISSED", dismissedAt: new Date() },
+  });
   if (!candidates.length) return { detected: 0 };
   const existing = await prisma.fanMemory.findMany({
     where: { fanId, OR: candidates.map((candidate) => ({ category: candidate.category, key: candidate.key })) },
@@ -35,4 +50,3 @@ export async function refreshFanMemory(creatorId: string, fanId: string) {
   })));
   return { detected: candidates.length };
 }
-

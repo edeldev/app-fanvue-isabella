@@ -156,12 +156,34 @@ export function detectCommercialGuard(messages: Array<{ text: string | null; sen
     .filter((message) => message.text?.trim())
     .sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime())
     .slice(0, 5);
+  const directCreatorRejection = newest.find((message) => isDirectCreatorRejection(message.text!));
+  if (directCreatorRejection) return {
+    code: "REJECTION",
+    label: "Rechazó recibir ofertas",
+    evidence: directCreatorRejection.text!.trim().slice(0, 180),
+  };
+  const platformDisinterest = newest.find((message) => isPlatformDisinterest(message.text!));
+  const exclusiveInterest = newest.some((message) => isCreatorExclusivityPraise(message.text!));
+  const reinforcedCommercialRejection = newest.find((message) => isExplicitCommercialRejection(message.text!));
+  if (platformDisinterest && reinforcedCommercialRejection && !exclusiveInterest) return {
+    code: "REJECTION",
+    label: "Rechazó recibir ofertas",
+    evidence: `${platformDisinterest.text!.trim()} · ${reinforcedCommercialRejection.text!.trim()}`.slice(0, 180),
+  };
   const guards: Array<{ code: CommercialGuard["code"]; label: string; patterns: RegExp[] }> = [
-    { code: "REJECTION", label: "Rechazó recibir ofertas", patterns: [/no me interesa/i, /no quiero (?:comprar|ver|recibir|ofertas?|mensajes?|nada)/i, /no gracias/i, /no me mandes/i, /deja de enviar/i, /\bstop\b/i, /not interested/i] },
+    { code: "REJECTION", label: "Rechazó recibir ofertas", patterns: [
+      /no (?:me )?interesa(?:n)? (?:comprar|recibir|desbloquear|la oferta|las ofertas|ese contenido|el contenido|esto|eso)/i,
+      /no quiero (?:comprar(?: nada)?|recibir (?:ofertas?|mensajes?)|ver (?:ese|el|m[aá]s) contenido|desbloquear(?:lo| nada)?|ofertas?|nada de eso)/i,
+      /no me mandes (?:ofertas?|mensajes?|contenido|ppv)/i,
+      /deja de enviar(?:me)? (?:ofertas?|mensajes?|contenido|ppv)/i,
+      /\bstop (?:sending|offers?|messages?)\b/i,
+      /not interested in (?:buying|offers?|content|ppv)/i,
+    ] },
     { code: "NOT_NOW", label: "Pidió tiempo o espacio", patterns: [/\bahora no\b/i, /quiz[aá]s (?:luego|despu[eé]s)/i, /(?:te|yo te) (?:digo|aviso) despu[eé]s/i, /despu[eé]s (?:hablamos|vemos)/i, /(?:hablamos|vemos|te digo|te aviso) m[aá]s tarde/i, /dame tiempo/i, /necesito espacio/i, /estoy ocupad/i, /not now/i, /maybe later/i] },
     { code: "BUDGET_CONCERN", label: "Expresó una objeción de precio", patterns: [/no tengo dinero/i, /no puedo pagar/i, /muy caro/i, /demasiado caro/i, /sin dinero/i, /can'?t afford/i, /too expensive/i] },
   ];
   for (const message of newest) {
+    if (isCreatorExclusivityPraise(message.text!)) continue;
     for (const guard of guards) {
       if (guard.patterns.some((pattern) => pattern.test(message.text!))) {
         return { code: guard.code, label: guard.label, evidence: message.text!.trim().slice(0, 180) };
@@ -169,6 +191,45 @@ export function detectCommercialGuard(messages: Array<{ text: string | null; sen
     }
   }
   return null;
+}
+
+function isDirectCreatorRejection(text: string) {
+  return [
+    /no quiero nada (?:de ti|contigo|tuyo|tuya)/i,
+    /no (?:me )?interesa nada (?:de ti|tuyo|tuya)/i,
+    /no quiero (?:comprarte|pagarte|desbloquearte|ver nada tuyo)/i,
+    /no me (?:ofrezcas|vendas|mandes) nada/i,
+    /no quiero que me (?:ofrezcas|vendas|mandes) nada/i,
+  ].some((pattern) => pattern.test(text));
+}
+
+function isPlatformDisinterest(text: string) {
+  return [
+    /fanvue no me interesa/i,
+    /no me interesa fanvue/i,
+    /no me interesa (?:nadie|ninguna|ninguno) (?:m[aá]s )?(?:en|de) fanvue/i,
+    /no me interesa nadie m[aá]s/i,
+    /no quiero nada (?:de|en) fanvue/i,
+  ].some((pattern) => pattern.test(text));
+}
+
+function isExplicitCommercialRejection(text: string) {
+  return [
+    /no quiero comprar(?: nada)?/i,
+    /no (?:me )?interesa(?:n)? (?:comprar|recibir|desbloquear|la oferta|las ofertas|ese contenido|el contenido|esto|eso)/i,
+    /no quiero (?:recibir (?:ofertas?|mensajes?)|ver (?:ese|el|m[aá]s) contenido|desbloquear(?:lo| nada)?|ofertas?|nada de eso)/i,
+  ].some((pattern) => pattern.test(text));
+}
+
+function isCreatorExclusivityPraise(text: string) {
+  return [
+    /no me interesa (?:nadie|ninguna|ning[uú]n creador|ninguna creadora) m[aá]s/i,
+    /no (?:me )?interesa(?:n)? (?:los|las|otros|otras|nadie) de fanvue/i,
+    /(?:solo|solamente|nada m[aá]s) (?:me interesas|te quiero|te sigo|contigo|t[uú])/i,
+    /(?:nadie|ninguna|ninguno) m[aá]s.*(?:solo|solamente|t[uú]|contigo)/i,
+    /(?:only|just) (?:you|interested in you)/i,
+    /not interested in anyone else/i,
+  ].some((pattern) => pattern.test(text));
 }
 
 export function analyzeConversationContext(

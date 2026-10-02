@@ -11,11 +11,17 @@ describe("deriveFanMemory", () => {
 
   it("registra un límite explícito como hecho", () => {
     const result = deriveFanMemory([{ id: "m2", text: "Ahora no, quizá después", sentAt: now }], now);
-    expect(result[0]).toMatchObject({ category: "BOUNDARY", key: "NOT_NOW", type: "FACT", confidence: 1 });
+    expect(result[0]).toMatchObject({ category: "BOUNDARY", key: "NOT_NOW", type: "INFERENCE", confidence: 0.9 });
   });
 
   it("no convierte palabras genéricas en memoria", () => {
     expect(deriveFanMemory([{ id: "m3", text: "Tengo años viviendo en Bogotá jajaja", sentAt: now }], now)).toEqual([]);
   });
-});
 
+  it("no guarda como límite que el fan solo esté interesado en la creadora", () => {
+    expect(deriveFanMemory([
+      { id: "m4", text: "No me interesa nadie más en Fanvue", sentAt: now },
+      { id: "m5", text: "La única que me interesa eres tú", sentAt: new Date(now.getTime() - 1_000) },
+    ], now).filter((memory) => memory.category === "BOUNDARY")).toEqual([]);
+  });
+});

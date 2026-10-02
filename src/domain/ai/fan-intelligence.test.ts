@@ -42,6 +42,41 @@ describe("fan intelligence", () => {
     ])).toMatchObject({ code: "REJECTION" });
   });
 
+  it("does not confuse exclusivity toward the creator with rejecting offers", () => {
+    expect(detectCommercialGuard([
+      { text: "No me interesa nadie más en Fanvue", sentAt: new Date("2026-09-19T10:00:00.000Z") },
+      { text: "La única que me interesa eres tú, sí quiero ver más", sentAt: new Date("2026-09-19T09:59:00.000Z") },
+    ])).toBeNull();
+  });
+
+  it("uses nearby messages to distinguish platform disinterest from creator rejection", () => {
+    expect(detectCommercialGuard([
+      { text: "Fanvue no me interesa realmente", sentAt: new Date("2026-09-19T10:00:00.000Z") },
+      { text: "Solo estoy aquí por ti, tú sí me interesas", sentAt: new Date("2026-09-19T09:59:00.000Z") },
+    ])).toBeNull();
+
+    expect(detectCommercialGuard([
+      { text: "No me interesa nadie más en Fanvue", sentAt: new Date("2026-09-19T10:00:00.000Z") },
+      { text: "No quiero nada de ti ni quiero comprar", sentAt: new Date("2026-09-19T09:59:00.000Z") },
+    ])).toMatchObject({ code: "REJECTION", evidence: "No quiero nada de ti ni quiero comprar" });
+  });
+
+  it("treats repeated platform and purchase rejection as a commercial boundary", () => {
+    expect(detectCommercialGuard([
+      { text: "Fanvue no me interesa", sentAt: new Date("2026-09-19T10:00:00.000Z") },
+      { text: "No quiero comprar nada aquí", sentAt: new Date("2026-09-19T09:59:00.000Z") },
+    ])).toMatchObject({ code: "REJECTION" });
+  });
+
+  it("requires a commercial object instead of treating a generic no me interesa as rejection", () => {
+    expect(detectCommercialGuard([
+      { text: "No me interesa el fútbol, prefiero hablar contigo", sentAt: now },
+    ])).toBeNull();
+    expect(detectCommercialGuard([
+      { text: "No me interesa comprar ese contenido", sentAt: now },
+    ])).toMatchObject({ code: "REJECTION" });
+  });
+
   it("keeps a social conversation in discovery instead of inventing PPV intent", () => {
     const messages = ["Tengo 25 años", "Vivo en Bogotá", "Jajaja, salí con amigas"].map((text, index) => ({
       text,

@@ -33,8 +33,8 @@ export function deriveFanMemory(messages: MemoryMessage[], now = new Date()): Fa
       category: "BOUNDARY",
       key: guard.code,
       value: guard.label,
-      type: "FACT",
-      confidence: 1,
+      type: "INFERENCE",
+      confidence: 0.9,
       evidence: guard.evidence,
       sourceMessageId: message?.id ?? null,
       observedAt: message?.sentAt ?? now,
@@ -55,4 +55,3 @@ export function deriveFanMemory(messages: MemoryMessage[], now = new Date()): Fa
   }
   return candidates;
 }
-
