@@ -5,6 +5,7 @@ const destinations = [
   ["Fans", "/fans"],
   ["Mensajes", "/messages"],
   ["Plantillas", "/templates"],
+  ["Content Library", "/content-library"],
   ["Flujos", "/workflows"],
   ["Automatización", "/automation"],
   ["Analítica", "/analytics"],

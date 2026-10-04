@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("las páginas principales no generan desbordamiento horizontal", async ({ page }) => {
-  for (const path of ["/", "/messages", "/workflows", "/analytics", "/settings"]) {
+  for (const path of ["/", "/messages", "/templates", "/content-library", "/content-library/packs", "/workflows", "/analytics", "/settings"]) {
     await page.goto(path);
     await expect(page.locator("main#main-content")).toBeVisible();
     const overflows = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);

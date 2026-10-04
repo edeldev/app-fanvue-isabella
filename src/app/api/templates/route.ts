@@ -9,6 +9,15 @@ const mediaSchema = z.array(z.object({ uuid: z.string().uuid(), name: z.string()
 const baseSchema = z.object({ name: z.string().trim().min(1).max(80), text: z.string().trim().max(5000), category: z.enum(["WELCOME", "FOLLOW_UP", "RENEWAL", "SALES", "VIP", "REACTIVATION", "GENERAL"]) });
 function parseJson(value: FormDataEntryValue | null) { try { return JSON.parse(String(value || "[]")) as unknown; } catch { return null; } }
 
+async function syncContentLibraryUsage(creatorId: string, templateId: string, media: Array<{ uuid: string }>) {
+  const assets = await prisma.content.findMany({ where: { creatorId, fanvueContentId: { in: media.map((item) => item.uuid) } }, select: { id: true, fanvueContentId: true } });
+  const contentIds = media.flatMap((item) => { const asset = assets.find((candidate) => candidate.fanvueContentId === item.uuid); return asset ? [asset.id] : []; });
+  await prisma.$transaction(async (transaction) => {
+    await transaction.contentTemplateAsset.deleteMany({ where: { templateId } });
+    if (contentIds.length) await transaction.contentTemplateAsset.createMany({ data: contentIds.map((contentId, position) => ({ templateId, contentId, position })) });
+  });
+}
+
 export async function POST(request: Request) {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
   if (!creatorId) redirect("/?fanvue=connection_required");
@@ -32,12 +41,14 @@ export async function POST(request: Request) {
     if (priceMinor !== null && !hasLockedPpvMedia(media.data, previewUuid)) redirect("/templates?error=ppv_requires_locked_media");
     const metadata = { media: media.data, priceMinor, previewUuid };
     if (action === "create") {
-      await prisma.messageTemplate.create({ data: { creatorId, ...data.data, type: media.data.length ? "MEDIA" : "TEXT", status: "ACTIVE", metadata } });
+      const template = await prisma.messageTemplate.create({ data: { creatorId, ...data.data, type: media.data.length ? "MEDIA" : "TEXT", status: "ACTIVE", metadata } });
+      await syncContentLibraryUsage(creatorId, template.id, media.data);
       redirect("/templates?saved=1");
     }
     if (action === "update" && id.success) {
       const updated = await prisma.messageTemplate.updateMany({ where: { id: id.data, creatorId }, data: { ...data.data, type: media.data.length ? "MEDIA" : "TEXT", metadata } });
       if (updated.count !== 1) redirect("/templates?error=not_found");
+      await syncContentLibraryUsage(creatorId, id.data, media.data);
       redirect("/templates?saved=1");
     }
     redirect("/templates?error=invalid");

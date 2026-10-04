@@ -125,6 +125,24 @@ enum ResumeStrategy {
   NEVER
 }
 
+enum ContentPackStatus {
+  DRAFT
+  READY
+  ACTIVE
+  ARCHIVED
+}
+
+enum ContentPackType {
+  PHOTO_PACK
+  VIDEO_PACK
+  PHOTO_VIDEO
+  PPV
+  SUBSCRIBER
+  PREMIUM
+  BUNDLE
+  CUSTOM
+}
+
 enum LogLevel {
   INFO
   WARN
@@ -152,6 +170,10 @@ model Creator {
   workflows              Workflow[]
   templates              MessageTemplate[]
   contents               Content[]
+  contentCategories      ContentCategory[]
+  contentCollections     ContentCollection[]
+  contentTags            ContentTag[]
+  contentPacks           ContentPack[]
   webhookEvents          WebhookEvent[]
   fanEvents              FanEvent[]
   automationLogs         AutomationLog[]
@@ -383,6 +405,7 @@ model MessageTemplate {
   updatedAt           DateTime       @updatedAt
   creator             Creator        @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   content             Content?       @relation(fields: [associatedContentId], references: [id], onDelete: SetNull)
+  contentAssets       ContentTemplateAsset[]
   messages            Message[]
   workflowSteps       WorkflowStep[]
 
@@ -397,14 +420,136 @@ model Content {
   name            String
   type            String
   metadata        Json?
+  isFavorite      Boolean           @default(false)
+  isArchived      Boolean           @default(false)
+  categoryId      String?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   creator         Creator           @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  category        ContentCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  collections     ContentCollectionAsset[]
+  tags            ContentAssetTag[]
+  packItems       ContentPackAsset[]
+  packCovers      ContentPack[]      @relation("ContentPackCover")
   purchases       Purchase[]
   templates       MessageTemplate[]
+  templateItems   ContentTemplateAsset[]
 
   @@unique([creatorId, fanvueContentId])
   @@index([creatorId, type])
+  @@index([creatorId, isArchived, createdAt])
+  @@index([creatorId, isFavorite, createdAt])
+  @@index([creatorId, categoryId])
+}
+
+model ContentCategory {
+  id        String    @id @default(cuid())
+  creatorId String
+  name      String
+  color     String    @default("violet")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  creator   Creator   @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  assets    Content[]
+  packs     ContentPack[]
+
+  @@unique([creatorId, name])
+  @@index([creatorId, name])
+}
+
+model ContentPack {
+  id             String            @id @default(cuid())
+  creatorId      String
+  categoryId     String?
+  coverContentId String?
+  name           String
+  description    String?
+  type           ContentPackType   @default(CUSTOM)
+  status         ContentPackStatus @default(DRAFT)
+  priceMinor     Int?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  creator        Creator           @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  category       ContentCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  cover          Content?          @relation("ContentPackCover", fields: [coverContentId], references: [id], onDelete: SetNull)
+  assets         ContentPackAsset[]
+
+  @@unique([creatorId, name])
+  @@index([creatorId, status, updatedAt])
+  @@index([creatorId, categoryId])
+}
+
+model ContentPackAsset {
+  packId    String
+  contentId String
+  position  Int
+  addedAt   DateTime    @default(now())
+  pack      ContentPack @relation(fields: [packId], references: [id], onDelete: Cascade)
+  content   Content     @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@id([packId, contentId])
+  @@unique([packId, position])
+  @@index([contentId])
+}
+
+model ContentCollection {
+  id          String                   @id @default(cuid())
+  creatorId   String
+  name        String
+  description String?
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  creator     Creator                  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  assets      ContentCollectionAsset[]
+
+  @@unique([creatorId, name])
+  @@index([creatorId, name])
+}
+
+model ContentCollectionAsset {
+  collectionId String
+  contentId    String
+  addedAt      DateTime          @default(now())
+  collection   ContentCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  content      Content           @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, contentId])
+  @@index([contentId])
+}
+
+model ContentTag {
+  id        String            @id @default(cuid())
+  creatorId String
+  name      String
+  createdAt DateTime          @default(now())
+  creator   Creator           @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  assets    ContentAssetTag[]
+
+  @@unique([creatorId, name])
+  @@index([creatorId, name])
+}
+
+model ContentAssetTag {
+  contentId String
+  tagId     String
+  content   Content    @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  tag       ContentTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contentId, tagId])
+  @@index([tagId])
+}
+
+model ContentTemplateAsset {
+  templateId String
+  contentId  String
+  position   Int
+  addedAt    DateTime        @default(now())
+  template   MessageTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  content    Content         @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@id([templateId, contentId])
+  @@unique([templateId, position])
+  @@index([contentId])
 }
 
 model Workflow {

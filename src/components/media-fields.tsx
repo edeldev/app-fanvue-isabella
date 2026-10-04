@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Expand, Eye, FolderOpen, ImageOff, ImagePlus, LoaderCircle, LockKeyhole, X } from "lucide-react";
+import { BookOpen, Expand, Eye, FolderOpen, ImageOff, ImagePlus, LoaderCircle, LockKeyhole, X } from "lucide-react";
 import { ExpandableImage } from "@/components/expandable-image";
 import { enqueueSnackbar } from "notistack";
 import { VaultMediaPicker } from "@/components/vault-media-picker";
 import { MediaLightbox } from "@/components/media-lightbox";
+import { ContentLibraryPicker } from "@/components/content-library/content-library-picker";
 
 export type AttachedMedia = {
   uuid: string;
@@ -31,6 +32,7 @@ export function MediaFields({
   const [previewUuid, setPreviewUuid] = useState(initialPreviewUuid ?? "");
   const [uploading, setUploading] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [resolvingMedia, setResolvingMedia] = useState(initialMedia.some((item) => !item.localUrl));
   const objectUrls = useRef(new Set<string>());
   const missingLockedMedia = Boolean(
@@ -144,6 +146,7 @@ export function MediaFields({
           />
         </label>
         <button type="button" disabled={uploading || media.length >= 10} onClick={() => setVaultOpen(true)} className="flex items-center gap-2 rounded-lg border border-violet-400/20 bg-violet-400/[.06] px-3 py-2 text-xs text-violet-300 hover:bg-violet-400/10 disabled:opacity-40"><FolderOpen className="size-4" />Elegir de la bóveda</button>
+        <button type="button" disabled={uploading || media.length >= 10} onClick={() => setLibraryOpen(true)} className="flex items-center gap-2 rounded-lg border border-fuchsia-400/20 bg-fuchsia-400/[.06] px-3 py-2 text-xs text-fuchsia-200 hover:bg-fuchsia-400/10 disabled:opacity-40"><BookOpen className="size-4" />Mi Content Library</button>
         {uploading ? (
           <span className="flex items-center gap-2 text-xs text-violet-300">
             <LoaderCircle className="size-3.5 animate-spin" />
@@ -236,6 +239,7 @@ export function MediaFields({
         </div>
       ) : null}
       {vaultOpen ? <VaultMediaPicker selectedUuids={media.map((item) => item.uuid)} remaining={10 - media.length} onClose={() => setVaultOpen(false)} onAdd={(incoming) => { setMedia((current) => [...current, ...incoming].slice(0, 10)); setVaultOpen(false); enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo agregado" : "archivos agregados"} desde la bóveda.`, { variant: "success" }); }} /> : null}
+      {libraryOpen ? <ContentLibraryPicker selectedUuids={media.map((item) => item.uuid)} remaining={10 - media.length} onClose={() => setLibraryOpen(false)} onAdd={(incoming, suggestedPriceMinor) => { setMedia((current) => [...new Map([...current, ...incoming].map((item) => [item.uuid, item])).values()].slice(0, 10)); if (!price && suggestedPriceMinor) setPrice((suggestedPriceMinor / 100).toFixed(2)); setLibraryOpen(false); enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo agregado" : "archivos agregados"} desde Content Library.`, { variant: "success" }); }} /> : null}
     </div>
   );
 }
