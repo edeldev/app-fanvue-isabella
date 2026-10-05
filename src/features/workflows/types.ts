@@ -39,6 +39,7 @@ export interface TemplateOption {
   type: string;
   priceMinor: number | null;
   previewUuid: string | null;
+  mediaCount: number;
 }
 
 export interface FanOption {

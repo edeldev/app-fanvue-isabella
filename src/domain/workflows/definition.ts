@@ -20,9 +20,6 @@ export const workflowStepInputSchema = z.object({
   messageTemplateId: z.string().min(1).nullable().optional(),
   config: z.record(z.string(), z.unknown()).default({}),
 }).superRefine((step, context) => {
-  if (["SEND_MESSAGE", "SEND_PPV"].includes(step.type) && !step.messageTemplateId) {
-    context.addIssue({ code: "custom", path: ["messageTemplateId"], message: "Selecciona una plantilla." });
-  }
   if (["SEND_MESSAGE", "SEND_PPV"].includes(step.type)) {
     const mode = step.config.replyPauseMode;
     if (mode !== undefined && !["GLOBAL", "CUSTOM", "DISABLED"].includes(String(mode))) {
@@ -31,6 +28,21 @@ export const workflowStepInputSchema = z.object({
     if (mode === "CUSTOM") {
       const result = z.number().int().min(1).max(43_200).safeParse(step.config.replySilenceMinutes);
       if (!result.success) context.addIssue({ code: "custom", path: ["config", "replySilenceMinutes"], message: "El silencio debe estar entre 1 minuto y 30 días." });
+    }
+    if (!step.messageTemplateId) {
+      const text = typeof step.config.manualText === "string" ? step.config.manualText.trim() : "";
+      const media = Array.isArray(step.config.manualMedia) ? step.config.manualMedia.filter((item) => typeof item === "object" && item !== null && !Array.isArray(item) && typeof (item as Record<string, unknown>).uuid === "string") : [];
+      if (step.type === "SEND_MESSAGE" && !text && media.length === 0) {
+        context.addIssue({ code: "custom", path: ["config", "manualText"], message: "Escribe un mensaje o agrega contenido multimedia." });
+      }
+      if (step.type === "SEND_PPV") {
+        const price = step.config.manualPriceMinor;
+        const previewUuid = typeof step.config.manualPreviewUuid === "string" ? step.config.manualPreviewUuid : null;
+        const mediaUuids = media.map((item) => String((item as Record<string, unknown>).uuid));
+        if (typeof price !== "number" || !Number.isInteger(price) || price < 300) context.addIssue({ code: "custom", path: ["config", "manualPriceMinor"], message: "El PPV manual necesita un precio mínimo de $3.00." });
+        if (!media.length) context.addIssue({ code: "custom", path: ["config", "manualMedia"], message: "El PPV manual necesita al menos una foto o video bloqueado." });
+        if (previewUuid && (!mediaUuids.includes(previewUuid) || mediaUuids.every((uuid) => uuid === previewUuid))) context.addIssue({ code: "custom", path: ["config", "manualPreviewUuid"], message: "La vista gratuita debe pertenecer al PPV y debe quedar contenido bloqueado." });
+      }
     }
   }
   if (step.type === "WAIT") {

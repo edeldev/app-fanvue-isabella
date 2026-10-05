@@ -9,6 +9,11 @@ describe("workflowStepContext", () => {
     expect(workflowStepContext({ name: "Mensaje", type: "SEND_MESSAGE", messageTemplateId: "welcome", config: {} }, templates, workflows)).toBe("Bienvenida personal");
   });
 
+  it("describes manual message and PPV steps", () => {
+    expect(workflowStepContext({ name: "Manual", type: "SEND_MESSAGE", config: { manualText: "Hola" } }, templates, workflows)).toBe("Mensaje manual");
+    expect(workflowStepContext({ name: "PPV", type: "SEND_PPV", config: { manualPriceMinor: 500 } }, templates, workflows)).toBe("PPV manual · $5.00");
+  });
+
   it("formats wait durations", () => {
     expect(workflowStepContext({ name: "Espera", type: "WAIT", config: { durationMinutes: 120 } }, templates, workflows)).toBe("2 horas");
     expect(workflowStepContext({ name: "Espera", type: "WAIT", config: { durationMinutes: 2880 } }, templates, workflows)).toBe("2 días");

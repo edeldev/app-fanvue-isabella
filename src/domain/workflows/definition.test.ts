@@ -36,6 +36,28 @@ describe("workflowDefinitionInputSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("accepts a manual message without a template", () => {
+    const result = workflowDefinitionInputSchema.safeParse({
+      name: "Flujo rápido", priority: 1, isPrimary: true,
+      steps: [
+        { name: "Mensaje manual", type: "SEND_MESSAGE", config: { stepKey: "message", manualText: "Hola {{nombre}}", manualMedia: [], replyPauseMode: "DISABLED" } },
+        { name: "Finalizar", type: "END", config: { stepKey: "end" } },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a manual PPV without a free preview", () => {
+    const result = workflowDefinitionInputSchema.safeParse({
+      name: "PPV rápido", priority: 1, isPrimary: true,
+      steps: [
+        { name: "PPV manual", type: "SEND_PPV", config: { stepKey: "ppv", manualText: "Tengo algo para ti", manualMedia: [{ uuid: "b908a82f-3b73-480b-b5a8-5d8d051c2d6b", name: "Foto", mediaType: "image" }], manualPriceMinor: 500, manualPreviewUuid: null, replyPauseMode: "DISABLED" } },
+        { name: "Finalizar", type: "END", config: { stepKey: "end" } },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("requires at least one enabled day when a send window is provided", () => {
     const result = workflowDefinitionInputSchema.safeParse({
       name: "Horario inválido", priority: 1, isPrimary: true,

@@ -32,8 +32,10 @@ async function assertReferencesBelongToCreator(
     const media = Array.isArray(metadata.media) ? metadata.media : [];
     const price = typeof metadata.priceMinor === "number" ? metadata.priceMinor : null;
     const preview = typeof metadata.previewUuid === "string" ? metadata.previewUuid : null;
-    const previewExists = preview && media.some((item) => typeof item === "object" && item && "uuid" in item && item.uuid === preview);
-    if (step.type === "SEND_PPV" && (!price || price < 300 || !previewExists || media.length < 2)) throw new Error("WORKFLOW_PPV_TEMPLATE_INVALID");
+    const mediaUuids = media.flatMap((item) => typeof item === "object" && item && "uuid" in item && typeof item.uuid === "string" ? [item.uuid] : []);
+    const previewExists = preview ? mediaUuids.includes(preview) : true;
+    const hasLockedMedia = mediaUuids.some((uuid) => uuid !== preview);
+    if (step.type === "SEND_PPV" && (!price || price < 300 || !previewExists || !hasLockedMedia)) throw new Error("WORKFLOW_PPV_TEMPLATE_INVALID");
     if (step.type === "SEND_MESSAGE" && price) throw new Error("WORKFLOW_MESSAGE_TEMPLATE_HAS_PRICE");
   }
 }

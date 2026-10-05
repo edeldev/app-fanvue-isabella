@@ -33,7 +33,9 @@ export function workflowStepContext(
   if (step.type === "SEND_MESSAGE" || step.type === "SEND_PPV") {
     return step.messageTemplateId
       ? templateNames.get(step.messageTemplateId) ?? "Plantilla no disponible"
-      : "Sin plantilla";
+      : step.type === "SEND_PPV"
+        ? `PPV manual${typeof step.config.manualPriceMinor === "number" ? ` · $${(step.config.manualPriceMinor / 100).toFixed(2)}` : ""}`
+        : "Mensaje manual";
   }
   if (step.type === "WAIT") return formatDuration(Number(step.config.durationMinutes));
   if (step.type === "WAIT_FOR_REPLY") return `Hasta ${formatDuration(Number(step.config.timeoutMinutes))} por una respuesta`;

@@ -230,10 +230,10 @@ async function executeCondition(enrollment: LoadedEnrollment, step: NonNullable<
 }
 
 async function executeMessage(enrollment: NonNullable<Awaited<ReturnType<typeof loadEnrollment>>>, step: NonNullable<StepRecord>, executionId: string, now: Date) {
-  if (!step.messageTemplate || step.messageTemplate.status !== "ACTIVE") throw new Error("WORKFLOW_TEMPLATE_UNAVAILABLE");
-  const metadata = readTemplateMetadata(step.messageTemplate.metadata);
+  if (step.messageTemplateId && (!step.messageTemplate || step.messageTemplate.status !== "ACTIVE")) throw new Error("WORKFLOW_TEMPLATE_UNAVAILABLE");
+  const metadata = step.messageTemplate ? readTemplateMetadata(step.messageTemplate.metadata) : readManualStepMetadata(step.config);
   if (metadata.priceMinor) throw new Error("WORKFLOW_TEMPLATE_REQUIRES_PPV_STEP");
-  const text = renderTemplateVariables(step.messageTemplate.text, enrollment.fan);
+  const text = renderTemplateVariables(step.messageTemplate?.text ?? metadata.text, enrollment.fan);
   if (!text && metadata.mediaUuids.length === 0) throw new Error("WORKFLOW_TEMPLATE_EMPTY");
 
   const reservation = await prepareWorkflowSend(enrollment, step, executionId, now);
@@ -262,25 +262,25 @@ async function executeMessage(enrollment: NonNullable<Awaited<ReturnType<typeof 
   await prisma.$transaction([
     prisma.message.upsert({
       where: { creatorId_fanvueMessageId: { creatorId: enrollment.creatorId, fanvueMessageId: sent.messageUuid } },
-      update: { text, templateId: step.messageTemplate.id, status: "SENT", mediaUuids: metadata.mediaUuids },
-      create: { creatorId: enrollment.creatorId, conversationId: conversation.id, fanvueMessageId: sent.messageUuid, templateId: step.messageTemplate.id, direction: "OUTBOUND", status: "SENT", text, mediaUuids: metadata.mediaUuids, sentAt: now },
+      update: { text, templateId: step.messageTemplate?.id ?? null, status: "SENT", mediaUuids: metadata.mediaUuids },
+      create: { creatorId: enrollment.creatorId, conversationId: conversation.id, fanvueMessageId: sent.messageUuid, templateId: step.messageTemplate?.id ?? null, direction: "OUTBOUND", status: "SENT", text, mediaUuids: metadata.mediaUuids, sentAt: now },
     }),
     prisma.automationExecution.update({ where: { id: executionId }, data: { status: "SUCCESS", decision: "SEND", reason: `Mensaje ${sent.messageUuid} enviado.`, evidence: { fanvueMessageId: sent.messageUuid }, finishedAt: new Date() } }),
     prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { ...schedule, lastRunAt: now, lastResult: { stepId: step.id, fanvueMessageId: sent.messageUuid } } }),
-    prisma.automationLog.create({ data: { creatorId: enrollment.creatorId, fanId: enrollment.fanId, enrollmentId: enrollment.id, executionId, eventType: "WORKFLOW_MESSAGE_SENT", explanation: `${step.name}: plantilla ${step.messageTemplate.name} enviada a ${enrollment.fan.displayName || enrollment.fan.username || "fan"}.`, metadata: { templateId: step.messageTemplate.id, fanvueMessageId: sent.messageUuid } } }),
+    prisma.automationLog.create({ data: { creatorId: enrollment.creatorId, fanId: enrollment.fanId, enrollmentId: enrollment.id, executionId, eventType: "WORKFLOW_MESSAGE_SENT", explanation: `${step.name}: ${step.messageTemplate ? `plantilla ${step.messageTemplate.name}` : "mensaje manual"} enviado a ${enrollment.fan.displayName || enrollment.fan.username || "fan"}.`, metadata: { templateId: step.messageTemplate?.id ?? null, fanvueMessageId: sent.messageUuid } } }),
   ]);
   if (reservation.reservationId) await markWorkflowSendSucceeded(reservation.reservationId, now);
   return { outcome: "MESSAGE_SENT", nextStep: next?.name ?? null, shouldContinue: schedule.status === "ACTIVE" };
 }
 
 async function executePpv(enrollment: LoadedEnrollment, step: NonNullable<StepRecord>, executionId: string, now: Date) {
-  if (!step.messageTemplate || step.messageTemplate.status !== "ACTIVE") throw new Error("WORKFLOW_TEMPLATE_UNAVAILABLE");
-  const metadata = readTemplateMetadata(step.messageTemplate.metadata);
+  if (step.messageTemplateId && (!step.messageTemplate || step.messageTemplate.status !== "ACTIVE")) throw new Error("WORKFLOW_TEMPLATE_UNAVAILABLE");
+  const metadata = step.messageTemplate ? readTemplateMetadata(step.messageTemplate.metadata) : readManualStepMetadata(step.config);
   if (!metadata.priceMinor || metadata.priceMinor < 300) throw new Error("WORKFLOW_PPV_PRICE_INVALID");
-  if (!metadata.previewUuid || !metadata.mediaUuids.includes(metadata.previewUuid)) throw new Error("WORKFLOW_PPV_PREVIEW_REQUIRED");
+  if (metadata.previewUuid && !metadata.mediaUuids.includes(metadata.previewUuid)) throw new Error("WORKFLOW_PPV_PREVIEW_INVALID");
   const lockedMediaUuids = metadata.mediaUuids.filter((uuid) => uuid !== metadata.previewUuid);
   if (!lockedMediaUuids.length) throw new Error("WORKFLOW_PPV_LOCKED_MEDIA_REQUIRED");
-  const text = renderTemplateVariables(step.messageTemplate.text, enrollment.fan);
+  const text = renderTemplateVariables(step.messageTemplate?.text ?? metadata.text, enrollment.fan);
   const reservation = await prepareWorkflowSend(enrollment, step, executionId, now);
   if (!reservation.allowed) return reservation.result;
   const token = await getValidFanvueAccessToken(enrollment.creatorId);
@@ -305,12 +305,12 @@ async function executePpv(enrollment: LoadedEnrollment, step: NonNullable<StepRe
   await prisma.$transaction([
     prisma.message.upsert({
       where: { creatorId_fanvueMessageId: { creatorId: enrollment.creatorId, fanvueMessageId: sent.messageUuid } },
-      update: { text, templateId: step.messageTemplate.id, status: "SENT", mediaUuids: metadata.mediaUuids, mediaPreviewUuid: metadata.previewUuid, priceMinor: metadata.priceMinor },
-      create: { creatorId: enrollment.creatorId, conversationId: conversation.id, fanvueMessageId: sent.messageUuid, templateId: step.messageTemplate.id, direction: "OUTBOUND", status: "SENT", text, mediaUuids: metadata.mediaUuids, mediaPreviewUuid: metadata.previewUuid, priceMinor: metadata.priceMinor, sentAt: now },
+      update: { text, templateId: step.messageTemplate?.id ?? null, status: "SENT", mediaUuids: metadata.mediaUuids, mediaPreviewUuid: metadata.previewUuid, priceMinor: metadata.priceMinor },
+      create: { creatorId: enrollment.creatorId, conversationId: conversation.id, fanvueMessageId: sent.messageUuid, templateId: step.messageTemplate?.id ?? null, direction: "OUTBOUND", status: "SENT", text, mediaUuids: metadata.mediaUuids, mediaPreviewUuid: metadata.previewUuid, priceMinor: metadata.priceMinor, sentAt: now },
     }),
     prisma.automationExecution.update({ where: { id: executionId }, data: { status: "SUCCESS", decision: "SEND", reason: `PPV ${sent.messageUuid} enviado.`, evidence: { fanvueMessageId: sent.messageUuid, priceMinor: metadata.priceMinor, previewUuid: metadata.previewUuid }, finishedAt: new Date() } }),
     prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { ...schedule, lastRunAt: now, lastResult: { stepId: step.id, fanvueMessageId: sent.messageUuid, priceMinor: metadata.priceMinor } } }),
-    prisma.automationLog.create({ data: { creatorId: enrollment.creatorId, fanId: enrollment.fanId, enrollmentId: enrollment.id, executionId, eventType: "WORKFLOW_PPV_SENT", explanation: `${step.name}: PPV de $${(metadata.priceMinor / 100).toFixed(2)} enviado a ${enrollment.fan.displayName || enrollment.fan.username || "fan"}.`, metadata: { templateId: step.messageTemplate.id, fanvueMessageId: sent.messageUuid, priceMinor: metadata.priceMinor } } }),
+    prisma.automationLog.create({ data: { creatorId: enrollment.creatorId, fanId: enrollment.fanId, enrollmentId: enrollment.id, executionId, eventType: "WORKFLOW_PPV_SENT", explanation: `${step.name}: PPV ${step.messageTemplate ? `con plantilla ${step.messageTemplate.name}` : "manual"} de $${(metadata.priceMinor / 100).toFixed(2)} enviado a ${enrollment.fan.displayName || enrollment.fan.username || "fan"}.`, metadata: { templateId: step.messageTemplate?.id ?? null, fanvueMessageId: sent.messageUuid, priceMinor: metadata.priceMinor } } }),
   ]);
   if (reservation.reservationId) await markWorkflowSendSucceeded(reservation.reservationId, now);
   return { outcome: "PPV_SENT", nextStep: next?.name ?? null, shouldContinue: schedule.status === "ACTIVE" };
@@ -409,13 +409,25 @@ function nextStep(steps: { id: string; position: number; name: string; type: str
 }
 
 function readTemplateMetadata(value: Prisma.JsonValue | null) {
-  if (typeof value !== "object" || !value || Array.isArray(value)) return { mediaUuids: [], priceMinor: null, previewUuid: null };
+  if (typeof value !== "object" || !value || Array.isArray(value)) return { text: "", mediaUuids: [], priceMinor: null, previewUuid: null };
   const metadata = value as Record<string, unknown>;
   const media = Array.isArray(metadata.media) ? metadata.media : [];
   return {
+    text: "",
     mediaUuids: media.flatMap((item) => typeof item === "object" && item && "uuid" in item && typeof item.uuid === "string" ? [item.uuid] : []),
     priceMinor: typeof metadata.priceMinor === "number" ? metadata.priceMinor : null,
     previewUuid: typeof metadata.previewUuid === "string" ? metadata.previewUuid : null,
+  };
+}
+
+function readManualStepMetadata(value: Prisma.JsonValue | null) {
+  const config = jsonRecord(value);
+  const media = Array.isArray(config.manualMedia) ? config.manualMedia : [];
+  return {
+    text: typeof config.manualText === "string" ? config.manualText : "",
+    mediaUuids: media.flatMap((item) => typeof item === "object" && item && !Array.isArray(item) && "uuid" in item && typeof item.uuid === "string" ? [item.uuid] : []),
+    priceMinor: typeof config.manualPriceMinor === "number" ? config.manualPriceMinor : null,
+    previewUuid: typeof config.manualPreviewUuid === "string" ? config.manualPreviewUuid : null,
   };
 }
 

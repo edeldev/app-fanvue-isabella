@@ -20,10 +20,14 @@ export function MediaFields({
   initialMedia = [],
   initialPriceMinor = null,
   initialPreviewUuid = null,
+  onValueChange,
+  priceEnabled = true,
 }: {
   initialMedia?: AttachedMedia[];
   initialPriceMinor?: number | null;
   initialPreviewUuid?: string | null;
+  onValueChange?: (value: { media: AttachedMedia[]; priceMinor: number | null; previewUuid: string | null }) => void;
+  priceEnabled?: boolean;
 }) {
   const [media, setMedia] = useState<AttachedMedia[]>(initialMedia);
   const [price, setPrice] = useState(
@@ -35,6 +39,7 @@ export function MediaFields({
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [resolvingMedia, setResolvingMedia] = useState(initialMedia.some((item) => !item.localUrl));
   const objectUrls = useRef(new Set<string>());
+  const onValueChangeRef = useRef(onValueChange);
   const missingLockedMedia = Boolean(
     price && previewUuid && media.every((item) => item.uuid === previewUuid),
   );
@@ -43,6 +48,19 @@ export function MediaFields({
     const urls = objectUrls.current;
     return () => urls.forEach((url) => URL.revokeObjectURL(url));
   }, []);
+
+  useEffect(() => {
+    onValueChangeRef.current = onValueChange;
+  }, [onValueChange]);
+
+  useEffect(() => {
+    const numericPrice = Number(price);
+    onValueChangeRef.current?.({
+      media: media.map(({ uuid, name, mediaType, localUrl, thumbnailUrl }) => ({ uuid, name, mediaType, localUrl, thumbnailUrl })),
+      priceMinor: price && Number.isFinite(numericPrice) ? Math.round(numericPrice * 100) : null,
+      previewUuid: price && previewUuid ? previewUuid : null,
+    });
+  }, [media, previewUuid, price]);
 
   useEffect(() => {
     const unresolved = initialMedia
@@ -158,7 +176,7 @@ export function MediaFields({
           </span>
         )}
       </div>
-      {media.length > 0 ? (
+      {media.length > 0 && priceEnabled ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {media.map((item, index) => {
             const preview = Boolean(price && previewUuid === item.uuid);

@@ -161,7 +161,7 @@ function translateError(message: string) {
     WORKFLOW_TEMPLATE_NOT_FOUND: "Una plantilla seleccionada no existe.",
     WORKFLOW_TARGET_NOT_FOUND: "El flujo de destino debe estar publicado y ser principal.",
     WORKFLOW_IS_RUNNING: "Cancela o finaliza todos los enrollments activos antes de eliminar este workflow.",
-    WORKFLOW_PPV_TEMPLATE_INVALID: "El PPV necesita una plantilla con precio, vista gratuita y al menos un archivo bloqueado.",
+    WORKFLOW_PPV_TEMPLATE_INVALID: "El PPV necesita una plantilla con precio y al menos una foto o video bloqueado. La vista gratuita es opcional.",
     WORKFLOW_MESSAGE_TEMPLATE_HAS_PRICE: "Enviar mensaje requiere una plantilla sin precio; usa Enviar PPV para contenido de pago.",
   };
   return errors[message] ?? message;
