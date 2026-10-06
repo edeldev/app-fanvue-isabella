@@ -10,6 +10,7 @@ import { isInsideSendWindow, nextSendWindowOpening } from "@/domain/workflows/se
 import { markWorkflowSendFailed, markWorkflowSendSucceeded, reserveWorkflowSend } from "./send-rate-limit";
 import { maximumWorkflowAttempts, workflowRetryDecision } from "@/domain/workflows/retry-policy";
 import { sanitizeErrorMessage } from "@/lib/logger";
+import { scheduleWorkflowStep } from "@/domain/workflows/step-schedule";
 
 type LoadedEnrollment = NonNullable<Awaited<ReturnType<typeof loadEnrollment>>>;
 type StepRecord = LoadedEnrollment["currentStep"];
@@ -363,9 +364,7 @@ async function finishLocalStep(enrollment: NonNullable<Awaited<ReturnType<typeof
 }
 
 function scheduleNext(step: { id: string; type: string; config: Prisma.JsonValue } | undefined, now: Date) {
-  if (!step) return { status: "COMPLETED" as const, currentStepId: null, nextRunAt: null, completedAt: now };
-  if (step.type !== "WAIT") return { status: "ACTIVE" as const, currentStepId: step.id, nextRunAt: now, completedAt: null };
-  return { status: "WAITING" as const, currentStepId: step.id, nextRunAt: scheduleWait(step, now).nextRunAt, completedAt: null };
+  return scheduleWorkflowStep(step, now);
 }
 
 function scheduleWait(step: { config: Prisma.JsonValue }, now: Date) {

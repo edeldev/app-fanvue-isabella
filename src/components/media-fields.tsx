@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { createPortal } from "react-dom";
 import { BookOpen, Expand, Eye, FolderOpen, ImageOff, ImagePlus, LoaderCircle, LockKeyhole, X } from "lucide-react";
 import { ExpandableImage } from "@/components/expandable-image";
 import { enqueueSnackbar } from "notistack";
-import { VaultMediaPicker } from "@/components/vault-media-picker";
+import { VaultMediaPicker as VaultMediaPickerContent } from "@/components/vault-media-picker";
 import { MediaLightbox } from "@/components/media-lightbox";
-import { ContentLibraryPicker } from "@/components/content-library/content-library-picker";
+import { ContentLibraryPicker as ContentLibraryPickerContent } from "@/components/content-library/content-library-picker";
 
 export type AttachedMedia = {
   uuid: string;
@@ -176,7 +177,7 @@ export function MediaFields({
           </span>
         )}
       </div>
-      {media.length > 0 && priceEnabled ? (
+      {media.length > 0 ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {media.map((item, index) => {
             const preview = Boolean(price && previewUuid === item.uuid);
@@ -206,7 +207,7 @@ export function MediaFields({
                 >
                   <X className="size-3.5" />
                 </button>
-                {price ? (
+                {priceEnabled && price ? (
                   <button
                     type="button"
                     onClick={() => setPreviewUuid(preview ? "" : item.uuid)}
@@ -229,7 +230,7 @@ export function MediaFields({
           })}
         </div>
       ) : null}
-      {media.length > 0 ? (
+      {media.length > 0 && priceEnabled ? (
         <div className="rounded-xl border border-amber-400/15 bg-amber-400/[.04] p-3">
           <label className="text-xs font-medium text-amber-200">
             Precio PPV en USD
@@ -267,4 +268,12 @@ function VideoPreview({ src, poster, name }: { src: string; poster?: string; nam
   const [state, setState] = useState<{ src: string; status: "loading" | "loaded" | "error" }>({ src, status: "loading" });
   const status = state.src === src ? state.status : "loading";
   return <><button type="button" disabled={status !== "loaded"} onClick={() => setOpen(true)} aria-label={`Ampliar ${name}`} className="group relative block h-28 w-full overflow-hidden bg-black disabled:cursor-default">{status === "loading" ? <span className="absolute inset-0 z-10 grid animate-pulse place-items-center bg-gradient-to-br from-white/[.06] via-white/[.025] to-transparent text-zinc-500"><span className="text-center"><LoaderCircle className="mx-auto mb-2 size-5 animate-spin" /><span className="text-[10px]">Cargando video…</span></span></span> : null}{status === "error" ? <span className="absolute inset-0 z-10 grid place-items-center text-zinc-600"><span className="text-center"><ImageOff className="mx-auto mb-2 size-5" /><span className="text-[10px]">Vista previa no disponible</span></span></span> : null}<video src={src} poster={poster} muted playsInline preload="metadata" aria-label={name} onLoadedData={() => setState({ src, status: "loaded" })} onError={() => setState({ src, status: "error" })} className={`pointer-events-none h-28 w-full object-contain transition-opacity duration-300 ${status === "loaded" ? "opacity-100" : "opacity-0"}`} /><span className="absolute right-2 top-2 grid size-8 place-items-center rounded-full bg-black/65 text-white opacity-0 backdrop-blur transition group-hover:opacity-100 group-focus-visible:opacity-100"><Expand className="size-4" /></span></button>{open ? <MediaLightbox src={src} type="video" name={name} poster={poster} onClose={() => setOpen(false)} /> : null}</>;
+}
+
+function ContentLibraryPicker(props: ComponentProps<typeof ContentLibraryPickerContent>) {
+  return createPortal(<ContentLibraryPickerContent {...props} />, document.body);
+}
+
+function VaultMediaPicker(props: ComponentProps<typeof VaultMediaPickerContent>) {
+  return createPortal(<VaultMediaPickerContent {...props} />, document.body);
 }
