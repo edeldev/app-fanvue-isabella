@@ -14,6 +14,7 @@ export async function startEnrollment(creatorId: string, fanId: string, workflow
     prisma.workflow.findFirst({ where: { id: workflowId, creatorId, status: "PUBLISHED", isPrimary: true }, include: { steps: { orderBy: { position: "asc" }, take: 1 } } }),
   ]);
   if (!fan) throw new Error("ENROLLMENT_FAN_NOT_FOUND");
+  if (fan.doNotMessage) throw new Error("FAN_DO_NOT_MESSAGE");
   if (!workflow || !workflow.steps[0]) throw new Error("ENROLLMENT_WORKFLOW_NOT_FOUND");
 
   const result = await prisma.$transaction(async (transaction) => {

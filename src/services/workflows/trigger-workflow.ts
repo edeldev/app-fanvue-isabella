@@ -4,8 +4,8 @@ import { executeEnrollmentUntilBlocked } from "./execute-enrollment";
 import { startEnrollment } from "./manage-enrollment";
 
 export async function triggerWorkflowForFan(creatorId: string, fanId: string, triggerEvent: WorkflowTrigger) {
-  const fan = await prisma.fan.findFirst({ where: { id: fanId, creatorId }, select: { automationPaused: true } });
-  if (!fan || fan.automationPaused) return { outcome: fan ? "FAN_AUTOMATION_PAUSED" : "FAN_NOT_FOUND" } as const;
+  const fan = await prisma.fan.findFirst({ where: { id: fanId, creatorId }, select: { automationPaused: true, doNotMessage: true } });
+  if (!fan || fan.automationPaused || fan.doNotMessage) return { outcome: !fan ? "FAN_NOT_FOUND" : fan.doNotMessage ? "FAN_DO_NOT_MESSAGE" : "FAN_AUTOMATION_PAUSED" } as const;
   const workflow = await prisma.workflow.findFirst({
     where: { creatorId, status: "PUBLISHED", isPrimary: true, triggerEvent },
     orderBy: [{ priority: "desc" }, { publishedAt: "desc" }],

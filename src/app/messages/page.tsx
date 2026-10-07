@@ -167,6 +167,14 @@ export default async function MessagesPage({ searchParams }: Props) {
   const selected = selectedConversation ?? (selectedFan
     ? { id: `new-${selectedFan.id}`, unreadMessagesCount: 0, fan: selectedFan }
     : null);
+  const scheduledMessages = creatorId && selected
+    ? await prisma.scheduledMessage.findMany({
+        where: { creatorId, fanId: selected.fan.id, status: "PENDING" },
+        orderBy: { scheduledAt: "asc" },
+        take: 10,
+        select: { id: true, text: true, scheduledAt: true, priceMinor: true, media: true },
+      })
+    : [];
   let messages: Array<{
     uuid: string;
     text: string | null;
@@ -528,6 +536,14 @@ export default async function MessagesPage({ searchParams }: Props) {
                       selected.fan.displayName || selected.fan.username || "Fan"
                     }
                     username={selected.fan.username || ""}
+                    doNotMessage={selected.fan.doNotMessage}
+                    scheduledMessages={scheduledMessages.map((message) => ({
+                      id: message.id,
+                      text: message.text,
+                      scheduledAt: message.scheduledAt.toISOString(),
+                      priceMinor: message.priceMinor,
+                      mediaCount: Array.isArray(message.media) ? message.media.length : 0,
+                    }))}
                     templates={templates.map((template) => ({
                       ...template,
                       ...readTemplateMetadata(template.metadata),

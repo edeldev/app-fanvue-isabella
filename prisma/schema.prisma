@@ -182,6 +182,7 @@ model Creator {
   fanTags                FanTag[]
   fanNotes               FanNote[]
   fanMemories            FanMemory[]
+  scheduledMessages      ScheduledMessage[]
 }
 
 model Fan {
@@ -212,6 +213,9 @@ model Fan {
   lifecycleOverride        FanLifecycleStage?
   automationPaused         Boolean               @default(false)
   automationPauseReason    String?
+  doNotMessage             Boolean               @default(false)
+  doNotMessageReason       String?
+  doNotMessageAt           DateTime?
   followedAt               DateTime?
   acquisitionSource        String?
   acquisitionMetadata      Json?
@@ -228,12 +232,14 @@ model Fan {
   tags                     FanTag[]
   notes                    FanNote[]
   memories                 FanMemory[]
+  scheduledMessages        ScheduledMessage[]
 
   @@unique([creatorId, fanvueUserId])
   @@index([creatorId, isFollower])
   @@index([creatorId, lastActivityAt])
   @@index([creatorId, lifecycleStage, lastActivityAt])
   @@index([creatorId, isArchived, lastActivityAt])
+  @@index([creatorId, doNotMessage])
 }
 
 model Tag {
@@ -408,9 +414,35 @@ model MessageTemplate {
   contentAssets       ContentTemplateAsset[]
   messages            Message[]
   workflowSteps       WorkflowStep[]
+  scheduledMessages  ScheduledMessage[]
 
   @@unique([creatorId, name])
   @@index([creatorId, category, status])
+}
+
+model ScheduledMessage {
+  id               String           @id @default(cuid())
+  creatorId        String
+  fanId            String
+  templateId       String?
+  status           String           @default("PENDING")
+  text             String?
+  media             Json?
+  mediaPreviewUuid String?
+  priceMinor       Int?
+  scheduledAt      DateTime
+  sentAt           DateTime?
+  fanvueMessageId  String?
+  attempts         Int              @default(0)
+  lastError        String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  creator          Creator          @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  fan              Fan              @relation(fields: [fanId], references: [id], onDelete: Cascade)
+  template         MessageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([status, scheduledAt])
+  @@index([creatorId, fanId, scheduledAt])
 }
 
 model Content {

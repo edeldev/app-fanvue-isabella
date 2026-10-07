@@ -9,7 +9,7 @@ import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
 import { consumeRateLimit, rateLimitPolicies } from "@/lib/rate-limit";
 
 const mediaSchema = z.array(z.object({ uuid: z.string().uuid(), name: z.string(), mediaType: z.enum(["image", "video"]) })).max(10);
-const formSchema = z.object({ fanUuid: z.string().uuid(), text: z.string().trim().max(5000), templateId: z.string().optional(), price: z.string(), previewUuid: z.string().optional() });
+const formSchema = z.object({ fanUuid: z.string().uuid(), text: z.string().trim().max(5000), templateId: z.string().optional(), price: z.string(), previewUuid: z.string().optional(), scheduledAt: z.string().datetime().optional() });
 const audience = [{ isFollower: true }, { isSubscriber: true }, { isExpiredSubscriber: true }];
 function parseJson(value: FormDataEntryValue | null) { try { return JSON.parse(String(value || "[]")) as unknown; } catch { return null; } }
 
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   const rateLimit = await consumeRateLimit(creatorId, rateLimitPolicies.messageSend);
   if (!rateLimit.allowed) redirect(`/messages?error=rate_limited&retryAfter=${rateLimit.retryAfterSeconds}`);
   const form = await request.formData();
-  const parsed = formSchema.safeParse({ fanUuid: form.get("fanUuid"), text: form.get("text") || "", templateId: form.get("templateId") || undefined, price: String(form.get("price") || ""), previewUuid: form.get("previewUuid") || undefined });
+  const parsed = formSchema.safeParse({ fanUuid: form.get("fanUuid"), text: form.get("text") || "", templateId: form.get("templateId") || undefined, price: String(form.get("price") || ""), previewUuid: form.get("previewUuid") || undefined, scheduledAt: form.get("scheduledAt") || undefined });
   if (!parsed.success) redirect("/messages?error=invalid_message");
   const media = mediaSchema.safeParse(parseJson(form.get("mediaJson")));
   if (!media.success || (!parsed.data.text && media.data.length === 0)) redirect("/messages?error=invalid_message");
@@ -37,11 +37,32 @@ export async function POST(request: Request) {
     where: { creatorId, fanvueUserId: parsed.data.fanUuid, isCreatorAccount: false, OR: audience },
   });
   if (!fan) redirect("/messages?error=invalid_recipient");
+  if (fan.doNotMessage) redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&error=do_not_message`);
   const template = parsed.data.templateId ? await prisma.messageTemplate.findFirst({
     where: { id: parsed.data.templateId, creatorId, status: "ACTIVE" },
     select: { id: true },
   }) : null;
   if (parsed.data.templateId && !template) redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&error=invalid_template`);
+  if (parsed.data.scheduledAt) {
+    const scheduledAt = new Date(parsed.data.scheduledAt);
+    const now = new Date();
+    if (scheduledAt.getTime() < now.getTime() + 30_000 || scheduledAt.getTime() > now.getTime() + 366 * 24 * 60 * 60_000) {
+      redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&error=invalid_schedule`);
+    }
+    await prisma.scheduledMessage.create({
+      data: {
+        creatorId,
+        fanId: fan.id,
+        templateId: template?.id,
+        text: parsed.data.text || null,
+        media: media.data,
+        mediaPreviewUuid: effectivePreviewUuid,
+        priceMinor: price,
+        scheduledAt,
+      },
+    });
+    redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&scheduled=1`);
+  }
   try {
     const token = await getValidFanvueAccessToken(creatorId);
     const sent = await fanvueRequest(`/v1/chats/${fan.fanvueUserId}/message`, token, sentMessageSchema, {

@@ -70,6 +70,7 @@ export default async function WorkflowsPage({ searchParams }: { searchParams: Pr
           where: {
             creatorId,
             isCreatorAccount: false,
+            doNotMessage: false,
             OR: [
               { isFollower: true },
               { isSubscriber: true },
@@ -242,6 +243,13 @@ export default async function WorkflowsPage({ searchParams }: { searchParams: Pr
         })),
       )
     : [];
+  const protectedFans = creatorId
+    ? await prisma.fan.findMany({
+        where: { creatorId, isCreatorAccount: false, doNotMessage: true },
+        orderBy: [{ displayName: "asc" }, { username: "asc" }],
+        select: { id: true, displayName: true, username: true },
+      })
+    : [];
   const workflowAnalytics = workflows.map((workflow) => {
     const enrollmentsForWorkflow = analyticsRecords.filter((enrollment) => enrollment.workflowId === workflow.id);
     const uniqueFans = new Set(enrollmentsForWorkflow.map((enrollment) => enrollment.fanId));
@@ -333,6 +341,7 @@ export default async function WorkflowsPage({ searchParams }: { searchParams: Pr
               <WorkflowAnalyticsPanel analytics={workflowAnalytics} stepAnalytics={stepAnalytics} />
               <EnrollmentPanel
                 fans={fans}
+                protectedFans={protectedFans.map((fan) => ({ id: fan.id, name: fan.displayName || fan.username || "Fan sin nombre", username: fan.username }))}
                 audiences={audiences}
                 workflows={workflows.filter(
                   (workflow) =>

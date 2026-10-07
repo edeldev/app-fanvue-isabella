@@ -55,6 +55,8 @@ const messageErrors: Record<string, string> = {
   invalid_recipient: "Este contacto no puede recibir mensajes actualmente.",
   invalid_template: "La plantilla seleccionada ya no está disponible.",
   send_failed: "Fanvue no pudo enviar el mensaje. Inténtalo nuevamente.",
+  do_not_message: "Este fan está marcado como ‘No contactar’. Retira la preferencia desde Fan Lifecycle para enviarle mensajes.",
+  invalid_schedule: "Elige una fecha futura válida para programar el mensaje.",
 };
 const templateErrors: Record<string, string> = {
   duplicate: "Ya existe una plantilla con ese nombre.",
@@ -98,6 +100,9 @@ export function RouteNotifications() {
         variant: "success",
       });
     }
+    if (pathname === "/messages" && searchParams.has("scheduled")) {
+      notices.push({ message: "Mensaje programado correctamente.", variant: "success" });
+    }
     const error = searchParams.get("error");
     if (pathname === "/messages" && error)
       notices.push({
@@ -129,6 +134,7 @@ export function RouteNotifications() {
       "fanvue",
       "sync",
       "sent",
+      "scheduled",
       "saved",
       "deleted",
       "error",

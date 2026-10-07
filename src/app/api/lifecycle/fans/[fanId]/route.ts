@@ -14,6 +14,7 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("REMOVE_TAG"), tagId: z.string().min(1) }),
   z.object({ action: z.literal("SET_STAGE"), stage: z.enum(lifecycleStages as [typeof lifecycleStages[number], ...typeof lifecycleStages[number][]]).nullable() }),
   z.object({ action: z.literal("SET_AUTOMATION_PAUSE"), paused: z.boolean(), reason: z.string().trim().max(240).optional() }),
+  z.object({ action: z.literal("SET_DO_NOT_MESSAGE"), blocked: z.boolean(), reason: z.string().trim().max(240).optional() }),
   z.object({ action: z.literal("CONFIRM_MEMORY"), memoryId: z.string().min(1) }),
   z.object({ action: z.literal("DISMISS_MEMORY"), memoryId: z.string().min(1) }),
   z.object({ action: z.literal("REFRESH_MEMORY") }),
@@ -77,6 +78,38 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     ]);
   } else if (data.action === "REFRESH_MEMORY") {
     await refreshFanMemory(creatorId, fanId);
+  } else if (data.action === "SET_DO_NOT_MESSAGE") {
+    const now = new Date();
+    const reason = data.reason || "Marcado manualmente desde Fan Lifecycle.";
+    const enrollments = await prisma.workflowEnrollment.findMany({
+      where: data.blocked
+        ? { creatorId, fanId, status: { in: ["ACTIVE", "WAITING"] } }
+        : { creatorId, fanId, status: "PAUSED", pauseReason: "FAN_DO_NOT_MESSAGE" },
+      select: { id: true, status: true, pausedFromStatus: true, pausedRemainingSeconds: true, nextRunAt: true },
+    });
+    await prisma.$transaction([
+      prisma.fan.update({ where: { id: fanId }, data: { doNotMessage: data.blocked, doNotMessageReason: data.blocked ? reason : null, doNotMessageAt: data.blocked ? now : null } }),
+      ...(data.blocked ? [prisma.scheduledMessage.updateMany({ where: { creatorId, fanId, status: "PENDING" }, data: { status: "BLOCKED", lastError: "FAN_DO_NOT_MESSAGE" } })] : []),
+      ...enrollments.map((enrollment) => prisma.workflowEnrollment.update({
+        where: { id: enrollment.id },
+        data: data.blocked ? {
+          status: "PAUSED",
+          pausedAt: now,
+          pausedFromStatus: enrollment.status,
+          pausedRemainingSeconds: enrollment.nextRunAt ? Math.max(0, Math.ceil((enrollment.nextRunAt.getTime() - now.getTime()) / 1_000)) : null,
+          pauseReason: "FAN_DO_NOT_MESSAGE",
+          nextRunAt: null,
+        } : {
+          status: enrollment.pausedFromStatus === "WAITING" ? "WAITING" : "ACTIVE",
+          nextRunAt: enrollment.pausedFromStatus === "WAITING" && enrollment.pausedRemainingSeconds !== null ? new Date(now.getTime() + enrollment.pausedRemainingSeconds * 1_000) : null,
+          pausedAt: null,
+          pausedFromStatus: null,
+          pausedRemainingSeconds: null,
+          pauseReason: null,
+        },
+      })),
+      prisma.fanEvent.create({ data: { creatorId, fanId, type: data.blocked ? "FAN_DO_NOT_MESSAGE_ENABLED" : "FAN_DO_NOT_MESSAGE_DISABLED", occurredAt: now, payload: { reason: data.blocked ? reason : null } } }),
+    ]);
   } else {
     const now = new Date();
     const reason = data.reason || "Pausado manualmente desde el perfil.";

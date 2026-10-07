@@ -8,7 +8,7 @@ describe("workflow audiences", () => {
 
   it("combines inclusions and exclusions safely", () => {
     expect(buildAudienceWhere("creator-1", ["FOLLOWERS", "FREE_TRIAL_SUBSCRIBERS"], ["MUTED"])).toEqual({
-      creatorId: "creator-1", isCreatorAccount: false,
+      creatorId: "creator-1", isCreatorAccount: false, doNotMessage: false,
       OR: [{ isFollower: true }, { isFreeTrialSubscriber: true }],
       NOT: { OR: [{ isMuted: true }] },
     });

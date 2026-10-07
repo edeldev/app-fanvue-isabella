@@ -48,6 +48,13 @@ export async function executeEnrollmentUntilBlocked(creatorId: string, enrollmen
 async function executeEnrollmentStep(creatorId: string, enrollmentId: string, now = new Date()) {
   const enrollment = await loadEnrollment(creatorId, enrollmentId);
   if (!enrollment) throw new Error("ENROLLMENT_NOT_FOUND");
+  if (enrollment.fan.doNotMessage) {
+    await prisma.workflowEnrollment.updateMany({
+      where: { id: enrollment.id, creatorId, status: { in: ["ACTIVE", "WAITING"] } },
+      data: { status: "PAUSED", pausedAt: now, pausedFromStatus: enrollment.status, pauseReason: "FAN_DO_NOT_MESSAGE", nextRunAt: null },
+    });
+    throw new Error("FAN_DO_NOT_MESSAGE");
+  }
   if (enrollment.fan.automationPaused) {
     await prisma.workflowEnrollment.updateMany({
       where: { id: enrollment.id, creatorId, status: { in: ["ACTIVE", "WAITING"] } },
@@ -434,7 +441,7 @@ function loadEnrollment(creatorId: string, enrollmentId: string) {
   return prisma.workflowEnrollment.findFirst({
     where: { id: enrollmentId, creatorId },
     include: {
-      fan: { select: { fanvueUserId: true, displayName: true, username: true, isFollower: true, isSubscriber: true, isFreeTrialSubscriber: true, isAutoRenewingSubscriber: true, isNonRenewingSubscriber: true, isExpiredSubscriber: true, isCreatorAccount: true, isMuted: true, isOnline: true, isTopSpender: true, totalSpentMinor: true, automationPaused: true, _count: { select: { purchases: { where: { reversedAt: null, amountMinor: { gt: 0 } } } } } } },
+      fan: { select: { fanvueUserId: true, displayName: true, username: true, isFollower: true, isSubscriber: true, isFreeTrialSubscriber: true, isAutoRenewingSubscriber: true, isNonRenewingSubscriber: true, isExpiredSubscriber: true, isCreatorAccount: true, isMuted: true, isOnline: true, isTopSpender: true, totalSpentMinor: true, automationPaused: true, doNotMessage: true, _count: { select: { purchases: { where: { reversedAt: null, amountMinor: { gt: 0 } } } } } } },
       currentStep: { include: { messageTemplate: true } },
       workflow: { include: { creator: { select: { settings: { select: { maximumRetries: true, minimumDelaySeconds: true } } } }, steps: { orderBy: { position: "asc" }, select: { id: true, position: true, name: true, type: true, config: true } } } },
     },

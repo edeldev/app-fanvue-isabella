@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { runDueWorkflowsForAllCreators } from "@/services/automation/workflow-runner";
 import { runScheduledCleanup } from "@/services/maintenance/cleanup";
 import { logger, sanitizeErrorMessage } from "@/lib/logger";
+import { runDueScheduledMessages } from "@/services/messages/scheduled-messages";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -21,14 +22,17 @@ export async function GET(request: Request) {
     update: { status: "RUNNING", lastStartedAt: startedAt, error: null },
   });
   try {
-    const result = await runDueWorkflowsForAllCreators(startedAt);
+    const [result, scheduledMessages] = await Promise.all([
+      runDueWorkflowsForAllCreators(startedAt),
+      runDueScheduledMessages(startedAt),
+    ]);
     const maintenance = await runScheduledCleanup(startedAt);
     const finishedAt = new Date();
     await prisma.schedulerHeartbeat.update({
       where: { id: "workflow-cron" },
-      data: { status: "SUCCESS", lastFinishedAt: finishedAt, lastSucceededAt: finishedAt, result: { ...result, maintenance }, error: null },
+      data: { status: "SUCCESS", lastFinishedAt: finishedAt, lastSucceededAt: finishedAt, result: { ...result, scheduledMessages, maintenance }, error: null },
     });
-    return Response.json({ ok: true, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), ...result, maintenance });
+    return Response.json({ ok: true, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), ...result, scheduledMessages, maintenance });
   } catch (error) {
     const errorName = error instanceof Error ? error.name : "UnknownError";
     const errorMessage = sanitizeErrorMessage(error instanceof Error ? error.message : "Error desconocido");
