@@ -17,3 +17,14 @@ export function pickCurrentConversationContext(messages: ConversationContextMess
   }
   return recent.slice(contextStart).slice(-maximum);
 }
+
+export function pickCurrentFanTurn(messages: ConversationContextMessage[]) {
+  const ordered = messages
+    .filter((message) => message.text.trim())
+    .sort((left, right) => left.sentAt.getTime() - right.sentAt.getTime());
+  const latestFanIndex = ordered.findLastIndex((message) => message.role === "fan");
+  if (latestFanIndex < 0) return [];
+  let turnStart = latestFanIndex;
+  while (turnStart > 0 && ordered[turnStart - 1].role === "fan") turnStart -= 1;
+  return ordered.slice(turnStart, latestFanIndex + 1).filter((message) => message.role === "fan");
+}
