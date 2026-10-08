@@ -25,7 +25,7 @@ import {
 } from "@/lib/session/creator-session";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
 import { fanFilterWhere, isFanOnlineNow, type FanFilter } from "@/domain/fans/filters";
-import { shouldOfferSpanishTranslation } from "@/domain/messages/language-hint";
+import { isConversationPredominantlySpanish, shouldOfferSpanishTranslation } from "@/domain/messages/language-hint";
 
 type Props = {
   searchParams: Promise<{
@@ -298,6 +298,9 @@ export default async function MessagesPage({ searchParams }: Props) {
     (sum, item) => sum + item.unreadMessagesCount,
     0,
   );
+  const fanConversationIsMostlySpanish = selected
+    ? isConversationPredominantlySpanish(messages.flatMap((message) => message.sender.uuid === selected.fan.fanvueUserId && message.text ? [message.text] : []))
+    : false;
   const conversationHref = (fanUuid: string) => {
     const next = new URLSearchParams({ fan: fanUuid });
     if (query) next.set("q", query);
@@ -513,7 +516,7 @@ export default async function MessagesPage({ searchParams }: Props) {
                                 </p>
                               ) : null}
                             </div>
-                            {inbound && message.text && shouldOfferSpanishTranslation(message.text) ? <MessageTranslation text={message.text} /> : null}
+                            {inbound && message.text && shouldOfferSpanishTranslation(message.text, fanConversationIsMostlySpanish) ? <MessageTranslation text={message.text} /> : null}
                             <p
                               className={`mt-1 px-1 text-[10px] text-zinc-700 ${inbound ? "text-left" : "text-right"}`}
                             >

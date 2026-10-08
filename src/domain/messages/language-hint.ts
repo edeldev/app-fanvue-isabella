@@ -9,12 +9,31 @@ const foreignSignals = new Set([
   "oi", "obrigado", "obrigada", "voce", "você", "com", "quero",
 ]);
 
-export function shouldOfferSpanishTranslation(text: string) {
+function languageScores(text: string) {
   const trimmed = text.trim();
-  if (!trimmed || !/\p{L}/u.test(trimmed)) return false;
+  if (!trimmed || !/\p{L}/u.test(trimmed)) return { words: 0, spanish: 0, foreign: 0 };
   const words = trimmed.toLocaleLowerCase("es").match(/\p{L}+/gu) ?? [];
-  const spanishScore = words.filter((word) => spanishWords.has(word)).length + (/[¿¡ñáéíóúü]/iu.test(trimmed) ? 2 : 0);
-  const foreignScore = words.filter((word) => foreignSignals.has(word)).length;
-  if (spanishScore >= 2 || (spanishScore >= 1 && foreignScore === 0)) return false;
-  return foreignScore > 0 || words.length >= 2;
+  return {
+    words: words.length,
+    spanish: words.filter((word) => spanishWords.has(word)).length + (/[¿¡ñáéíóúü]/iu.test(trimmed) ? 2 : 0),
+    foreign: words.filter((word) => foreignSignals.has(word)).length,
+  };
+}
+
+export function isConversationPredominantlySpanish(messages: string[]) {
+  const score = messages.slice(-30).reduce((total, message) => {
+    const current = languageScores(message);
+    return { spanish: total.spanish + current.spanish, foreign: total.foreign + current.foreign };
+  }, { spanish: 0, foreign: 0 });
+  return score.spanish > 0 && score.spanish >= score.foreign;
+}
+
+export function shouldOfferSpanishTranslation(text: string, spanishConversation = false) {
+  const score = languageScores(text);
+  if (!score.words) return false;
+  if (score.spanish >= 2 && score.spanish >= score.foreign) return false;
+  if (score.foreign >= 2 && score.foreign > score.spanish) return true;
+  if (score.spanish > score.foreign) return false;
+  if (score.foreign > score.spanish) return true;
+  return !spanishConversation && score.words >= 2;
 }
