@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import { pickCurrentConversationContext, pickCurrentFanTurn } from "@/domain/messages/conversation-context";
 import { enforceAiIdentityBoundary } from "@/domain/messages/ai-reply-safety";
+import { shouldOfferSpanishTranslation } from "@/domain/messages/language-hint";
 import { fanvueRequest } from "@/lib/fanvue/client";
 import { messagesPageSchema } from "@/lib/fanvue/sync-schemas";
 import { prisma } from "@/lib/prisma";
@@ -25,6 +26,12 @@ const languageSchema = z.object({
   isoCode: z.string().trim().min(2).max(12),
   isSpanish: z.boolean(),
 });
+const normalizedReplySchema = z.object({ reply: z.string().trim().min(1).max(2_000) });
+const geminiNormalizedReplySchema = {
+  type: "object",
+  properties: { reply: { type: "string" } },
+  required: ["reply"],
+};
 const geminiLanguageSchema = {
   type: "object",
   properties: {
@@ -135,12 +142,45 @@ export async function POST(request: Request) {
     if (!raw) return Response.json({ error: "Gemini no devolvió una respuesta utilizable." }, { status: 502 });
     const output = outputSchema.safeParse(JSON.parse(raw));
     if (!output.success) return Response.json({ error: "La respuesta de Gemini tuvo un formato inesperado." }, { status: 502 });
+    const replyLooksNonSpanish = shouldOfferSpanishTranslation(output.data.reply);
+    const normalizedIsoCode = language.data.isoCode.toLocaleLowerCase("en").split("-")[0];
+    const replyLanguageMismatch = language.data.isSpanish
+      ? replyLooksNonSpanish
+      : normalizedIsoCode === "en"
+        ? !replyLooksNonSpanish
+        : true;
+    let enforcedReply = output.data.reply;
+    if (replyLanguageMismatch) {
+      const normalizationResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          model,
+          store: false,
+          system_instruction: `Reescribe el borrador exclusivamente en ${language.data.language} (${language.data.isoCode}). Es una transformación de idioma, no una conversación: no respondas al contenido ni agregues información. Conserva exactamente la intención, el tono coqueto, la longitud aproximada, la puntuación y los emojis. Devuelve solamente el borrador corregido en el JSON solicitado.`,
+          input: JSON.stringify({ draft: output.data.reply }),
+          generation_config: { temperature: 0.1 },
+          response_format: { type: "text", mime_type: "application/json", schema: geminiNormalizedReplySchema },
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!normalizationResponse.ok) {
+        const body = await normalizationResponse.json().catch(() => null) as { error?: { message?: string } } | null;
+        return Response.json({ error: body?.error?.message || "Gemini no pudo ajustar la respuesta al idioma del fan." }, { status: normalizationResponse.status === 429 ? 429 : 502 });
+      }
+      const normalizationRaw = readInteractionText(await normalizationResponse.json() as InteractionResponse);
+      if (!normalizationRaw) return Response.json({ error: "Gemini no pudo ajustar la respuesta al idioma del fan." }, { status: 502 });
+      const normalizedReply = normalizedReplySchema.safeParse(JSON.parse(normalizationRaw));
+      if (!normalizedReply.success) return Response.json({ error: "Gemini devolvió la respuesta corregida con un formato inesperado." }, { status: 502 });
+      enforcedReply = normalizedReply.data.reply;
+    }
     const recentFanText = context.filter((message) => message.role === "fan").slice(-3).map((message) => message.text).join("\n");
     const languageEnforcedSuggestion = {
       ...output.data,
+      reply: enforcedReply,
       detectedLanguage: language.data.language,
       needsSpanishTranslation: !language.data.isSpanish,
-      spanishTranslation: language.data.isSpanish ? output.data.reply : output.data.spanishTranslation,
+      spanishTranslation: language.data.isSpanish ? enforcedReply : output.data.spanishTranslation,
     };
     const safeSuggestion = enforceAiIdentityBoundary(languageEnforcedSuggestion, recentFanText);
     return Response.json({ suggestion: safeSuggestion, contextMessages: context.length });
