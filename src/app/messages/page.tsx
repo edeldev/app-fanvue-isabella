@@ -531,6 +531,7 @@ export default async function MessagesPage({ searchParams }: Props) {
                     )}
                   </MessageHistory>
                   <MessageComposer
+                    key={selected.fan.id}
                     fanUuid={selected.fan.fanvueUserId}
                     fanName={
                       selected.fan.displayName || selected.fan.username || "Fan"

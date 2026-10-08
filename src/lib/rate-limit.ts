@@ -12,6 +12,7 @@ export const rateLimitPolicies = {
   fanvueReconciliation: { scope: "fanvue-reconciliation", limit: 1, windowSeconds: 900 },
   fanvuePresence: { scope: "fanvue-presence", limit: 2, windowSeconds: 60 },
   workflowMutation: { scope: "workflow-mutation", limit: 60, windowSeconds: 60 },
+  aiMessageDraft: { scope: "ai-message-draft", limit: 10, windowSeconds: 60 },
 } as const satisfies Record<string, RateLimitPolicy>;
 
 export async function consumeRateLimit(creatorId: string, policy: RateLimitPolicy, now = new Date()): Promise<RateLimitResult> {
