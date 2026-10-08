@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BellRing, Heart, LoaderCircle, MessageCircle, Trash2, UserPlus, Volume2, VolumeX } from "lucide-react";
+import { Bell, BellRing, ExternalLink, Heart, LoaderCircle, MessageCircle, Trash2, UserPlus, Volume2, VolumeX } from "lucide-react";
 import { enqueueSnackbar } from "notistack";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EngagementNotificationView } from "@/domain/notifications/engagement";
@@ -151,7 +151,9 @@ export function EngagementNotificationsMenu() {
 function NotificationRow({ notification }: { notification: EngagementNotificationView }) {
   const Icon = notification.type === "FOLLOW_CREATED" ? UserPlus : notification.type === "POST_LIKED" ? Heart : MessageCircle;
   const tone = notification.type === "FOLLOW_CREATED" ? "bg-violet-400/10 text-violet-300" : notification.type === "POST_LIKED" ? "bg-pink-400/10 text-pink-300" : "bg-sky-400/10 text-sky-300";
-  return <div className="border-b border-white/6 p-4 last:border-0"><div className="flex items-start gap-3"><span className={`grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl ${tone}`}>{notification.avatarUrl ? <span className="size-full bg-cover bg-center" style={{ backgroundImage: `url(${JSON.stringify(notification.avatarUrl).slice(1, -1)})` }} /> : <Icon className="size-4" />}</span><div className="min-w-0 flex-1"><p className="text-xs font-medium text-zinc-200">{notification.title}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-400">{notification.message}</p><div className="mt-2 flex items-center justify-between gap-2"><span className="truncate text-[10px] text-zinc-600">{notification.actorUsername ? `@${notification.actorUsername}` : notification.actorName}</span><time dateTime={notification.occurredAt} className="shrink-0 text-[10px] text-zinc-700">{new Date(notification.occurredAt).toLocaleString("es-MX")}</time></div></div></div></div>;
+  const postHref = notification.postUuid && notification.type !== "FOLLOW_CREATED" ? `https://www.fanvue.com/post/${encodeURIComponent(notification.postUuid)}` : null;
+  const content = <div className="flex items-start gap-3"><span className={`grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl ${tone}`}>{notification.avatarUrl ? <span className="size-full bg-cover bg-center" style={{ backgroundImage: `url(${JSON.stringify(notification.avatarUrl).slice(1, -1)})` }} /> : <Icon className="size-4" />}</span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-zinc-200">{notification.title}</p>{postHref ? <ExternalLink className="size-3 shrink-0 text-zinc-600" /> : null}</div><p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-400">{notification.message}</p><div className="mt-2 flex items-center justify-between gap-2"><span className="truncate text-[10px] text-zinc-600">{notification.actorUsername ? `@${notification.actorUsername}` : notification.actorName}</span><time dateTime={notification.occurredAt} className="shrink-0 text-[10px] text-zinc-700">{new Date(notification.occurredAt).toLocaleString("es-MX")}</time></div></div></div>;
+  return postHref ? <a href={postHref} target="_blank" rel="noreferrer" aria-label={`${notification.title}: abrir publicación en Fanvue`} className="block cursor-pointer border-b border-white/6 p-4 transition hover:bg-white/[.035] last:border-0">{content}</a> : <div className="border-b border-white/6 p-4 last:border-0">{content}</div>;
 }
 
 function playSound(context: AudioContext | null) {

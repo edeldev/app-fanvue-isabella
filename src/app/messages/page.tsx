@@ -8,6 +8,7 @@ import { FanPresenceReconciler } from "@/components/fan-presence-reconciler";
 import { MarkConversationRead } from "@/components/mark-conversation-read";
 import { MessageHistory } from "@/components/message-history";
 import { MessageComposer } from "@/components/message-composer";
+import { MessageTranslation } from "@/components/message-translation";
 import { ExpandableImage } from "@/components/expandable-image";
 import { ChatMediaCarousel } from "@/components/chat-media-carousel";
 import { fanvueRequest } from "@/lib/fanvue/client";
@@ -24,6 +25,7 @@ import {
 } from "@/lib/session/creator-session";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
 import { fanFilterWhere, isFanOnlineNow, type FanFilter } from "@/domain/fans/filters";
+import { shouldOfferSpanishTranslation } from "@/domain/messages/language-hint";
 
 type Props = {
   searchParams: Promise<{
@@ -511,6 +513,7 @@ export default async function MessagesPage({ searchParams }: Props) {
                                 </p>
                               ) : null}
                             </div>
+                            {inbound && message.text && shouldOfferSpanishTranslation(message.text) ? <MessageTranslation text={message.text} /> : null}
                             <p
                               className={`mt-1 px-1 text-[10px] text-zinc-700 ${inbound ? "text-left" : "text-right"}`}
                             >
