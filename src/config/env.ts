@@ -13,7 +13,7 @@ const serverEnvSchema = z.object({
   FANVUE_WEBHOOK_SIGNING_SECRET: z.string().min(16),
   FANVUE_REDIRECT_URI: z.string().url(),
   GEMINI_API_KEY: z.string().min(1).optional(),
-  GEMINI_MODEL: z.string().min(1).default("gemini-2.5-flash-lite"),
+  GEMINI_MODEL: z.string().min(1).default("gemini-3.5-flash-lite"),
   FANVUE_SCOPES: z.string().default(
     "read:self read:creator read:chat write:chat read:fan read:media write:media read:insights read:post",
   ),
