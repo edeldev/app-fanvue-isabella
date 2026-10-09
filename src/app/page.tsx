@@ -216,6 +216,13 @@ export default async function Home() {
     style: "currency",
     currency: "USD",
   });
+  const configuredTimeZone = data?.creator?.settings?.timezone || "America/Monterrey";
+  const date = new Intl.DateTimeFormat("es-MX", {
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+    timeZone: configuredTimeZone,
+  });
 
   return (
     <div className="flex min-h-screen bg-[#101218] text-zinc-100">
@@ -281,7 +288,7 @@ export default async function Home() {
             <StatCard
               label="Disponible para retirar"
               value={data ? money.format(data.availableEarnings / 100) : "—"}
-              detail={data?.lastPayoutAt ? `Saldo neto · último retiro ${data.lastPayoutAt.toLocaleDateString("es-MX")}` : "Saldo neto listo para solicitar como retiro"}
+              detail={data?.lastPayoutAt ? `Saldo neto · último retiro ${date.format(data.lastPayoutAt)}` : "Saldo neto listo para solicitar como retiro"}
               icon={WalletCards}
             />
             <StatCard
