@@ -186,7 +186,11 @@ export const creatorListPageSchema = cursorPage(z.object({
 
 export const accountSchema = z.object({
   account: z.object({
-    earnings: z.object({ total: z.number().int() }),
+    earnings: z.object({
+      total: z.number().int(),
+      availableBalance: z.number().int(),
+      lastPayoutAt: z.string().datetime().nullable(),
+    }),
     fans: z.object({ followers: z.number().int(), subscribers: z.number().int() }),
   }),
 });

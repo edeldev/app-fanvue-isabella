@@ -43,7 +43,9 @@ async function dashboardData(creatorId: string | null) {
       select: {
         displayName: true,
         allTimeEarningsMinor: true,
+        availableEarningsMinor: true,
         pendingEarningsMinor: true,
+        lastPayoutAt: true,
         fanvueFollowersCount: true,
         fanvueSubscribersCount: true,
         fanvueContactsCount: true,
@@ -150,11 +152,9 @@ async function dashboardData(creatorId: string | null) {
       select: { id: true, explanation: true, occurredAt: true },
     }),
   ]);
-  const earningsBalance = Math.max(creator?.allTimeEarningsMinor ?? 0, 0);
-  const pendingEarnings = Math.min(
-    Math.max(creator?.pendingEarningsMinor ?? 0, 0),
-    earningsBalance,
-  );
+  const grossEarnings = Math.max(creator?.allTimeEarningsMinor ?? 0, 0);
+  const pendingEarnings = Math.max(creator?.pendingEarningsMinor ?? 0, 0);
+  const availableEarnings = Math.max(creator?.availableEarningsMinor ?? 0, 0);
   const attention = attentionCandidates
     .flatMap((fan) => {
       const conversation = fan.conversations[0];
@@ -195,9 +195,10 @@ async function dashboardData(creatorId: string | null) {
     workflows,
     pendingMessages: pendingMessages._sum.unreadMessagesCount ?? 0,
     historicalRevenue: revenue._sum.amountMinor ?? 0,
-    earningsBalance,
+    grossEarnings,
     pendingEarnings,
-    availableEarnings: earningsBalance - pendingEarnings,
+    availableEarnings,
+    lastPayoutAt: creator?.lastPayoutAt ?? null,
     attention,
     logs,
   };
@@ -256,9 +257,9 @@ export default async function Home() {
               icon={Users}
             />
             <StatCard
-              label="Saldo de ganancias"
-              value={data ? money.format(data.earningsBalance / 100) : "—"}
-              detail="Saldo actual informado por Fanvue; disminuye después de retirar"
+              label="Ganancias brutas"
+              value={data ? money.format(data.grossEarnings / 100) : "—"}
+              detail="Histórico bruto de Fanvue; incluye importes antes de comisiones"
               icon={CircleDollarSign}
             />
             <StatCard
@@ -278,7 +279,7 @@ export default async function Home() {
             <StatCard
               label="Disponible para retirar"
               value={data ? money.format(data.availableEarnings / 100) : "—"}
-              detail="Saldo listo para solicitar como retiro"
+              detail={data?.lastPayoutAt ? `Saldo neto · último retiro ${data.lastPayoutAt.toLocaleDateString("es-MX")}` : "Saldo neto listo para solicitar como retiro"}
               icon={WalletCards}
             />
             <StatCard
