@@ -155,6 +155,7 @@ async function dashboardData(creatorId: string | null) {
   const grossEarnings = Math.max(creator?.allTimeEarningsMinor ?? 0, 0);
   const pendingEarnings = Math.max(creator?.pendingEarningsMinor ?? 0, 0);
   const availableEarnings = Math.max(creator?.availableEarningsMinor ?? 0, 0);
+  const currentEarningsBalance = pendingEarnings + availableEarnings;
   const attention = attentionCandidates
     .flatMap((fan) => {
       const conversation = fan.conversations[0];
@@ -196,6 +197,7 @@ async function dashboardData(creatorId: string | null) {
     pendingMessages: pendingMessages._sum.unreadMessagesCount ?? 0,
     historicalRevenue: revenue._sum.amountMinor ?? 0,
     grossEarnings,
+    currentEarningsBalance,
     pendingEarnings,
     availableEarnings,
     lastPayoutAt: creator?.lastPayoutAt ?? null,
@@ -257,9 +259,9 @@ export default async function Home() {
               icon={Users}
             />
             <StatCard
-              label="Ganancias brutas"
-              value={data ? money.format(data.grossEarnings / 100) : "—"}
-              detail="Histórico bruto de Fanvue; incluye importes antes de comisiones"
+              label="Ganancias"
+              value={data ? money.format(data.currentEarningsBalance / 100) : "—"}
+              detail="Saldo pendiente + disponible; disminuye al retirar"
               icon={CircleDollarSign}
             />
             <StatCard
