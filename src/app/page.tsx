@@ -216,12 +216,11 @@ export default async function Home() {
     style: "currency",
     currency: "USD",
   });
-  const configuredTimeZone = data?.creator?.settings?.timezone || "America/Monterrey";
   const date = new Intl.DateTimeFormat("es-MX", {
     day: "numeric",
     month: "numeric",
     year: "numeric",
-    timeZone: configuredTimeZone,
+    timeZone: "America/Monterrey",
   });
 
   return (
