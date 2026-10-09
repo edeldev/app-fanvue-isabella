@@ -102,7 +102,7 @@ async function recordEngagementEvent({
 }: {
   creatorId: string;
   fanId: string;
-  type: "FOLLOW_CREATED" | "POST_LIKED" | "POST_COMMENTED";
+  type: "FOLLOW_CREATED" | "POST_LIKED" | "POST_COMMENTED" | "MESSAGE_RECEIVED";
   occurredAt: Date;
   context?: WebhookContext;
   payload: Record<string, string | null>;
@@ -198,6 +198,14 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
     });
     if (type === "creator.message.received" && data.sender === "fan") {
       const repliedAt = data.created_at ? new Date(data.created_at) : new Date();
+      await recordEngagementEvent({
+        creatorId,
+        fanId: fan.id,
+        type: "MESSAGE_RECEIVED",
+        occurredAt: repliedAt,
+        context,
+        payload: { messageUuid: data.uuid, text: data.text ?? null },
+      });
       const routedEnrollments = await routeReplyWaitEnrollments(creatorId, fan.id, data.uuid, repliedAt);
       await recordFanReplyInActiveWorkflows(creatorId, fan.id, data.uuid, repliedAt);
       await pauseEnrollmentsOnFanReply(creatorId, fan.id, data.uuid, repliedAt, routedEnrollments);

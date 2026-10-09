@@ -5,9 +5,11 @@ import {
   Bot,
   CircleDollarSign,
   Clock3,
+  Hourglass,
   MessageSquare,
   Sparkles,
   Users,
+  WalletCards,
 } from "lucide-react";
 import Link from "next/link";
 import { Sidebar } from "@/components/app-shell/sidebar";
@@ -41,6 +43,7 @@ async function dashboardData(creatorId: string | null) {
       select: {
         displayName: true,
         allTimeEarningsMinor: true,
+        pendingEarningsMinor: true,
         fanvueFollowersCount: true,
         fanvueSubscribersCount: true,
         fanvueContactsCount: true,
@@ -147,6 +150,11 @@ async function dashboardData(creatorId: string | null) {
       select: { id: true, explanation: true, occurredAt: true },
     }),
   ]);
+  const earningsBalance = Math.max(creator?.allTimeEarningsMinor ?? 0, 0);
+  const pendingEarnings = Math.min(
+    Math.max(creator?.pendingEarningsMinor ?? 0, 0),
+    earningsBalance,
+  );
   const attention = attentionCandidates
     .flatMap((fan) => {
       const conversation = fan.conversations[0];
@@ -186,7 +194,10 @@ async function dashboardData(creatorId: string | null) {
     additionalExpiredSubscribers,
     workflows,
     pendingMessages: pendingMessages._sum.unreadMessagesCount ?? 0,
-    revenue: revenue._sum.amountMinor ?? creator?.allTimeEarningsMinor ?? 0,
+    historicalRevenue: revenue._sum.amountMinor ?? 0,
+    earningsBalance,
+    pendingEarnings,
+    availableEarnings: earningsBalance - pendingEarnings,
     attention,
     logs,
   };
@@ -201,7 +212,7 @@ export default async function Home() {
   const money = new Intl.NumberFormat("es-MX", {
     style: "currency",
     currency: "USD",
-  }).format((data?.revenue ?? 0) / 100);
+  });
 
   return (
     <div className="flex min-h-screen bg-[#101218] text-zinc-100">
@@ -245,9 +256,9 @@ export default async function Home() {
               icon={Users}
             />
             <StatCard
-              label="Ganancias totales"
-              value={data ? money : "—"}
-              detail="Ingresos brutos de todo el tiempo en Fanvue"
+              label="Saldo de ganancias"
+              value={data ? money.format(data.earningsBalance / 100) : "—"}
+              detail="Saldo actual informado por Fanvue; disminuye después de retirar"
               icon={CircleDollarSign}
             />
             <StatCard
@@ -261,6 +272,26 @@ export default async function Home() {
               value={data ? String(data.pendingMessages) : "—"}
               detail="Sin leer, solo de fans contactables; excluye creadores"
               icon={MessageSquare}
+            />
+          </section>
+          <section aria-label="Ganancias y retiros" className="mt-4 grid gap-4 sm:grid-cols-3">
+            <StatCard
+              label="Disponible para retirar"
+              value={data ? money.format(data.availableEarnings / 100) : "—"}
+              detail="Saldo listo para solicitar como retiro"
+              icon={WalletCards}
+            />
+            <StatCard
+              label="Saldo pendiente"
+              value={data ? money.format(data.pendingEarnings / 100) : "—"}
+              detail="Pagos todavía en revisión por Fanvue"
+              icon={Hourglass}
+            />
+            <StatCard
+              label="Ingresos registrados"
+              value={data ? money.format(data.historicalRevenue / 100) : "—"}
+              detail="Histórico bruto sincronizado; no disminuye con los retiros"
+              icon={ArrowUpRight}
             />
           </section>
           {data ? (

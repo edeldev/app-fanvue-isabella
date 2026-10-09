@@ -73,6 +73,10 @@ export async function runInitialFanvueSync(creatorId: string): Promise<InitialSy
     where: { id: creatorId },
     data: {
       allTimeEarningsMinor: account.account.earnings.total,
+      pendingEarningsMinor: earnings.reduce(
+        (total, earning) => total + (earning.transactionOrderStatus === "pendingBalance" ? earning.net : 0),
+        0,
+      ),
       fanvueFollowersCount: account.account.fans.followers,
       fanvueSubscribersCount: account.account.fans.subscribers,
       fanvueContactsCount,

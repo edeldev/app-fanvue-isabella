@@ -3,6 +3,7 @@
 import { Bell, BellRing, ExternalLink, Heart, LoaderCircle, MessageCircle, Trash2, UserPlus, Volume2, VolumeX } from "lucide-react";
 import { enqueueSnackbar } from "notistack";
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import type { EngagementNotificationView } from "@/domain/notifications/engagement";
 
 const POLL_INTERVAL_MS = 5_000;
@@ -139,7 +140,7 @@ export function EngagementNotificationsMenu() {
     </button>
     {menuOpen ? <div onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} className="absolute right-0 mt-3 w-[min(25rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-[#181a21] shadow-2xl shadow-black/50">
       <div className="flex items-center justify-between gap-3 border-b border-white/8 p-4">
-        <div><p className="text-sm font-semibold text-white">Actividad en tiempo real</p><p className="mt-0.5 text-[10px] text-zinc-600">Seguidores, likes y comentarios</p></div>
+        <div><p className="text-sm font-semibold text-white">Actividad en tiempo real</p><p className="mt-0.5 text-[10px] text-zinc-600">Mensajes, seguidores, likes y comentarios</p></div>
         <button type="button" onClick={toggleSound} aria-label={soundEnabled ? "Silenciar notificaciones" : "Activar sonido"} title={soundEnabled ? "Sonido activado" : "Sonido desactivado"} className="grid size-9 place-items-center rounded-lg border border-white/8 text-zinc-400 hover:bg-white/5 hover:text-white">{soundEnabled ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}</button>
       </div>
       <div className="max-h-96 overflow-y-auto">{notifications.map((notification) => <NotificationRow key={notification.id} notification={notification} />)}{!notifications.length ? <div className="p-8 text-center"><Bell className="mx-auto size-6 text-zinc-700" /><p className="mt-2 text-xs text-zinc-500">La nueva actividad aparecerá aquí.</p></div> : null}</div>
@@ -150,10 +151,13 @@ export function EngagementNotificationsMenu() {
 
 function NotificationRow({ notification }: { notification: EngagementNotificationView }) {
   const Icon = notification.type === "FOLLOW_CREATED" ? UserPlus : notification.type === "POST_LIKED" ? Heart : MessageCircle;
-  const tone = notification.type === "FOLLOW_CREATED" ? "bg-violet-400/10 text-violet-300" : notification.type === "POST_LIKED" ? "bg-pink-400/10 text-pink-300" : "bg-sky-400/10 text-sky-300";
+  const tone = notification.type === "FOLLOW_CREATED" ? "bg-violet-400/10 text-violet-300" : notification.type === "POST_LIKED" ? "bg-pink-400/10 text-pink-300" : notification.type === "MESSAGE_RECEIVED" ? "bg-emerald-400/10 text-emerald-300" : "bg-sky-400/10 text-sky-300";
   const postHref = notification.postUuid && notification.type !== "FOLLOW_CREATED" ? `https://www.fanvue.com/post/${encodeURIComponent(notification.postUuid)}` : null;
+  const chatHref = notification.type === "MESSAGE_RECEIVED" && notification.fanUuid ? `/messages?fan=${encodeURIComponent(notification.fanUuid)}` : null;
   const content = <div className="flex items-start gap-3"><span className={`grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl ${tone}`}>{notification.avatarUrl ? <span className="size-full bg-cover bg-center" style={{ backgroundImage: `url(${JSON.stringify(notification.avatarUrl).slice(1, -1)})` }} /> : <Icon className="size-4" />}</span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-zinc-200">{notification.title}</p>{postHref ? <ExternalLink className="size-3 shrink-0 text-zinc-600" /> : null}</div><p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-400">{notification.message}</p><div className="mt-2 flex items-center justify-between gap-2"><span className="truncate text-[10px] text-zinc-600">{notification.actorUsername ? `@${notification.actorUsername}` : notification.actorName}</span><time dateTime={notification.occurredAt} className="shrink-0 text-[10px] text-zinc-700">{new Date(notification.occurredAt).toLocaleString("es-MX")}</time></div></div></div>;
-  return postHref ? <a href={postHref} target="_blank" rel="noreferrer" aria-label={`${notification.title}: abrir publicación en Fanvue`} className="block cursor-pointer border-b border-white/6 p-4 transition hover:bg-white/[.035] last:border-0">{content}</a> : <div className="border-b border-white/6 p-4 last:border-0">{content}</div>;
+  if (postHref) return <a href={postHref} target="_blank" rel="noreferrer" aria-label={`${notification.title}: abrir publicación en Fanvue`} className="block cursor-pointer border-b border-white/6 p-4 transition hover:bg-white/[.035] last:border-0">{content}</a>;
+  if (chatHref) return <Link href={chatHref} aria-label={`${notification.title}: abrir conversación`} className="block cursor-pointer border-b border-white/6 p-4 transition hover:bg-white/[.035] last:border-0">{content}</Link>;
+  return <div className="border-b border-white/6 p-4 last:border-0">{content}</div>;
 }
 
 function playSound(context: AudioContext | null) {

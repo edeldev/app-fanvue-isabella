@@ -475,9 +475,7 @@ export default async function MessagesPage({ searchParams }: Props) {
                           unattachedMedia.length === 1 &&
                           media.length === message.mediaUuids.length + 1
                             ? unattachedMedia[0].uuid
-                            : !previewUuid && ppvPrice !== null && media.length > 1
-                              ? media.at(-1)?.uuid ?? null
-                              : null;
+                            : null;
                         const effectivePreviewUuid =
                           previewUuid ?? inferredPreviewUuid;
                         return (

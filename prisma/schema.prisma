@@ -156,6 +156,7 @@ model Creator {
   displayName            String?
   avatarUrl              String?
   allTimeEarningsMinor   Int?
+  pendingEarningsMinor   Int?
   fanvueFollowersCount   Int?
   fanvueSubscribersCount Int?
   fanvueContactsCount    Int?

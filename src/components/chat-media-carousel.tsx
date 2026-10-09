@@ -25,10 +25,11 @@ export function ChatMediaCarousel({
   previewUuid: string | null;
 }) {
   const orderedMedia = useMemo(() => {
+    if (!previewUuid) return media;
     const previewIndex = media.findIndex(
       (item) =>
         item.uuid === previewUuid ||
-        item.variantUuids.includes(previewUuid ?? ""),
+        item.variantUuids.includes(previewUuid),
     );
     if (previewIndex <= 0) return media;
     return [
@@ -52,8 +53,10 @@ export function ChatMediaCarousel({
     const position = galleryItems.findIndex((entry) => entry.id === uuid);
     if (position >= 0) setGalleryIndex(position);
   };
-  const isPreview =
-    previewUuid === item.uuid || item.variantUuids.includes(previewUuid ?? "");
+  const isPreview = Boolean(
+    previewUuid &&
+      (previewUuid === item.uuid || item.variantUuids.includes(previewUuid)),
+  );
   const previous = () =>
     setIndex(
       (current) =>
