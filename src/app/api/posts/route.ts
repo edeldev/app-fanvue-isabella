@@ -8,6 +8,7 @@ import {
   fanvuePostsPageSchema,
   postAudienceSchema,
 } from "@/lib/fanvue/post-schemas";
+import { mediaBulkSchema } from "@/lib/fanvue/sync-schemas";
 import {
   CREATOR_SESSION_COOKIE,
   readCreatorSession,
@@ -60,7 +61,63 @@ export async function GET() {
       token,
       fanvuePostsPageSchema,
     );
-    return Response.json(posts);
+    const mediaUuids = [...new Set(posts.data.flatMap((post) => [
+      ...(post.mediaPreviewUuid ? [post.mediaPreviewUuid] : []),
+      ...post.mediaUuids,
+    ]))];
+    const resolvedMedia = new Map<string, {
+      uuid: string;
+      name: string;
+      mediaType: "image" | "video";
+      url: string;
+      thumbnailUrl: string;
+    }>();
+
+    for (let index = 0; index < mediaUuids.length; index += 20) {
+      const chunk = mediaUuids.slice(index, index + 20);
+      try {
+        const resolved = await fanvueRequest(
+          `/v1/media/bulk?mediaUuids=${encodeURIComponent(chunk.join(","))}&variants=main,thumbnail`,
+          token,
+          mediaBulkSchema,
+        );
+        for (const item of Object.values(resolved.results)) {
+          if (!item || item.status !== "ready" || (item.mediaType !== "image" && item.mediaType !== "video")) continue;
+          const main = item.variants.find((variant) => variant.variantType === "main" && variant.url)
+            ?? item.variants.find((variant) => variant.url);
+          const thumbnail = item.variants.find((variant) => variant.variantType === "thumbnail" && variant.url)
+            ?? item.variants.find((variant) => variant.variantType === "thumbnail_gallery" && variant.url)
+            ?? main;
+          if (!main?.url && !thumbnail?.url) continue;
+          resolvedMedia.set(item.uuid, {
+            uuid: item.uuid,
+            name: item.name || `Contenido ${item.mediaType === "video" ? "de video" : "visual"}`,
+            mediaType: item.mediaType,
+            url: main?.url ?? thumbnail?.url ?? "",
+            thumbnailUrl: thumbnail?.url ?? main?.url ?? "",
+          });
+        }
+      } catch {
+        // El post sigue siendo útil aunque Fanvue no pueda firmar una miniatura temporal.
+      }
+    }
+
+    return Response.json({
+      ...posts,
+      data: posts.data.map((post) => {
+        const orderedUuids = [...new Set([
+          ...(post.mediaPreviewUuid ? [post.mediaPreviewUuid] : []),
+          ...post.mediaUuids,
+        ])];
+        return {
+          ...post,
+          media: orderedUuids.flatMap((uuid) => {
+            const media = resolvedMedia.get(uuid);
+            return media ? [{ ...media, isPreview: uuid === post.mediaPreviewUuid }] : [];
+          }),
+        };
+      }),
+    });
   } catch (error) {
     return fanvueErrorResponse(error);
   }

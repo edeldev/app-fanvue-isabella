@@ -9,16 +9,21 @@ describe("fanvuePostsPageSchema", () => {
         createdAt: "2026-10-10T14:13:06.569Z",
         text: "Caption",
         price: null,
+        mediaUuids: ["d513d700-3c25-4a88-b6e4-0e589203fa9a"],
         mediaPreviewUuid: null,
         audience: "subscribers",
         publishAt: null,
         publishedAt: "2026-10-10T14:13:06.567Z",
         expiresAt: null,
+        commentsCount: 2,
+        likesCount: 4,
       }],
       nextCursor: "cursor",
       total: null,
     });
 
     expect(result.success).toBe(true);
+    expect(result.data?.data[0]?.mediaUuids).toHaveLength(1);
+    expect(result.data?.data[0]?.likesCount).toBe(4);
   });
 });
