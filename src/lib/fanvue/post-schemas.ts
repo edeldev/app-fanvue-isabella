@@ -20,6 +20,6 @@ export const fanvuePostSchema = z.object({
 export const fanvuePostsPageSchema = z.object({
   data: z.array(fanvuePostSchema),
   nextCursor: z.string().nullable().optional(),
-  total: z.number().optional(),
+  total: z.number().nullable().optional(),
 });
 
