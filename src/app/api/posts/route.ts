@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { z } from "zod";
+import { buildPostMediaPayload } from "@/domain/posts/media-payload";
 import { fanvueRequest } from "@/lib/fanvue/client";
 import { FanvueError } from "@/lib/fanvue/errors";
 import {
@@ -87,6 +88,10 @@ export async function POST(request: Request) {
   if (mediaPreviewUuid && !mediaUuids.includes(mediaPreviewUuid)) {
     return Response.json({ error: "La vista previa debe pertenecer al contenido seleccionado." }, { status: 400 });
   }
+  const postMedia = buildPostMediaPayload(mediaUuids, price, mediaPreviewUuid);
+  if (price && postMedia.mediaUuids.length === 0) {
+    return Response.json({ error: "Un post PPV necesita contenido bloqueado además de la vista gratuita." }, { status: 400 });
+  }
   if (publishAt && new Date(publishAt).getTime() < Date.now() + 30_000) {
     return Response.json({ error: "Programa el post al menos 30 segundos en el futuro." }, { status: 400 });
   }
@@ -98,8 +103,8 @@ export async function POST(request: Request) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         text: text || undefined,
-        mediaUuids: mediaUuids.length ? mediaUuids : undefined,
-        mediaPreviewUuid: price ? mediaPreviewUuid || undefined : undefined,
+        mediaUuids: postMedia.mediaUuids.length ? postMedia.mediaUuids : undefined,
+        mediaPreviewUuid: postMedia.mediaPreviewUuid,
         price: price || undefined,
         audience,
         publishAt: publishAt || undefined,
