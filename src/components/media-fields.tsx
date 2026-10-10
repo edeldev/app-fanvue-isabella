@@ -1,8 +1,25 @@
 "use client";
 
-import { useEffect, useRef, useState, type ComponentProps } from "react";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  rectSortingStrategy,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, Expand, Eye, FolderOpen, ImageOff, ImagePlus, LoaderCircle, LockKeyhole, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Expand, Eye, FolderOpen, GripVertical, ImageOff, ImagePlus, LoaderCircle, LockKeyhole, X } from "lucide-react";
 import { ExpandableImage } from "@/components/expandable-image";
 import { enqueueSnackbar } from "notistack";
 import { VaultMediaPicker as VaultMediaPickerContent } from "@/components/vault-media-picker";
@@ -41,6 +58,10 @@ export function MediaFields({
   const [resolvingMedia, setResolvingMedia] = useState(initialMedia.some((item) => !item.localUrl));
   const objectUrls = useRef(new Set<string>());
   const onValueChangeRef = useRef(onValueChange);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   const missingLockedMedia = Boolean(
     price && previewUuid && media.every((item) => item.uuid === previewUuid),
   );
@@ -141,6 +162,25 @@ export function MediaFields({
     if (previewUuid === uuid) setPreviewUuid("");
   }
 
+  function move(uuid: string, offset: -1 | 1) {
+    setMedia((current) => {
+      const from = current.findIndex((item) => item.uuid === uuid);
+      const to = from + offset;
+      return from < 0 || to < 0 || to >= current.length
+        ? current
+        : arrayMove(current, from, to);
+    });
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    if (!event.over || event.active.id === event.over.id) return;
+    setMedia((current) => {
+      const from = current.findIndex((item) => item.uuid === event.active.id);
+      const to = current.findIndex((item) => item.uuid === event.over?.id);
+      return from < 0 || to < 0 ? current : arrayMove(current, from, to);
+    });
+  }
+
   return (
     <div className="space-y-3 rounded-xl border border-white/8 bg-black/10 p-3">
       <input
@@ -178,13 +218,19 @@ export function MediaFields({
         )}
       </div>
       {media.length > 0 ? (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={media.map((item) => item.uuid)} strategy={rectSortingStrategy}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {media.map((item, index) => {
             const preview = Boolean(price && previewUuid === item.uuid);
             return (
-              <div
-                key={`${item.uuid}-${index}`}
-                className={`relative overflow-hidden rounded-xl border bg-black/30 transition ${preview ? "border-emerald-400/70 ring-2 ring-emerald-400/15" : "border-white/10"}`}
+              <SortableMediaCard
+                key={item.uuid}
+                id={item.uuid}
+                index={index}
+                total={media.length}
+                preview={preview}
+                onMove={(offset) => move(item.uuid, offset)}
               >
                 {item.localUrl && item.mediaType === "image" ? (
                   <ExpandableImage
@@ -199,14 +245,7 @@ export function MediaFields({
                     <span>{resolvingMedia ? <LoaderCircle className="mx-auto mb-2 size-5 animate-spin" /> : <ImageOff className="mx-auto mb-2 size-5" />}{resolvingMedia ? "Cargando vista previa…" : "Vista previa no disponible"}</span>
                   </div>
                 )}
-                <button
-                  type="button"
-                  aria-label="Quitar archivo"
-                  onClick={() => remove(item.uuid)}
-                  className="absolute right-1.5 top-1.5 z-10 grid size-7 place-items-center rounded-full bg-black/75 text-white"
-                >
-                  <X className="size-3.5" />
-                </button>
+                <button type="button" aria-label="Quitar archivo" onClick={() => remove(item.uuid)} className="absolute right-1.5 top-1.5 z-20 grid size-7 cursor-pointer place-items-center rounded-full bg-black/75 text-white hover:bg-red-500"><X className="size-3.5" /></button>
                 {priceEnabled && price ? (
                   <button
                     type="button"
@@ -225,10 +264,12 @@ export function MediaFields({
                     {item.name}
                   </p>
                 )}
-              </div>
+              </SortableMediaCard>
             );
           })}
         </div>
+        </SortableContext>
+        </DndContext>
       ) : null}
       {media.length > 0 && priceEnabled ? (
         <div className="rounded-xl border border-amber-400/15 bg-amber-400/[.04] p-3">
@@ -261,6 +302,18 @@ export function MediaFields({
       {libraryOpen ? <ContentLibraryPicker selectedUuids={media.map((item) => item.uuid)} remaining={10 - media.length} onClose={() => setLibraryOpen(false)} onAdd={(incoming, suggestedPriceMinor) => { setMedia((current) => [...new Map([...current, ...incoming].map((item) => [item.uuid, item])).values()].slice(0, 10)); if (!price && suggestedPriceMinor) setPrice((suggestedPriceMinor / 100).toFixed(2)); setLibraryOpen(false); enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo agregado" : "archivos agregados"} desde Content Library.`, { variant: "success" }); }} /> : null}
     </div>
   );
+}
+
+function SortableMediaCard({ id, index, total, preview, onMove, children }: { id: string; index: number; total: number; preview: boolean; onMove: (offset: -1 | 1) => void; children: ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={`relative overflow-hidden rounded-xl border bg-black/30 transition-shadow ${isDragging ? "z-30 scale-[1.02] border-violet-400 opacity-80 shadow-2xl shadow-black/60" : preview ? "border-emerald-400/70 ring-2 ring-emerald-400/15" : "border-white/10"}`}>
+    <div className="absolute left-1.5 top-1.5 z-20 flex items-center gap-1 rounded-lg bg-black/75 p-1 text-white backdrop-blur">
+      <button type="button" disabled={index === 0} onClick={() => onMove(-1)} aria-label={`Mover archivo ${index + 1} a la izquierda`} className="grid size-6 cursor-pointer place-items-center rounded disabled:cursor-not-allowed disabled:opacity-25 hover:bg-white/15"><ArrowLeft className="size-3" /></button>
+      <button type="button" {...attributes} {...listeners} aria-label={`Arrastrar archivo ${index + 1} de ${total}`} className="flex h-6 cursor-grab touch-none items-center gap-0.5 rounded px-1 text-[9px] active:cursor-grabbing hover:bg-white/15"><GripVertical className="size-3" />{index + 1}</button>
+      <button type="button" disabled={index === total - 1} onClick={() => onMove(1)} aria-label={`Mover archivo ${index + 1} a la derecha`} className="grid size-6 cursor-pointer place-items-center rounded disabled:cursor-not-allowed disabled:opacity-25 hover:bg-white/15"><ArrowRight className="size-3" /></button>
+    </div>
+    {children}
+  </div>;
 }
 
 function VideoPreview({ src, poster, name }: { src: string; poster?: string; name: string }) {
