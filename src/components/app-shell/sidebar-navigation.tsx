@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   BrainCircuit,
+  CalendarClock,
   ContactRound,
   Bot,
   FileText,
@@ -22,6 +23,7 @@ const navigation = [
   ["Fan Lifecycle", "/lifecycle", ContactRound],
   ["Mensajes", "/messages", MessageSquare],
   ["Content Library", "/content-library", Images],
+  ["Content Studio", "/content-planner", CalendarClock],
   ["Plantillas", "/templates", FileText],
   ["Flujos", "/workflows", Workflow],
   ["Automatización", "/automation", Bot],

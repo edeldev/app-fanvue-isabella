@@ -13,6 +13,8 @@ export const rateLimitPolicies = {
   fanvuePresence: { scope: "fanvue-presence", limit: 2, windowSeconds: 60 },
   workflowMutation: { scope: "workflow-mutation", limit: 60, windowSeconds: 60 },
   aiMessageDraft: { scope: "ai-message-draft", limit: 10, windowSeconds: 60 },
+  aiPostCaption: { scope: "ai-post-caption", limit: 10, windowSeconds: 60 },
+  postCreate: { scope: "post-create", limit: 15, windowSeconds: 60 },
   messageTranslation: { scope: "message-translation", limit: 30, windowSeconds: 60 },
 } as const satisfies Record<string, RateLimitPolicy>;
 

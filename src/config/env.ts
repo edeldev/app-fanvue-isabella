@@ -15,7 +15,7 @@ const serverEnvSchema = z.object({
   GEMINI_API_KEY: z.string().min(1).optional(),
   GEMINI_MODEL: z.string().min(1).default("gemini-3.5-flash-lite"),
   FANVUE_SCOPES: z.string().default(
-    "read:self read:creator read:chat write:chat read:fan read:media write:media read:insights read:post",
+    "read:self read:creator read:chat write:chat read:fan read:media write:media read:insights read:post write:post",
   ),
 });
 

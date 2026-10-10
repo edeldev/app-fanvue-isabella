@@ -9,7 +9,13 @@ export function getFanvueConfig() {
     clientId: env.FANVUE_CLIENT_ID,
     clientSecret: env.FANVUE_CLIENT_SECRET,
     redirectUri: env.FANVUE_REDIRECT_URI,
-    scopes: ["openid", "offline_access", "offline", ...env.FANVUE_SCOPES.split(/\s+/).filter(Boolean)],
+    scopes: [...new Set([
+      "openid",
+      "offline_access",
+      "offline",
+      ...env.FANVUE_SCOPES.split(/\s+/).filter(Boolean),
+      "write:post",
+    ])],
     encryptionKey: env.APP_ENCRYPTION_KEY,
   } as const;
 }
