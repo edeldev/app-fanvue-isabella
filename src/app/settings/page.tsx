@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/app-shell/sidebar";
 import { Topbar } from "@/components/app-shell/topbar";
 import { LocalDateTime } from "@/components/local-date-time";
 import { SettingsForm, type GlobalSettingsView } from "@/features/settings/settings-form";
+import { DisconnectFanvueCard } from "@/features/settings/disconnect-fanvue-card";
 import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 
@@ -28,6 +29,7 @@ export default async function SettingsPage() {
         <StatusCard icon={cronHealthy ? ShieldCheck : Clock3} title={cronHealthy ? "Scheduler funcionando" : "Scheduler sin señal reciente"} detail={heartbeat?.lastStartedAt ? <>Último ciclo: <LocalDateTime value={heartbeat.lastStartedAt} /></> : "Todavía no hay ejecuciones registradas."} healthy={cronHealthy} action={<a href="/automation" className="text-xs font-medium text-violet-300 hover:text-violet-200">Ver supervisión</a>} />
       </section>
       <SettingsForm initial={initial} />
+      <div className="mt-5"><DisconnectFanvueCard /></div>
     </>}
   </main></div></div>;
 }
