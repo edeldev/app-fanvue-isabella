@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink, MessageCircle } from "lucide-react";
+import { ArrowLeft, CalendarDays, ExternalLink, MessageCircle, RefreshCw } from "lucide-react";
 import { Sidebar } from "@/components/app-shell/sidebar";
 import { Topbar } from "@/components/app-shell/topbar";
 import { FanProfileActions } from "@/components/lifecycle/fan-profile-actions";
@@ -15,6 +15,10 @@ import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 
 const money = new Intl.NumberFormat("es-MX", { style: "currency", currency: "USD" });
+const subscriptionDate = new Intl.DateTimeFormat("es-MX", {
+  dateStyle: "long",
+  timeZone: "America/Monterrey",
+});
 type TimelineItem = { id: string; at: Date; title: string; detail: string; tone: string };
 
 export default async function FanLifecycleProfile({ params }: { params: Promise<{ fanId: string }> }) {
@@ -42,6 +46,9 @@ export default async function FanLifecycleProfile({ params }: { params: Promise<
   if (!fan) notFound();
   const meta = lifecyclePresentation[fan.lifecycleStage];
   const activeEnrollment = fan.enrollments.find((item) => ["ACTIVE", "WAITING", "PAUSED"].includes(item.status));
+  const paidSubscription = fan.isSubscriber && !fan.isFreeTrialSubscriber
+    ? fan.subscriptions.find((item) => !item.isFreeTrial && ["ACTIVE", "CANCEL_AT_PERIOD_END"].includes(item.status))
+    : null;
   const messages = fan.conversations[0]?.messages ?? [];
   const inboundMessages = messages.filter((message) => message.direction === "INBOUND");
   const outboundMessages = messages.filter((message) => message.direction === "OUTBOUND");
@@ -84,12 +91,17 @@ export default async function FanLifecycleProfile({ params }: { params: Promise<
           ["Suscripción", fan.isSubscriber ? (fan.isFreeTrialSubscriber ? "Prueba activa" : "Activa") : fan.isExpiredSubscriber ? "Vencida" : "Sin suscripción"],
           ["Workflow", activeEnrollment?.workflow.name ?? "Sin flujo activo"],
         ].map(([label, value]) => <div key={label} className="rounded-2xl border border-white/8 bg-white/[.025] p-4"><p className="text-xs text-zinc-600">{label}</p><p className="mt-2 truncate font-semibold text-white" title={value}>{value}</p></div>)}</section>
+        {fan.isSubscriber && !fan.isFreeTrialSubscriber ? <section className="rounded-2xl border border-violet-400/15 bg-gradient-to-br from-violet-400/[.07] to-transparent p-5"><div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-violet-500/15 text-violet-300"><CalendarDays className="size-5"/></span><div><h2 className="font-semibold text-white">Periodo de suscripción de pago</h2><p className="mt-1 text-xs leading-5 text-zinc-500">Fechas sincronizadas directamente desde Fanvue.</p></div></div><div className="mt-4 grid gap-3 sm:grid-cols-3"><SubscriptionDateCard label="Fecha de inicio" value={paidSubscription ? subscriptionDate.format(paidSubscription.startedAt) : "No disponible"}/><SubscriptionDateCard label="Fecha de vencimiento" value={paidSubscription?.currentPeriodEndsAt ? subscriptionDate.format(paidSubscription.currentPeriodEndsAt) : "Sin fecha confirmada"}/><SubscriptionDateCard label="Renovación" value={paidSubscription?.autoRenewalEnabled ? "Automática" : fan.isNonRenewingSubscriber ? "No renovará" : "No confirmada"} icon={paidSubscription?.autoRenewalEnabled ? <RefreshCw className="size-3.5 text-emerald-300"/> : undefined}/></div></section> : null}
         <section className="rounded-2xl border border-white/8 bg-white/[.025] p-5"><div><h2 className="font-semibold text-white">Origen de los ingresos</h2><p className="mt-1 text-xs text-zinc-600">El total se conserva; aquí puedes ver qué compra realmente este fan.</p></div><div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{revenueCategories.map((category) => { const item = revenueBreakdown[category]; return <div key={category} className="rounded-xl border border-white/7 bg-black/10 p-3"><p className="text-[10px] font-medium text-zinc-500">{revenueCategoryLabels[category]}</p><p className="mt-2 text-sm font-semibold text-white">{money.format(item.amountMinor / 100)}</p><p className="mt-1 text-[10px] text-zinc-700">{item.count} {item.count === 1 ? "pago" : "pagos"}</p></div>; })}</div></section>
         <NextBestActionCard fanId={fan.id} action={nextAction}/>
         <section className="rounded-2xl border border-white/8 bg-white/[.025] p-5"><div className="flex items-end justify-between gap-4"><div><h2 className="font-semibold text-white">Timeline unificado</h2><p className="mt-1 text-xs text-zinc-600">Mensajes, compras, suscripciones, etapas y automatizaciones.</p></div><span className="text-xs text-zinc-600">{timeline.length} eventos</span></div><div className="mt-5 max-h-[680px] space-y-0 overflow-y-auto overscroll-contain pr-2">{timeline.map((item) => <article key={item.id} className="relative grid grid-cols-[18px_1fr] gap-3 pb-5 last:pb-0"><div className="relative flex justify-center"><span className={`relative z-10 mt-1.5 size-2 rounded-full ${item.tone}`}/><span className="absolute bottom-0 top-3 w-px bg-white/8 last:hidden"/></div><div><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-medium text-zinc-300">{item.title}</p><time className="text-[10px] text-zinc-700">{item.at.toLocaleString("es-MX")}</time></div><p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-zinc-600">{item.detail}</p></div></article>)}</div></section>
       </div><div className="space-y-6"><FanMemoryCard fanId={fan.id} memories={effectiveMemories.map((memory) => ({ ...memory, id: "id" in memory ? memory.id : null, observedAt: memory.observedAt.toISOString() }))}/><FanProfileActions fanId={fan.id} stage={fan.lifecycleStage} override={fan.lifecycleOverride} automationPaused={fan.automationPaused} doNotMessage={fan.doNotMessage} doNotMessageReason={fan.doNotMessageReason} hasActiveWorkflow={Boolean(activeEnrollment)} tags={fan.tags.map(({ tag }) => tag)} notes={fan.notes.map((note) => ({ ...note, createdAt: note.createdAt.toISOString() }))}/></div></div>
     </main>
   </div></div>;
+}
+
+function SubscriptionDateCard({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
+  return <div className="rounded-xl border border-white/7 bg-black/15 p-3"><p className="text-[10px] font-medium uppercase tracking-wide text-zinc-600">{label}</p><p className="mt-2 flex items-center gap-1.5 text-sm font-semibold text-zinc-200">{icon}{value}</p></div>;
 }
 
 function eventTitle(type: string) { return ({ LIFECYCLE_STAGE_CHANGED: "Etapa del ciclo actualizada", FOLLOW_CREATED: "Comenzó a seguirte", POST_LIKED: "Le dio like a una publicación", POST_COMMENTED: "Comentó una publicación", FAN_AUTOMATION_PAUSED: "Automatización pausada", FAN_AUTOMATION_RESUMED: "Automatización reanudada", FAN_DO_NOT_MESSAGE_ENABLED: "Protección de contacto activada", FAN_DO_NOT_MESSAGE_DISABLED: "Protección de contacto retirada" } as Record<string, string>)[type] ?? type.replaceAll("_", " ").toLocaleLowerCase("es-MX"); }
