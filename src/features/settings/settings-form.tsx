@@ -30,7 +30,9 @@ export function SettingsForm({ initial }: { initial: GlobalSettingsView }) {
   const [limitsEnabled, setLimitsEnabled] = useState(initial.sendLimitsEnabled);
   const [days, setDays] = useState(initial.sendingWindowDays);
   const [debugMode, setDebugMode] = useState(initial.debugMode);
-  const [aiMessagingEnabled, setAiMessagingEnabled] = useState(initial.aiMessagingEnabled);
+  const [aiMessagingEnabled, setAiMessagingEnabled] = useState(
+    initial.aiMessagingEnabled ?? true,
+  );
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
