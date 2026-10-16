@@ -364,21 +364,7 @@ export function ContentLibraryPicker({
                       className={`overflow-hidden rounded-2xl border text-left transition disabled:cursor-not-allowed disabled:opacity-30 ${chosen ? "border-violet-400 ring-2 ring-violet-400/15" : "border-white/8 hover:border-white/20"}`}
                     >
                       <div className="relative aspect-square bg-black/30">
-                        {asset.thumbnailUrl || asset.localUrl ? (
-                          <img
-                            src={asset.thumbnailUrl ?? asset.localUrl}
-                            alt={asset.name}
-                            className="size-full object-cover"
-                          />
-                        ) : (
-                          <span className="absolute inset-0 grid place-items-center text-zinc-700">
-                            {asset.mediaType === "video" ? (
-                              <Film />
-                            ) : (
-                              <ImageIcon />
-                            )}
-                          </span>
-                        )}
+                        <LibraryPreview asset={asset} />
                         {chosen ? (
                           <span className="absolute right-2 top-2 grid size-7 place-items-center rounded-full bg-violet-500">
                             <Check className="size-4" />
@@ -526,4 +512,15 @@ function Empty({ text }: { text: string }) {
       {text}
     </div>
   );
+}
+
+function LibraryPreview({ asset }: { asset: LibraryAsset }) {
+  const source = asset.thumbnailUrl ?? asset.localUrl;
+  const [state, setState] = useState<{ source?: string; status: "loading" | "loaded" | "error" }>({ source, status: source ? "loading" : "error" });
+  const status = state.source === source ? state.status : source ? "loading" : "error";
+  return <div className="relative size-full overflow-hidden">
+    {status === "loading" ? <span className="absolute inset-0 grid animate-pulse place-items-center bg-gradient-to-br from-white/[.07] via-white/[.025] to-transparent text-zinc-500"><LoaderCircle className="size-5 animate-spin" /></span> : null}
+    {status === "error" ? <span className="absolute inset-0 grid place-items-center text-zinc-700">{asset.mediaType === "video" ? <Film /> : <ImageIcon />}</span> : null}
+    {source ? asset.mediaType === "video" && !asset.thumbnailUrl ? <video src={source} muted preload="metadata" onLoadedData={() => setState({ source, status: "loaded" })} onError={() => setState({ source, status: "error" })} className={`size-full object-cover transition-opacity ${status === "loaded" ? "opacity-100" : "opacity-0"}`} /> : <img src={source} alt={asset.name} loading="lazy" onLoad={() => setState({ source, status: "loaded" })} onError={() => setState({ source, status: "error" })} className={`size-full object-cover transition-opacity ${status === "loaded" ? "opacity-100" : "opacity-0"}`} /> : null}
+  </div>;
 }

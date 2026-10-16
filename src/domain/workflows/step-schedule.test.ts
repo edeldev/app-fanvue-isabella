@@ -13,6 +13,15 @@ describe("scheduleWorkflowStep", () => {
     });
   });
 
+  it("initializes silence waits so the executor can start their rolling timer", () => {
+    expect(scheduleWorkflowStep({ id: "silence", type: "WAIT_FOR_SILENCE", config: { silenceMinutes: 10 } }, now)).toEqual({
+      status: "ACTIVE",
+      currentStepId: "silence",
+      nextRunAt: null,
+      completedAt: null,
+    });
+  });
+
   it("keeps regular waits scheduled for their configured duration", () => {
     expect(scheduleWorkflowStep({ id: "wait", type: "WAIT", config: { durationMinutes: 10 } }, now).nextRunAt).toEqual(new Date("2026-10-05T16:10:00.000Z"));
   });

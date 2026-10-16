@@ -9,17 +9,21 @@ import {
   Download,
   GripVertical,
   ImageIcon,
+  Images,
   LoaderCircle,
   PackageOpen,
   Plus,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { enqueueSnackbar } from "notistack";
 import { downloadArchive } from "@/lib/client/download-archive";
+import type { AttachedMedia } from "@/components/media-fields";
+import { VaultMediaPicker } from "@/components/vault-media-picker";
 
-type Asset = { id: string; name: string; type: string; position?: number };
+type Asset = { id: string; name: string; type: string; fanvueContentId?: string | null; url?: string; thumbnailUrl?: string; position?: number };
 type Pack = {
   id: string;
   name: string;
@@ -49,7 +53,7 @@ const types = [
   "CUSTOM",
 ];
 
-export function PackManager() {
+export function PackManager({ embedded = false }: { embedded?: boolean }) {
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -74,6 +78,18 @@ export function PackManager() {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  async function importMedia(media: AttachedMedia[]) {
+    const response = await fetch("/api/content-library", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "import", media: media.map((item) => ({ uuid: item.uuid, name: item.name, mediaType: item.mediaType })) }),
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || "No se pudo agregar el contenido.");
+    await load();
+    return (Array.isArray(body.items) ? body.items : []) as Asset[];
+  }
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -133,14 +149,14 @@ export function PackManager() {
 
   return (
     <>
-      <header className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+      <header className={`${embedded ? "mb-5 rounded-2xl border border-white/8 bg-white/[.025] p-4 sm:p-5" : "mb-7"} flex flex-col justify-between gap-4 sm:flex-row sm:items-end`}>
         <div>
-          <Link href="/content-library" className="text-xs text-violet-300">
+          {!embedded ? <Link href="/content-library" className="text-xs text-violet-300">
             ← Content Library
-          </Link>
-          <h1 className="mt-2 text-3xl font-semibold text-white">Packs</h1>
+          </Link> : null}
+          <h1 className={`${embedded ? "text-xl" : "mt-2 text-3xl"} font-semibold text-white`}>Packs</h1>
           <p className="mt-2 text-sm text-zinc-500">
-            Productos visuales reutilizables, sin duplicar tus archivos.
+            Agrupa contenido, define portadas y prepara productos sin duplicar archivos.
           </p>
         </div>
         <button
@@ -245,6 +261,7 @@ export function PackManager() {
           assets={data.assets}
           selected={selected}
           onSelected={setSelected}
+          onImport={importMedia}
           onSubmit={create}
           onClose={() => setCreating(false)}
         />
@@ -254,6 +271,7 @@ export function PackManager() {
           pack={editing}
           categories={data.categories}
           assets={data.assets}
+          onImport={importMedia}
           onClose={() => setEditing(null)}
           onDelete={() => void remove(editing.id)}
           onSaved={async () => {
@@ -286,6 +304,7 @@ function PackForm({
   selected,
   onSelected,
   onSubmit,
+  onImport,
   onClose,
 }: {
   title: string;
@@ -294,6 +313,7 @@ function PackForm({
   selected: string[];
   onSelected: (ids: string[]) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onImport: (media: AttachedMedia[]) => Promise<Asset[]>;
   onClose: () => void;
 }) {
   return (
@@ -308,6 +328,10 @@ function PackForm({
           assets={assets}
           selected={selected}
           onChange={onSelected}
+          onImport={async (media) => {
+            const imported = await onImport(media);
+            onSelected([...new Set([...selected, ...imported.map((item) => item.id)])]);
+          }}
         />
         <button className="mt-5 w-full cursor-pointer rounded-xl bg-violet-500 px-4 py-3 font-semibold">
           Crear con {selected.length} assets
@@ -324,6 +348,7 @@ function PackEditor({
   onClose,
   onDelete,
   onSaved,
+  onImport,
 }: {
   pack: Pack;
   categories: Data["categories"];
@@ -331,6 +356,7 @@ function PackEditor({
   onClose: () => void;
   onDelete: () => void;
   onSaved: () => void;
+  onImport: (media: AttachedMedia[]) => Promise<Asset[]>;
 }) {
   const [ordered, setOrdered] = useState(pack.assets.map((asset) => asset.id));
   const [cover, setCover] = useState(pack.coverContentId ?? ordered[0] ?? "");
@@ -519,6 +545,10 @@ function PackEditor({
                 ...ids.filter((id) => !current.includes(id)),
               ])
             }
+            onImport={async (media) => {
+              const imported = await onImport(media);
+              setOrdered((current) => [...new Set([...current, ...imported.map((item) => item.id)])]);
+            }}
           />
         </div>
         <div className="mt-5 flex justify-between">
@@ -562,59 +592,13 @@ function Fields({
 }) {
   return (
     <div className="mt-5 grid gap-3 sm:grid-cols-2">
-      <input
-        name="name"
-        required
-        defaultValue={pack?.name}
-        placeholder="Nombre"
-        className="rounded-xl border border-white/10 bg-black/20 p-3"
-      />
-      <select
-        name="type"
-        defaultValue={pack?.type ?? "CUSTOM"}
-        className="rounded-xl border border-white/10 bg-[#20222b] p-3"
-      >
-        {types.map((type) => (
-          <option key={type}>{type}</option>
-        ))}
-      </select>
-      <textarea
-        name="description"
-        defaultValue={pack?.description ?? ""}
-        placeholder="Descripción"
-        className="rounded-xl border border-white/10 bg-black/20 p-3 sm:col-span-2"
-      />
-      <select
-        name="categoryId"
-        defaultValue={pack?.category?.id ?? ""}
-        className="rounded-xl border border-white/10 bg-[#20222b] p-3"
-      >
-        <option value="">Sin categoría</option>
-        {categories.map((item) => (
-          <option key={item.id} value={item.id}>
-            {item.name}
-          </option>
-        ))}
-      </select>
-      <input
-        name="price"
-        type="number"
-        min="0"
-        step=".01"
-        defaultValue={pack?.priceMinor != null ? pack.priceMinor / 100 : ""}
-        placeholder="Precio USD"
-        className="rounded-xl border border-white/10 bg-black/20 p-3"
-      />
+      <label className="text-xs text-zinc-500">Nombre del Pack<input name="name" required defaultValue={pack?.name} placeholder="Ej. Pack lencería negra" className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-zinc-200 outline-none focus:border-violet-400/40" /></label>
+      <label className="text-xs text-zinc-500">Tipo de Pack<select name="type" defaultValue={pack?.type ?? "CUSTOM"} className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#20222b] p-3 text-zinc-200 outline-none focus:border-violet-400/40">{types.map((type) => <option key={type}>{type}</option>)}</select></label>
+      <label className="text-xs text-zinc-500 sm:col-span-2">Descripción<textarea name="description" defaultValue={pack?.description ?? ""} placeholder="Explica qué contiene este Pack…" rows={3} className="mt-1.5 w-full resize-y rounded-xl border border-white/10 bg-black/20 p-3 text-zinc-200 outline-none focus:border-violet-400/40" /></label>
+      <label className="text-xs text-zinc-500">Categoría<select name="categoryId" defaultValue={pack?.category?.id ?? ""} className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#20222b] p-3 text-zinc-200 outline-none focus:border-violet-400/40"><option value="">Sin categoría</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><span className="mt-1.5 block text-[10px] leading-4 text-zinc-600">Los archivos del Pack aparecerán al filtrar esta categoría.</span></label>
+      <label className="text-xs text-zinc-500">Precio sugerido (USD)<input name="price" type="number" min="0" step=".01" defaultValue={pack?.priceMinor != null ? pack.priceMinor / 100 : ""} placeholder="Ej. 12.00" className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-zinc-200 outline-none focus:border-violet-400/40" /></label>
       {pack ? (
-        <select
-          name="status"
-          defaultValue={pack.status}
-          className="rounded-xl border border-white/10 bg-[#20222b] p-3"
-        >
-          {["DRAFT", "READY", "ACTIVE", "ARCHIVED"].map((status) => (
-            <option key={status}>{status}</option>
-          ))}
-        </select>
+        <label className="text-xs text-zinc-500">Estado<select name="status" defaultValue={pack.status} className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#20222b] p-3 text-zinc-200 outline-none focus:border-violet-400/40">{["DRAFT", "READY", "ACTIVE", "ARCHIVED"].map((status) => <option key={status}>{status}</option>)}</select></label>
       ) : null}
     </div>
   );
@@ -623,16 +607,54 @@ function AssetPicker({
   assets,
   selected,
   onChange,
+  onImport,
 }: {
   assets: Asset[];
   selected: string[];
   onChange: (ids: string[]) => void;
+  onImport: (media: AttachedMedia[]) => Promise<void>;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [vaultOpen, setVaultOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+
+  async function addMedia(media: AttachedMedia[]) {
+    if (!media.length || importing) return;
+    setImporting(true);
+    try {
+      await onImport(media);
+      enqueueSnackbar(`${media.length} ${media.length === 1 ? "archivo agregado" : "archivos agregados"} al Pack.`, { variant: "success" });
+    } catch (error) {
+      enqueueSnackbar(error instanceof Error ? error.message : "No se pudo agregar el contenido.", { variant: "error" });
+    } finally {
+      setImporting(false);
+      setVaultOpen(false);
+    }
+  }
+
+  async function uploadFromMac(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []).slice(0, 10);
+    event.target.value = "";
+    if (!files.length) return;
+    setImporting(true);
+    try {
+      const form = new FormData();
+      files.forEach((file) => form.append("files", file));
+      const response = await fetch("/api/media/upload", { method: "POST", body: form });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "No se pudieron subir los archivos.");
+      await onImport(body.media);
+      enqueueSnackbar(`${body.media.length} ${body.media.length === 1 ? "archivo agregado" : "archivos agregados"} al Pack.`, { variant: "success" });
+    } catch (error) {
+      enqueueSnackbar(error instanceof Error ? error.message : "No se pudieron subir los archivos.", { variant: "error" });
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <div className="mt-5">
-      <p className="text-xs text-zinc-400">
-        Agregar contenido · {selected.length} seleccionado
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs text-zinc-300">Contenido del Pack</p><p className="mt-0.5 text-[10px] text-zinc-600">{selected.length} seleccionado · los archivos se guardan una sola vez y este Pack los referencia.</p></div><div className="flex gap-2"><input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm" multiple className="hidden" onChange={(event) => void uploadFromMac(event)} /><button type="button" disabled={importing} onClick={() => inputRef.current?.click()} className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-2 text-[10px] text-zinc-300 hover:border-violet-400/30 disabled:opacity-40">{importing ? <LoaderCircle className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}Desde Mac</button><button type="button" disabled={importing} onClick={() => setVaultOpen(true)} className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-2 text-[10px] text-zinc-300 hover:border-violet-400/30 disabled:opacity-40"><Images className="size-3.5" />Desde Fanvue</button></div></div>
       <div className="mt-2 grid max-h-64 grid-cols-2 gap-2 overflow-y-auto">
         {assets.map((asset) => {
           const chosen = selected.includes(asset.id);
@@ -647,14 +669,22 @@ function AssetPicker({
                     : [...selected, asset.id],
                 )
               }
-              className={`flex items-center gap-2 rounded-xl border p-3 text-left text-xs ${chosen ? "border-violet-400 bg-violet-400/10" : "border-white/8 text-zinc-500"}`}
+              className={`overflow-hidden rounded-xl border text-left text-xs ${chosen ? "border-violet-400 bg-violet-400/10 ring-2 ring-violet-400/10" : "border-white/8 text-zinc-500 hover:border-white/20"}`}
             >
-              <ImageIcon className="size-4" />
-              <span className="truncate">{asset.name}</span>
+              <PackAssetPreview asset={asset} />
+              <span className="block truncate px-2.5 py-2">{asset.name}</span>
             </button>
           );
         })}
       </div>
+      {vaultOpen ? <VaultMediaPicker selectedUuids={assets.flatMap((asset) => asset.fanvueContentId ? [asset.fanvueContentId] : [])} remaining={10} onClose={() => setVaultOpen(false)} onAdd={(media) => void addMedia(media)} /> : null}
     </div>
   );
+}
+
+function PackAssetPreview({ asset }: { asset: Asset }) {
+  const source = asset.thumbnailUrl ?? asset.url;
+  const [state, setState] = useState<{ source?: string; status: "loading" | "loaded" | "error" }>({ source, status: source ? "loading" : "error" });
+  const status = state.source === source ? state.status : source ? "loading" : "error";
+  return <span className="relative block aspect-video overflow-hidden bg-black/30">{status === "loading" ? <span className="absolute inset-0 grid place-items-center text-zinc-600"><LoaderCircle className="size-5 animate-spin" /></span> : null}{status === "error" ? <span className="absolute inset-0 grid place-items-center text-zinc-700"><ImageIcon className="size-5" /></span> : null}{source ? asset.type === "video" && !asset.thumbnailUrl ? <video src={source} muted preload="metadata" onLoadedData={() => setState({ source, status: "loaded" })} onError={() => setState({ source, status: "error" })} className={`size-full object-cover ${status === "loaded" ? "opacity-100" : "opacity-0"}`} /> : <img src={source} alt={asset.name} loading="lazy" onLoad={() => setState({ source, status: "loaded" })} onError={() => setState({ source, status: "error" })} className={`size-full object-cover ${status === "loaded" ? "opacity-100" : "opacity-0"}`} /> : null}</span>;
 }

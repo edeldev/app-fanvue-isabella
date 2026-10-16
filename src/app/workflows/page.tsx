@@ -178,6 +178,7 @@ export default async function WorkflowsPage({ searchParams }: { searchParams: Pr
         | "SEND_MESSAGE"
         | "WAIT"
         | "WAIT_FOR_REPLY"
+        | "WAIT_FOR_SILENCE"
         | "SEND_PPV"
         | "CONDITION"
         | "CHANGE_WORKFLOW"

@@ -16,9 +16,9 @@ export function scheduleWorkflowStep(step: ScheduledStep | undefined, now: Date)
     const minutes = Number(record(step.config).durationMinutes);
     return { status: "WAITING" as const, currentStepId: step.id, nextRunAt: new Date(now.getTime() + minutes * 60_000), completedAt: null };
   }
-  // WAIT_FOR_REPLY needs one ACTIVE cycle with no due date so the executor can
+  // These steps need one ACTIVE cycle with no due date so the executor can
   // create its real timeout window. Scheduling it for `now` skips that setup.
-  if (step.type === "WAIT_FOR_REPLY") {
+  if (step.type === "WAIT_FOR_REPLY" || step.type === "WAIT_FOR_SILENCE") {
     return { status: "ACTIVE" as const, currentStepId: step.id, nextRunAt: null, completedAt: null };
   }
   return { status: "ACTIVE" as const, currentStepId: step.id, nextRunAt: now, completedAt: null };

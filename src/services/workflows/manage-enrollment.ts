@@ -2,6 +2,7 @@ import type { EnrollmentStatus, Prisma } from "@prisma/client";
 import { assertEnrollmentTransition } from "@/domain/automation/transitions";
 import { remainingWaitSeconds, resumedRunAt } from "@/domain/workflows/pause-schedule";
 import { prisma } from "@/lib/prisma";
+import { silenceWaitDeadline } from "@/domain/workflows/silence-wait";
 import { reentryBlockedReason } from "@/domain/workflows/reentry-policy";
 import { isReplyWithinAttributionWindow } from "@/domain/workflows/reply-attribution";
 import { resolveReplyPausePolicy } from "@/domain/workflows/reply-pause-policy";
@@ -132,6 +133,49 @@ export async function routeReplyWaitEnrollments(creatorId: string, fanId: string
     if (updated) routed.push(enrollment.id);
   }
   return routed;
+}
+
+export async function resetSilenceWaitEnrollments(creatorId: string, fanId: string, messageId: string, repliedAt: Date) {
+  const enrollments = await prisma.workflowEnrollment.findMany({
+    where: {
+      creatorId,
+      fanId,
+      status: { in: ["ACTIVE", "WAITING"] },
+      currentStep: { type: "WAIT_FOR_SILENCE" },
+    },
+    include: { currentStep: true, workflow: { select: { name: true } } },
+  });
+  const reset: string[] = [];
+  for (const enrollment of enrollments) {
+    const step = enrollment.currentStep;
+    if (!step) continue;
+    const silenceMinutes = Number(record(step.config).silenceMinutes);
+    if (!Number.isInteger(silenceMinutes) || silenceMinutes < 1 || silenceMinutes > 43_200) continue;
+    const resumeAt = silenceWaitDeadline(repliedAt, silenceMinutes);
+    const previousResult = record(enrollment.lastResult);
+    const updated = await prisma.workflowEnrollment.updateMany({
+      where: { id: enrollment.id, status: { in: ["ACTIVE", "WAITING"] }, currentStepId: step.id },
+      data: {
+        status: "WAITING",
+        nextRunAt: resumeAt,
+        lastResult: { ...previousResult, reasonCode: "WAITING_FOR_FAN_SILENCE", stepId: step.id, lastInboundAt: repliedAt.toISOString(), messageId, resumeAt: resumeAt.toISOString() },
+      },
+    });
+    if (!updated.count) continue;
+    reset.push(enrollment.id);
+    await prisma.automationLog.create({
+      data: {
+        creatorId,
+        fanId,
+        enrollmentId: enrollment.id,
+        eventType: "WORKFLOW_SILENCE_WAIT_RESET",
+        reasonCode: "FAN_REPLIED",
+        explanation: `${enrollment.workflow.name}: el fan volvió a responder; el contador de ${silenceMinutes} min sin mensajes comenzó de nuevo.`,
+        metadata: { stepId: step.id, messageId, repliedAt: repliedAt.toISOString(), silenceMinutes, resumeAt: resumeAt.toISOString() } satisfies Prisma.InputJsonValue,
+      },
+    });
+  }
+  return reset;
 }
 
 export async function pauseEnrollmentsOnFanReply(creatorId: string, fanId: string, messageId: string, repliedAt: Date, excludedEnrollmentIds: string[] = []) {

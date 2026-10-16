@@ -107,6 +107,27 @@ describe("workflowDefinitionInputSchema", () => {
     }).success).toBe(true);
   });
 
+  it("accepts a rolling silence wait", () => {
+    expect(workflowDefinitionInputSchema.safeParse({
+      name: "Seguimiento por inactividad", priority: 1, isPrimary: true,
+      steps: [
+        { name: "Esperar silencio", type: "WAIT_FOR_SILENCE", config: { stepKey: "silence", silenceMinutes: 10 } },
+        { name: "Seguimiento", type: "SEND_MESSAGE", messageTemplateId: "follow-up", config: { stepKey: "message" } },
+        { name: "Fin", type: "END", config: { stepKey: "end" } },
+      ],
+    }).success).toBe(true);
+  });
+
+  it("rejects a silence wait without a positive duration", () => {
+    expect(workflowDefinitionInputSchema.safeParse({
+      name: "Silencio inválido", priority: 1, isPrimary: true,
+      steps: [
+        { name: "Esperar silencio", type: "WAIT_FOR_SILENCE", config: { stepKey: "silence", silenceMinutes: 0 } },
+        { name: "Fin", type: "END", config: { stepKey: "end" } },
+      ],
+    }).success).toBe(false);
+  });
+
   it("rejects a reply wait without both forward branches", () => {
     expect(workflowDefinitionInputSchema.safeParse({
       name: "Seguimiento incompleto", priority: 1, isPrimary: true,

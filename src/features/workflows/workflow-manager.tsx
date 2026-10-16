@@ -22,12 +22,12 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { stepTypeLabels, type WorkflowDefinitionInput } from "@/domain/workflows/definition";
+import type { WorkflowDefinitionInput } from "@/domain/workflows/definition";
 import { workflowReentryPolicyLabels } from "@/domain/workflows/reentry-policy";
 import { workflowTriggerLabels } from "@/domain/workflows/triggers";
 import { WorkflowDeleteDialog } from "./workflow-delete-dialog";
 import { WorkflowEditor } from "./workflow-editor";
-import { workflowStepContext } from "./step-context";
+import { WorkflowPreviewModal } from "./workflow-preview-modal";
 import type { TemplateOption, WorkflowAnalyticsView, WorkflowDefaultsView, WorkflowView } from "./types";
 
 const PAGE_SIZE = 6;
@@ -46,11 +46,10 @@ export function WorkflowManager({ workflows, templates, defaults, analytics, ini
   const [editor, setEditor] = useState<WorkflowView | null | undefined>(openCreator ? null : undefined);
   const [busy, setBusy] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<WorkflowView | null>(null);
+  const [previewing, setPreviewing] = useState<WorkflowView | null>(null);
   const [query, setQuery] = useState(initialQuery);
   const [status, setStatus] = useState<StatusFilter>("ALL");
   const [page, setPage] = useState(1);
-  const templateNames = useMemo(() => new Map(templates.map((template) => [template.id, template.name])), [templates]);
-  const workflowNames = useMemo(() => new Map(workflows.map((workflow) => [workflow.id, workflow.name])), [workflows]);
   const analyticsByWorkflow = useMemo(() => new Map(analytics.map((item) => [item.workflowId, item])), [analytics]);
   const filtered = workflows.filter((workflow) => {
     const normalized = query.trim().toLocaleLowerCase("es-MX");
@@ -127,7 +126,7 @@ export function WorkflowManager({ workflows, templates, defaults, analytics, ini
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-zinc-600"><span>{workflowReentryPolicyLabels[workflow.reentryPolicy]}{workflow.reentryPolicy === "AFTER_DELAY" ? ` · ${workflow.reentryDelayDays} días` : ""}</span>{result?.messagesSent ? <span className="flex items-center gap-1"><MessageSquare className="size-3" />{result.messagesSent} mensajes</span> : null}{result?.attributedRevenueMinor ? <span className="font-medium text-emerald-400">{money.format(result.attributedRevenueMinor / 100)} atribuido</span> : null}{workflow.publishedAt ? <span className="ml-auto flex items-center gap-1"><Clock3 className="size-3" />{new Date(workflow.publishedAt).toLocaleDateString("es-MX")}</span> : null}</div>
         </div>
-        <details className="border-t border-white/6"><summary className="cursor-pointer list-none px-5 py-3 text-xs text-zinc-500 transition hover:bg-white/[.025] hover:text-zinc-300 [&::-webkit-details-marker]:hidden">Ver estructura del flujo <span className="ml-1 text-zinc-700">→</span></summary><div className="border-t border-white/6 bg-black/10 px-4 py-4"><div className="flex gap-2 overflow-x-auto pb-1">{workflow.steps.map((step, index) => { const context = workflowStepContext(step, templateNames, workflowNames); return <div key={`${workflow.id}-${index}`} className="flex shrink-0 items-center gap-2"><div className="w-40 rounded-xl border border-white/8 bg-[#181a21] px-3 py-2"><p className="truncate text-[11px] font-medium text-zinc-300">{index + 1}. {step.name}</p><p className="mt-1 truncate text-[10px] text-violet-300/70" title={context ?? stepTypeLabels[step.type]}>{context ?? stepTypeLabels[step.type]}</p></div>{index < workflow.steps.length - 1 ? <span className="text-zinc-700">→</span> : null}</div>; })}</div></div></details>
+        <button type="button" onClick={() => setPreviewing(workflow)} className="flex w-full cursor-pointer items-center justify-between border-t border-white/6 px-5 py-3 text-left text-xs text-zinc-500 transition hover:bg-white/[.025] hover:text-zinc-300"><span>Ver estructura del flujo</span><span className="text-zinc-700">→</span></button>
       </article>;
     })}</div>
 
@@ -137,6 +136,7 @@ export function WorkflowManager({ workflows, templates, defaults, analytics, ini
 
     <div className="mt-5 rounded-2xl border border-violet-400/12 bg-violet-400/[.025] p-5"><CheckCircle2 className="mb-3 size-6 text-violet-400" /><h2 className="text-sm font-medium text-white">Diseño seguro</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-zinc-500">Cada acción pasa por Validation Guard. Publicar congela esa versión para que los enrollments en curso nunca cambien inesperadamente.</p></div>
     {pendingDelete ? <WorkflowDeleteDialog workflow={pendingDelete} busy={busy} onCancel={() => setPendingDelete(null)} onConfirm={() => { void request(`/api/workflows/${pendingDelete.id}`, { method: "DELETE" }, "Workflow eliminado correctamente.").then(() => setPendingDelete(null)); }} /> : null}
+    {previewing ? <WorkflowPreviewModal workflow={previewing} templates={templates} workflows={workflows} onClose={() => setPreviewing(null)} /> : null}
   </section>;
 }
 

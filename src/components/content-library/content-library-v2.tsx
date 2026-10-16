@@ -128,8 +128,6 @@ export function ContentLibraryV2() {
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadAbort = useRef<AbortController | null>(null);
 
-  console.log(data);
-
   const load = useCallback(
     async (signal?: AbortSignal) => {
       setLoading(true);
@@ -476,7 +474,7 @@ export function ContentLibraryV2() {
           </div>
           <div className="mt-5 hidden border-t border-white/8 pt-5 xl:block">
             <Link
-              href="/content-library/packs"
+              href="/content-library?section=packs"
               className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs text-zinc-400 hover:bg-violet-400/[.06] hover:text-violet-300"
             >
               <PackageOpen className="size-4" />
@@ -849,7 +847,6 @@ function AssetTile({
   onOpen: () => void;
   onFavorite: () => void;
 }) {
-  const source = asset.thumbnailUrl ?? asset.url;
   return (
     <article
       className={`group overflow-hidden rounded-2xl border bg-black/15 transition ${selected ? "border-violet-400 ring-2 ring-violet-400/15" : "border-white/8 hover:-translate-y-0.5 hover:border-white/20"}`}
@@ -860,27 +857,7 @@ function AssetTile({
           onClick={onOpen}
           className="absolute inset-0 z-[1] size-full cursor-zoom-in"
         >
-          {source ? (
-            asset.mediaType === "video" && !asset.thumbnailUrl ? (
-              <video
-                src={source}
-                muted
-                preload="metadata"
-                className="size-full object-cover"
-              />
-            ) : (
-              <img
-                src={source}
-                alt={asset.name}
-                loading="lazy"
-                className="size-full object-cover transition duration-300 group-hover:scale-[1.03]"
-              />
-            )
-          ) : (
-            <span className="grid size-full place-items-center text-zinc-700">
-              {asset.mediaType === "video" ? <Film /> : <ImageIcon />}
-            </span>
-          )}
+          <AssetThumbnail asset={asset} />
         </button>
         <button
           type="button"
@@ -936,6 +913,17 @@ function AssetTile({
       </div>
     </article>
   );
+}
+
+function AssetThumbnail({ asset }: { asset: Asset }) {
+  const source = asset.thumbnailUrl ?? asset.url;
+  const [state, setState] = useState<{ source?: string; status: "loading" | "loaded" | "error" }>({ source, status: source ? "loading" : "error" });
+  const status = state.source === source ? state.status : source ? "loading" : "error";
+  return <span className="relative block size-full overflow-hidden">
+    {status === "loading" ? <span className="absolute inset-0 grid animate-pulse place-items-center bg-gradient-to-br from-white/[.07] via-white/[.025] to-transparent text-zinc-500"><LoaderCircle className="size-5 animate-spin" /></span> : null}
+    {status === "error" ? <span className="absolute inset-0 grid place-items-center text-zinc-700">{asset.mediaType === "video" ? <Film /> : <ImageIcon />}</span> : null}
+    {source ? asset.mediaType === "video" && !asset.thumbnailUrl ? <video src={source} muted preload="metadata" onLoadedData={() => setState({ source, status: "loaded" })} onError={() => setState({ source, status: "error" })} className={`size-full object-cover transition duration-300 ${status === "loaded" ? "opacity-100 group-hover:scale-[1.03]" : "opacity-0"}`} /> : <img src={source} alt={asset.name} loading="lazy" onLoad={() => setState({ source, status: "loaded" })} onError={() => setState({ source, status: "error" })} className={`size-full object-cover transition duration-300 ${status === "loaded" ? "opacity-100 group-hover:scale-[1.03]" : "opacity-0"}`} /> : null}
+  </span>;
 }
 
 function AssetPreview({
@@ -1195,7 +1183,7 @@ function Usage({ asset }: { asset: Asset }) {
       {asset.packs?.map((item) => (
         <Link
           key={`p-${item.id}`}
-          href={`/content-library/packs?pack=${item.id}`}
+          href={`/content-library?section=packs&pack=${item.id}`}
           className="flex items-center gap-2 rounded-xl border border-white/8 px-3 py-2.5 text-xs text-zinc-300 hover:border-violet-400/30"
         >
           <PackageOpen className="size-3.5 text-violet-300" />
@@ -1545,7 +1533,7 @@ function PackSelectionDialog({
           </div>
           {!packs.length ? (
             <Link
-              href="/content-library/packs"
+              href="/content-library?section=packs"
               className="mt-3 block rounded-xl bg-violet-500 px-4 py-3 text-center text-xs font-semibold text-white"
             >
               Crear mi primer Pack

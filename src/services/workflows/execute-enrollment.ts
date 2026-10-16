@@ -11,6 +11,7 @@ import { markWorkflowSendFailed, markWorkflowSendSucceeded, reserveWorkflowSend 
 import { maximumWorkflowAttempts, workflowRetryDecision } from "@/domain/workflows/retry-policy";
 import { sanitizeErrorMessage } from "@/lib/logger";
 import { scheduleWorkflowStep } from "@/domain/workflows/step-schedule";
+import { silenceWaitDeadline } from "@/domain/workflows/silence-wait";
 
 type LoadedEnrollment = NonNullable<Awaited<ReturnType<typeof loadEnrollment>>>;
 type StepRecord = LoadedEnrollment["currentStep"];
@@ -91,6 +92,38 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
       prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, eventType: "WORKFLOW_REPLY_WAIT_STARTED", explanation: `${step.name}: esperando una respuesta hasta ${timeoutAt.toLocaleString("es-MX")}.`, metadata: { stepId: step.id, startedAt: now.toISOString(), timeoutAt: timeoutAt.toISOString() } } }),
     ]);
     return { outcome: "REPLY_WAIT_STARTED", nextStep: step.name, shouldContinue: false };
+  }
+
+  if (step.type === "WAIT_FOR_SILENCE" && enrollment.status === "ACTIVE" && !enrollment.nextRunAt) {
+    const silenceMinutes = Number(jsonRecord(step.config).silenceMinutes);
+    const resumeAt = silenceWaitDeadline(now, silenceMinutes);
+    await prisma.$transaction([
+      prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { status: "WAITING", nextRunAt: resumeAt, lastResult: { reasonCode: "WAITING_FOR_FAN_SILENCE", stepId: step.id, startedAt: now.toISOString(), lastInboundAt: null, resumeAt: resumeAt.toISOString() } } }),
+      prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, eventType: "WORKFLOW_SILENCE_WAIT_STARTED", explanation: `${step.name}: continuará cuando el fan lleve ${silenceMinutes} min sin responder.`, metadata: { stepId: step.id, silenceMinutes, resumeAt: resumeAt.toISOString() } } }),
+    ]);
+    return { outcome: "SILENCE_WAIT_STARTED", nextStep: step.name, shouldContinue: false };
+  }
+
+  if (step.type === "WAIT_FOR_SILENCE") {
+    const config = jsonRecord(step.config);
+    const lastResult = jsonRecord(enrollment.lastResult);
+    const silenceMinutes = Number(config.silenceMinutes);
+    const startedAt = typeof lastResult.startedAt === "string" ? new Date(lastResult.startedAt) : enrollment.lastRunAt ?? enrollment.updatedAt;
+    const latestReply = await prisma.message.findFirst({
+      where: { creatorId, conversation: { fanId: enrollment.fanId }, direction: "INBOUND", deletedAt: null, sentAt: { gte: startedAt } },
+      orderBy: { sentAt: "desc" },
+      select: { id: true, fanvueMessageId: true, sentAt: true },
+    });
+    if (latestReply) {
+      const resumeAt = silenceWaitDeadline(latestReply.sentAt, silenceMinutes);
+      if (resumeAt > now) {
+        await prisma.workflowEnrollment.update({
+          where: { id: enrollment.id },
+          data: { status: "WAITING", nextRunAt: resumeAt, lastResult: { ...lastResult, lastInboundAt: latestReply.sentAt.toISOString(), messageId: latestReply.fanvueMessageId ?? latestReply.id, resumeAt: resumeAt.toISOString() } },
+        });
+        return { outcome: "SILENCE_WAIT_RESET", nextStep: step.name, shouldContinue: false };
+      }
+    }
   }
 
   if ((step.type === "SEND_MESSAGE" || step.type === "SEND_PPV") && enrollment.workflow.sendWindowEnabled) {

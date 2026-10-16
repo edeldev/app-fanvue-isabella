@@ -8,6 +8,7 @@ export const editableStepTypes = [
   "SEND_MESSAGE",
   "WAIT",
   "WAIT_FOR_REPLY",
+  "WAIT_FOR_SILENCE",
   "SEND_PPV",
   "CONDITION",
   "CHANGE_WORKFLOW",
@@ -52,6 +53,10 @@ export const workflowStepInputSchema = z.object({
   if (step.type === "WAIT_FOR_REPLY") {
     const result = z.number().int().min(1).max(43_200).safeParse(step.config.timeoutMinutes);
     if (!result.success) context.addIssue({ code: "custom", path: ["config", "timeoutMinutes"], message: "El tiempo para responder debe estar entre 1 minuto y 30 días." });
+  }
+  if (step.type === "WAIT_FOR_SILENCE") {
+    const result = z.number().int().min(1).max(43_200).safeParse(step.config.silenceMinutes);
+    if (!result.success) context.addIssue({ code: "custom", path: ["config", "silenceMinutes"], message: "El silencio debe estar entre 1 minuto y 30 días." });
   }
   if (step.type === "CONDITION") {
     const legacyValid = workflowConditions.includes(String(step.config.condition) as (typeof workflowConditions)[number]);
@@ -134,6 +139,7 @@ export const stepTypeLabels: Record<(typeof editableStepTypes)[number], string> 
   SEND_MESSAGE: "Enviar mensaje",
   WAIT: "Esperar",
   WAIT_FOR_REPLY: "Esperar respuesta",
+  WAIT_FOR_SILENCE: "Esperar silencio",
   SEND_PPV: "Enviar PPV",
   CONDITION: "Evaluar condición",
   CHANGE_WORKFLOW: "Cambiar de flujo",

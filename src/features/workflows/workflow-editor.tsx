@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, ArrowUp, Flag, GitBranch, GripVertical, ImageIcon, MessageCircleQuestion, MessageSquare, Repeat2, Save, Timer, Trash2, X, Zap } from "lucide-react";
+import { ArrowDown, ArrowUp, Flag, GitBranch, GripVertical, ImageIcon, MessageCircleQuestion, MessageSquare, Repeat2, Save, Timer, TimerReset, Trash2, X, Zap } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { closestCenter, DndContext, DragOverlay, KeyboardSensor, PointerSensor, useDraggable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -27,7 +27,7 @@ interface Props {
 
 const emptyStep = (type: WorkflowDefinitionInput["steps"][number]["type"]) => ({
   name: stepTypeLabels[type], type, messageTemplateId: null,
-  config: type === "WAIT" ? { durationMinutes: 60 } : type === "WAIT_FOR_REPLY" ? { timeoutMinutes: 30 } : type === "CONDITION" ? { condition: "IS_FOLLOWER" } : type === "SEND_MESSAGE" || type === "SEND_PPV" ? { replyPauseMode: "DISABLED", manualText: "", manualMedia: [], manualPriceMinor: null, manualPreviewUuid: null } : {},
+  config: type === "WAIT" ? { durationMinutes: 60 } : type === "WAIT_FOR_REPLY" ? { timeoutMinutes: 30 } : type === "WAIT_FOR_SILENCE" ? { silenceMinutes: 10 } : type === "CONDITION" ? { condition: "IS_FOLLOWER" } : type === "SEND_MESSAGE" || type === "SEND_PPV" ? { replyPauseMode: "DISABLED", manualText: "", manualMedia: [], manualPriceMinor: null, manualPreviewUuid: null } : {},
 });
 
 const weekDays = [{ value: 1, label: "L" }, { value: 2, label: "M" }, { value: 3, label: "X" }, { value: 4, label: "J" }, { value: 5, label: "V" }, { value: 6, label: "S" }, { value: 0, label: "D" }];
@@ -153,7 +153,7 @@ function StepList({ initialSteps, templates, publishedWorkflows }: { initialStep
 
   return <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={({ active }) => setDragging(String(active.id))} onDragCancel={() => setDragging(null)} onDragEnd={handleDragEnd}><section className="mt-6 overflow-hidden rounded-2xl border border-white/8 bg-[#101218]"><input type="hidden" name="steps" value={JSON.stringify(steps)} />
     <div className="border-b border-white/8 p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-sm font-medium text-white">Diagrama del flujo</h3><p className="mt-1 text-xs text-zinc-600">Arrastra un bloque al lienzo o toma el asa de un paso para cambiar su orden.</p></div><span className="rounded-full bg-white/5 px-3 py-1.5 text-[11px] text-zinc-500">{steps.length} bloques</span></div>
-      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">{editableStepTypes.filter((type) => type !== "END").map((type) => <PaletteBlock key={type} type={type} onClick={() => addStep(type)} />)}</div>
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-7">{editableStepTypes.filter((type) => type !== "END").map((type) => <PaletteBlock key={type} type={type} onClick={() => addStep(type)} />)}</div>
     </div>
     <div className="relative mx-auto max-w-3xl px-3 py-5 sm:px-6">
       <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/8 px-4 py-2 text-xs font-medium text-emerald-300"><Zap className="size-3.5" />Inicio</div>
@@ -172,6 +172,7 @@ function stepDetail(step: WorkflowDefinitionInput["steps"][number], templates: T
   if (step.type === "SEND_MESSAGE" || step.type === "SEND_PPV") return step.messageTemplateId ? templates.find((item) => item.id === step.messageTemplateId)?.name ?? "Plantilla no disponible" : step.type === "SEND_PPV" ? `PPV manual${typeof step.config.manualPriceMinor === "number" ? ` · $${(step.config.manualPriceMinor / 100).toFixed(2)}` : ""}` : "Mensaje manual";
   if (step.type === "WAIT") return `${Number(step.config.durationMinutes ?? 60)} min de espera`;
   if (step.type === "WAIT_FOR_REPLY") return `Hasta ${Number(step.config.timeoutMinutes ?? 30)} min por una respuesta`;
+  if (step.type === "WAIT_FOR_SILENCE") return `${Number(step.config.silenceMinutes ?? 10)} min sin mensajes`;
   if (step.type === "CONDITION") {
     const conditions = Array.isArray(step.config.conditions) ? step.config.conditions : [];
     if (conditions.length > 1) return `${conditions.length} condiciones · ${step.config.conditionOperator === "ANY" ? "Cualquiera (O)" : "Todas (Y)"}`;
@@ -195,7 +196,7 @@ function SortableStepCard({ step, index, steps, dragging, templates, publishedWo
   const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({ id, disabled: { draggable: step.type === "END" } });
   return <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className="relative z-10">
     {routes.length ? <div className="mb-2 flex flex-wrap justify-center gap-2">{routes.map((route) => <span key={`${route.kind}-${route.sourceIndex}`} className={`rounded-full border px-2.5 py-1 text-[10px] font-medium ${route.kind === "true" || route.kind === "replied" ? "border-emerald-400/25 bg-emerald-400/8 text-emerald-300" : route.kind === "timeout" ? "border-amber-400/25 bg-amber-400/8 text-amber-300" : "border-red-400/25 bg-red-400/8 text-red-300"}`}>{route.kind === "true" ? "✓ Ruta: Sí cumple" : route.kind === "false" ? "× Ruta: No cumple" : route.kind === "replied" ? "✓ Ruta: Respondió" : "⌛ Ruta: No respondió"} · desde paso {route.sourceIndex + 1}</span>)}</div> : null}
-    <article className={`relative rounded-2xl border bg-[#181a21] shadow-lg shadow-black/15 transition-colors ${isDragging ? "border-violet-400/50 opacity-35" : isOver && dragging ? "border-violet-400/60 ring-2 ring-violet-400/15" : step.type === "CONDITION" ? "border-amber-400/20" : step.type === "WAIT_FOR_REPLY" ? "border-sky-400/20" : step.type === "END" ? "border-emerald-400/20" : "border-white/10"}`}>
+    <article className={`relative rounded-2xl border bg-[#181a21] shadow-lg shadow-black/15 transition-colors ${isDragging ? "border-violet-400/50 opacity-35" : isOver && dragging ? "border-violet-400/60 ring-2 ring-violet-400/15" : step.type === "CONDITION" ? "border-amber-400/20" : step.type === "WAIT_FOR_REPLY" ? "border-sky-400/20" : step.type === "WAIT_FOR_SILENCE" ? "border-fuchsia-400/20" : step.type === "END" ? "border-emerald-400/20" : "border-white/10"}`}>
       <div className="flex items-center gap-3 border-b border-white/7 px-3 py-3 sm:px-4">
         {step.type !== "END" ? <button type="button" {...attributes} {...listeners} aria-label={`Arrastrar paso ${index + 1}`} title="Arrastra para cambiar la posición" className="touch-none cursor-grab rounded-lg p-1.5 text-zinc-600 hover:bg-white/5 hover:text-zinc-300 active:cursor-grabbing"><GripVertical className="size-4" /></button> : <span className="w-7" />}
         <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-white/5 text-violet-300"><StepIcon type={step.type} /></span>
@@ -217,7 +218,7 @@ function DropConnector({ active, condition = false }: { active: boolean; conditi
 }
 
 function StepIcon({ type }: { type: WorkflowDefinitionInput["steps"][number]["type"] }) {
-  const Icon = type === "SEND_MESSAGE" ? MessageSquare : type === "WAIT" ? Timer : type === "WAIT_FOR_REPLY" ? MessageCircleQuestion : type === "SEND_PPV" ? ImageIcon : type === "CONDITION" ? GitBranch : type === "CHANGE_WORKFLOW" ? Repeat2 : Flag;
+  const Icon = type === "SEND_MESSAGE" ? MessageSquare : type === "WAIT" ? Timer : type === "WAIT_FOR_REPLY" ? MessageCircleQuestion : type === "WAIT_FOR_SILENCE" ? TimerReset : type === "SEND_PPV" ? ImageIcon : type === "CONDITION" ? GitBranch : type === "CHANGE_WORKFLOW" ? Repeat2 : Flag;
   return <Icon className="size-3.5" />;
 }
 
@@ -235,6 +236,7 @@ function StepConfig({ step, stepIndex, steps, templates, publishedWorkflows, onC
   }
   if (step.type === "WAIT") return <label className="mt-3 block text-xs text-zinc-500">Minutos de espera<input type="number" min={1} max={43200} value={Number(step.config.durationMinutes ?? 60)} onChange={(event) => onChange({ config: { ...step.config, durationMinutes: Number(event.target.value) } })} className="ml-3 w-28 rounded-lg border border-white/8 bg-[#20222b] px-3 py-2 text-zinc-200" /></label>;
   if (step.type === "WAIT_FOR_REPLY") return <ReplyWaitConfig step={step} targets={steps.slice(stepIndex + 1)} firstTargetNumber={stepIndex + 2} templates={templates} publishedWorkflows={publishedWorkflows} onChange={onChange} />;
+  if (step.type === "WAIT_FOR_SILENCE") return <div className="mt-3 rounded-xl border border-fuchsia-400/15 bg-fuchsia-400/[.035] p-3"><label className="text-xs text-zinc-400">Continuar cuando el fan lleve<input type="number" min={1} max={43200} value={Number(step.config.silenceMinutes ?? 10)} onChange={(event) => onChange({ config: { ...step.config, silenceMinutes: Number(event.target.value) } })} className="mx-2 w-24 rounded-lg border border-white/8 bg-[#20222b] px-3 py-2 text-zinc-200" />minutos sin enviar mensajes</label><p className="mt-2 text-[11px] leading-4 text-zinc-600">Cada nueva respuesta reinicia el contador desde cero. El siguiente mensaje solo se enviará después de completar este periodo de silencio.</p></div>;
   if (step.type === "CONDITION") return <ConditionConfig step={step} targets={steps.slice(stepIndex + 1)} firstTargetNumber={stepIndex + 2} templates={templates} publishedWorkflows={publishedWorkflows} onChange={onChange} />;
   if (step.type === "CHANGE_WORKFLOW") return <select value={String(step.config.targetWorkflowId ?? "")} onChange={(event) => onChange({ config: { ...step.config, targetWorkflowId: event.target.value } })} className="mt-3 w-full rounded-lg border border-white/8 bg-[#20222b] px-3 py-2 text-xs text-zinc-300"><option value="">Selecciona un flujo publicado</option>{publishedWorkflows.map((workflow) => <option key={workflow.id} value={workflow.id}>{workflow.name}</option>)}</select>;
   return <p className="mt-2 text-xs text-zinc-600">Cierra el enrollment y registra el resultado del flujo.</p>;

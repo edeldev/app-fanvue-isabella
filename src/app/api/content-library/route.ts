@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { fanvueRequest } from "@/lib/fanvue/client";
 import { mediaBulkSchema } from "@/lib/fanvue/sync-schemas";
@@ -57,22 +58,27 @@ export async function GET(request: Request) {
   const tagId = input.get("tag") ?? "";
   const packId = input.get("pack") ?? "";
   const assetId = input.get("asset") ?? "";
-  const where = {
+  const conditions: Prisma.ContentWhereInput[] = [];
+  if (query) conditions.push({ OR: [
+    { name: { contains: query, mode: "insensitive" as const } },
+    { category: { name: { contains: query, mode: "insensitive" as const } } },
+    { collections: { some: { collection: { name: { contains: query, mode: "insensitive" as const } } } } },
+    { tags: { some: { tag: { name: { contains: query, mode: "insensitive" as const } } } } },
+    { packItems: { some: { pack: { name: { contains: query, mode: "insensitive" as const } } } } },
+  ] });
+  if (categoryId) conditions.push({ OR: [
+    { categoryId },
+    { packItems: { some: { pack: { categoryId } } } },
+  ] });
+  const where: Prisma.ContentWhereInput = {
     creatorId: ownerId,
     ...(assetId ? { id: assetId } : {}),
-    ...(query ? { OR: [
-      { name: { contains: query, mode: "insensitive" as const } },
-      { category: { name: { contains: query, mode: "insensitive" as const } } },
-      { collections: { some: { collection: { name: { contains: query, mode: "insensitive" as const } } } } },
-      { tags: { some: { tag: { name: { contains: query, mode: "insensitive" as const } } } } },
-      { packItems: { some: { pack: { name: { contains: query, mode: "insensitive" as const } } } } },
-    ] } : {}),
+    ...(conditions.length ? { AND: conditions } : {}),
     ...(view === "photos" ? { type: "image" } : view === "videos" ? { type: "video" } : {}),
     ...(view === "favorites" ? { isFavorite: true } : {}),
     ...(view === "unused" ? { packItems: { none: {} } } : {}),
     ...(view === "used" ? { packItems: { some: {} } } : {}),
     ...(view === "unorganized" ? { categoryId: null, collections: { none: {} }, tags: { none: {} } } : {}),
-    ...(categoryId ? { categoryId } : {}),
     ...(collectionId ? { collections: { some: { collectionId } } } : {}),
     ...(tagId ? { tags: { some: { tagId } } } : {}),
     ...(packId ? { packItems: { some: { packId } } } : {}),
@@ -89,7 +95,7 @@ export async function GET(request: Request) {
     prisma.content.count({ where: { creatorId: ownerId, type: "video", isArchived: false } }),
     prisma.content.count({ where: { creatorId: ownerId, isFavorite: true, isArchived: false } }),
     prisma.content.count({ where: { creatorId: ownerId, isArchived: true } }),
-    prisma.contentCategory.findMany({ where: { creatorId: ownerId }, orderBy: { name: "asc" }, include: { _count: { select: { assets: true } } } }),
+    prisma.contentCategory.findMany({ where: { creatorId: ownerId }, orderBy: { name: "asc" }, include: { assets: { where: { isArchived: false }, select: { id: true } }, packs: { select: { assets: { where: { content: { isArchived: false } }, select: { contentId: true } } } } } }),
     prisma.contentCollection.findMany({ where: { creatorId: ownerId }, orderBy: { name: "asc" }, include: { _count: { select: { assets: true } } } }),
     prisma.contentTag.findMany({ where: { creatorId: ownerId }, orderBy: { name: "asc" }, include: { _count: { select: { assets: true } } } }),
     prisma.contentPack.findMany({ where: { creatorId: ownerId }, orderBy: { name: "asc" }, include: { _count: { select: { assets: true } } } }),
@@ -102,13 +108,21 @@ export async function GET(request: Request) {
   if (uuids.length) {
     try {
       const token = await getValidFanvueAccessToken(ownerId);
-      const resolved = await fanvueRequest(`/v1/media/bulk?mediaUuids=${encodeURIComponent(uuids.join(","))}&variants=main,thumbnail`, token, mediaBulkSchema);
-      for (const item of Object.values(resolved.results)) {
-        if (!item || item.status !== "ready") continue;
-        const main = item.variants.find((variant) => variant.variantType === "main" && variant.url) ?? item.variants.find((variant) => variant.url);
-        const thumbnail = item.variants.find((variant) => variant.variantType === "thumbnail" && variant.url) ?? item.variants.find((variant) => variant.variantType === "thumbnail_gallery" && variant.url);
-        const detail = main ?? thumbnail;
-        urls.set(item.uuid, { url: main?.url ?? thumbnail?.url, thumbnailUrl: thumbnail?.url, width: typeof detail?.width === "number" ? detail.width : null, height: typeof detail?.height === "number" ? detail.height : null, durationMs: typeof detail?.lengthMs === "number" ? detail.lengthMs : null });
+      for (let index = 0; index < uuids.length; index += 20) {
+        const chunk = uuids.slice(index, index + 20);
+        try {
+          const resolved = await fanvueRequest(`/v1/media/bulk?mediaUuids=${encodeURIComponent(chunk.join(","))}&variants=main,thumbnail`, token, mediaBulkSchema);
+          for (const item of Object.values(resolved.results)) {
+            if (!item || item.status !== "ready") continue;
+            const main = item.variants.find((variant) => variant.variantType === "main" && variant.url) ?? item.variants.find((variant) => variant.url);
+            const thumbnail = item.variants.find((variant) => variant.variantType === "thumbnail" && variant.url) ?? item.variants.find((variant) => variant.variantType === "thumbnail_gallery" && variant.url);
+            const detail = main ?? thumbnail;
+            urls.set(item.uuid, { url: main?.url ?? thumbnail?.url, thumbnailUrl: thumbnail?.url ?? (item.mediaType !== "video" ? main?.url : undefined), width: typeof detail?.width === "number" ? detail.width : null, height: typeof detail?.height === "number" ? detail.height : null, durationMs: typeof detail?.lengthMs === "number" ? detail.lengthMs : null });
+          }
+        } catch {
+          // Un lote inválido o temporalmente no disponible no debe ocultar
+          // las miniaturas que Fanvue sí puede resolver en los demás lotes.
+        }
       }
     } catch { /* Assets remain visible and can be resolved again on refresh. */ }
   }
@@ -116,7 +130,7 @@ export async function GET(request: Request) {
     items: records.map((item) => ({ id: item.id, uuid: item.fanvueContentId, name: item.name, mediaType: item.type, isFavorite: item.isFavorite, isArchived: item.isArchived, createdAt: item.createdAt.toISOString(), category: item.category, collections: item.collections.map((entry) => entry.collection), tags: item.tags.map((entry) => entry.tag), packs: item.packItems.map((entry) => entry.pack), templates: [...new Map([...item.templates, ...item.templateItems.map((entry) => entry.template)].map((template) => [template.id, template])).values()], ...metadata(item.metadata), ...(item.fanvueContentId ? urls.get(item.fanvueContentId) : {}) })),
     pagination: { page, pageSize, total, pages: Math.max(1, Math.ceil(total / pageSize)) },
     counts: { all: photos + videos, photos, videos, favorites, archived, unorganized, unused, used },
-    organizers: { categories: categories.map((item) => ({ id: item.id, name: item.name, count: item._count.assets })), collections: collections.map((item) => ({ id: item.id, name: item.name, count: item._count.assets })), tags: tags.map((item) => ({ id: item.id, name: item.name, count: item._count.assets })), packs: packs.map((item) => ({ id: item.id, name: item.name, count: item._count.assets })) },
+    organizers: { categories: categories.map((item) => ({ id: item.id, name: item.name, count: new Set([...item.assets.map((asset) => asset.id), ...item.packs.flatMap((pack) => pack.assets.map((asset) => asset.contentId))]).size })), collections: collections.map((item) => ({ id: item.id, name: item.name, count: item._count.assets })), tags: tags.map((item) => ({ id: item.id, name: item.name, count: item._count.assets })), packs: packs.map((item) => ({ id: item.id, name: item.name, count: item._count.assets })) },
   });
 }
 
@@ -193,7 +207,7 @@ export async function POST(request: Request) {
     update: { name: item.name, type: item.mediaType, isArchived: false },
     create: { creatorId: ownerId, fanvueContentId: item.uuid, name: item.name, type: item.mediaType, metadata: { source: "FANVUE_REFERENCE", importedAt: new Date().toISOString(), sourceCreatedAt: item.createdAt ?? null } },
   })));
-  return NextResponse.json({ imported: stored.length }, { status: 201 });
+  return NextResponse.json({ imported: stored.length, items: stored.map((item) => ({ id: item.id, uuid: item.fanvueContentId, name: item.name, type: item.type })) }, { status: 201 });
 }
 
 export async function PATCH(request: Request) {

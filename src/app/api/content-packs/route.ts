@@ -21,19 +21,27 @@ export async function GET() {
     prisma.contentCategory.findMany({ where: { creatorId }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.content.findMany({ where: { creatorId, isArchived: false }, orderBy: { createdAt: "desc" }, take: 500, select: { id: true, name: true, type: true, fanvueContentId: true } }),
   ]);
-  const coverUuids = packs.flatMap((pack) => pack.cover?.fanvueContentId ? [pack.cover.fanvueContentId] : []);
-  const coverUrls = new Map<string, string>();
-  if (coverUuids.length) {
+  const mediaUuids = [...new Set(assets.flatMap((asset) => asset.fanvueContentId ? [asset.fanvueContentId] : []))];
+  const mediaUrls = new Map<string, { url?: string; thumbnailUrl?: string }>();
+  if (mediaUuids.length) {
     try {
       const token = await getValidFanvueAccessToken(creatorId);
-      const resolved = await fanvueRequest(`/v1/media/bulk?mediaUuids=${encodeURIComponent(coverUuids.join(","))}&variants=thumbnail,main`, token, mediaBulkSchema);
-      for (const item of Object.values(resolved.results)) {
-        const url = item?.variants.find((variant) => variant.variantType === "thumbnail" && variant.url)?.url ?? item?.variants.find((variant) => variant.url)?.url;
-        if (item && url) coverUrls.set(item.uuid, url);
+      for (let index = 0; index < mediaUuids.length; index += 20) {
+        const chunk = mediaUuids.slice(index, index + 20);
+        try {
+          const resolved = await fanvueRequest(`/v1/media/bulk?mediaUuids=${encodeURIComponent(chunk.join(","))}&variants=thumbnail,main`, token, mediaBulkSchema);
+          for (const item of Object.values(resolved.results)) {
+            if (!item || item.status !== "ready") continue;
+            const main = item.variants.find((variant) => variant.variantType === "main" && variant.url) ?? item.variants.find((variant) => variant.url);
+            const thumbnail = item.variants.find((variant) => variant.variantType === "thumbnail" && variant.url) ?? item.variants.find((variant) => variant.variantType === "thumbnail_gallery" && variant.url);
+            mediaUrls.set(item.uuid, { url: main?.url ?? thumbnail?.url, thumbnailUrl: thumbnail?.url ?? (item.mediaType !== "video" ? main?.url : undefined) });
+          }
+        } catch { /* Other chunks can still provide useful previews. */ }
       }
     } catch { /* Pack cards remain usable without a cover preview. */ }
   }
-  return NextResponse.json({ packs: packs.map((pack) => ({ ...pack, coverUrl: pack.cover?.fanvueContentId ? coverUrls.get(pack.cover.fanvueContentId) : undefined, priceMinor: pack.priceMinor, assets: pack.assets.map((item) => ({ ...item.content, position: item.position })), stats: { total: pack.assets.length, photos: pack.assets.filter((item) => item.content.type === "image").length, videos: pack.assets.filter((item) => item.content.type === "video").length } })), categories, assets });
+  const withPreview = <T extends { fanvueContentId: string | null }>(asset: T) => ({ ...asset, ...(asset.fanvueContentId ? mediaUrls.get(asset.fanvueContentId) : {}) });
+  return NextResponse.json({ packs: packs.map((pack) => ({ ...pack, coverUrl: pack.cover?.fanvueContentId ? (mediaUrls.get(pack.cover.fanvueContentId)?.thumbnailUrl ?? mediaUrls.get(pack.cover.fanvueContentId)?.url) : undefined, priceMinor: pack.priceMinor, assets: pack.assets.map((item) => ({ ...withPreview(item.content), position: item.position })), stats: { total: pack.assets.length, photos: pack.assets.filter((item) => item.content.type === "image").length, videos: pack.assets.filter((item) => item.content.type === "video").length } })), categories, assets: assets.map(withPreview) });
 }
 
 export async function POST(request: Request) {
