@@ -190,53 +190,56 @@ model Creator {
 }
 
 model Fan {
-  id                       String                @id @default(cuid())
-  creatorId                String
-  fanvueUserId             String
-  username                 String?
-  displayName              String?
-  avatarUrl                String?
-  isFollower               Boolean               @default(false)
-  isSubscriber             Boolean               @default(false)
-  isFreeTrialSubscriber    Boolean               @default(false)
-  isAutoRenewingSubscriber Boolean               @default(false)
-  isNonRenewingSubscriber  Boolean               @default(false)
-  isExpiredSubscriber      Boolean               @default(false)
-  isCreatorAccount         Boolean               @default(false)
-  isMuted                  Boolean               @default(false)
-  isOnline                 Boolean               @default(false)
-  isArchived               Boolean               @default(false)
-  lastSeenOnFanvueAt       DateTime?
-  presenceChangedAt        DateTime?
-  isTopSpender             Boolean               @default(false)
-  totalSpentMinor          Int                   @default(0)
-  lastActivityAt           DateTime?
-  lifecycleStage           FanLifecycleStage     @default(FOLLOWER)
-  lifecycleChangedAt       DateTime?
-  lifecycleReason          String?
-  lifecycleOverride        FanLifecycleStage?
-  automationPaused         Boolean               @default(false)
-  automationPauseReason    String?
-  doNotMessage             Boolean               @default(false)
-  doNotMessageReason       String?
-  doNotMessageAt           DateTime?
-  followedAt               DateTime?
-  acquisitionSource        String?
-  acquisitionMetadata      Json?
-  createdAt                DateTime              @default(now())
-  updatedAt                DateTime              @updatedAt
-  creator                  Creator               @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  subscriptions            Subscription[]
-  purchases                Purchase[]
-  conversations            Conversation[]
-  enrollments              WorkflowEnrollment[]
-  events                   FanEvent[]
-  automationLogs           AutomationLog[]
-  executions               AutomationExecution[]
-  tags                     FanTag[]
-  notes                    FanNote[]
-  memories                 FanMemory[]
-  scheduledMessages        ScheduledMessage[]
+  id                         String                @id @default(cuid())
+  creatorId                  String
+  fanvueUserId               String
+  username                   String?
+  displayName                String?
+  avatarUrl                  String?
+  isFollower                 Boolean               @default(false)
+  isSubscriber               Boolean               @default(false)
+  isFreeTrialSubscriber      Boolean               @default(false)
+  isAutoRenewingSubscriber   Boolean               @default(false)
+  isNonRenewingSubscriber    Boolean               @default(false)
+  isExpiredSubscriber        Boolean               @default(false)
+  isCreatorAccount           Boolean               @default(false)
+  isMuted                    Boolean               @default(false)
+  isOnline                   Boolean               @default(false)
+  isArchived                 Boolean               @default(false)
+  lastSeenOnFanvueAt         DateTime?
+  presenceChangedAt          DateTime?
+  isTopSpender               Boolean               @default(false)
+  totalSpentMinor            Int                   @default(0)
+  lastActivityAt             DateTime?
+  lifecycleStage             FanLifecycleStage     @default(FOLLOWER)
+  lifecycleChangedAt         DateTime?
+  lifecycleReason            String?
+  lifecycleOverride          FanLifecycleStage?
+  automationPaused           Boolean               @default(false)
+  automationPauseReason      String?
+  doNotMessage               Boolean               @default(false)
+  doNotMessageReason         String?
+  doNotMessageAt             DateTime?
+  intimateContentOptIn       Boolean               @default(false)
+  intimateContentOptInAt     DateTime?
+  intimateContentOptInSource String?
+  followedAt                 DateTime?
+  acquisitionSource          String?
+  acquisitionMetadata        Json?
+  createdAt                  DateTime              @default(now())
+  updatedAt                  DateTime              @updatedAt
+  creator                    Creator               @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  subscriptions              Subscription[]
+  purchases                  Purchase[]
+  conversations              Conversation[]
+  enrollments                WorkflowEnrollment[]
+  events                     FanEvent[]
+  automationLogs             AutomationLog[]
+  executions                 AutomationExecution[]
+  tags                       FanTag[]
+  notes                      FanNote[]
+  memories                   FanMemory[]
+  scheduledMessages          ScheduledMessage[]
 
   @@unique([creatorId, fanvueUserId])
   @@index([creatorId, isFollower])
@@ -402,7 +405,7 @@ model Message {
 }
 
 model MessageTemplate {
-  id                  String         @id @default(cuid())
+  id                  String                 @id @default(cuid())
   creatorId           String
   name                String
   text                String
@@ -411,14 +414,14 @@ model MessageTemplate {
   status              String
   metadata            Json?
   associatedContentId String?
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
-  creator             Creator        @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  content             Content?       @relation(fields: [associatedContentId], references: [id], onDelete: SetNull)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  creator             Creator                @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  content             Content?               @relation(fields: [associatedContentId], references: [id], onDelete: SetNull)
   contentAssets       ContentTemplateAsset[]
   messages            Message[]
   workflowSteps       WorkflowStep[]
-  scheduledMessages  ScheduledMessage[]
+  scheduledMessages   ScheduledMessage[]
 
   @@unique([creatorId, name])
   @@index([creatorId, category, status])
@@ -431,7 +434,7 @@ model ScheduledMessage {
   templateId       String?
   status           String           @default("PENDING")
   text             String?
-  media             Json?
+  media            Json?
   mediaPreviewUuid String?
   priceMinor       Int?
   scheduledAt      DateTime
@@ -450,23 +453,23 @@ model ScheduledMessage {
 }
 
 model Content {
-  id              String            @id @default(cuid())
+  id              String                   @id @default(cuid())
   creatorId       String
   fanvueContentId String?
   name            String
   type            String
   metadata        Json?
-  isFavorite      Boolean           @default(false)
-  isArchived      Boolean           @default(false)
+  isFavorite      Boolean                  @default(false)
+  isArchived      Boolean                  @default(false)
   categoryId      String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  creator         Creator           @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  category        ContentCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  creator         Creator                  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  category        ContentCategory?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   collections     ContentCollectionAsset[]
   tags            ContentAssetTag[]
   packItems       ContentPackAsset[]
-  packCovers      ContentPack[]      @relation("ContentPackCover")
+  packCovers      ContentPack[]            @relation("ContentPackCover")
   purchases       Purchase[]
   templates       MessageTemplate[]
   templateItems   ContentTemplateAsset[]
@@ -479,13 +482,13 @@ model Content {
 }
 
 model ContentCategory {
-  id        String    @id @default(cuid())
+  id        String        @id @default(cuid())
   creatorId String
   name      String
-  color     String    @default("violet")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  creator   Creator   @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  color     String        @default("violet")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  creator   Creator       @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   assets    Content[]
   packs     ContentPack[]
 
@@ -494,20 +497,20 @@ model ContentCategory {
 }
 
 model ContentPack {
-  id             String            @id @default(cuid())
+  id             String             @id @default(cuid())
   creatorId      String
   categoryId     String?
   coverContentId String?
   name           String
   description    String?
-  type           ContentPackType   @default(CUSTOM)
-  status         ContentPackStatus @default(DRAFT)
+  type           ContentPackType    @default(CUSTOM)
+  status         ContentPackStatus  @default(DRAFT)
   priceMinor     Int?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  creator        Creator           @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  category       ContentCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  cover          Content?          @relation("ContentPackCover", fields: [coverContentId], references: [id], onDelete: SetNull)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  creator        Creator            @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  category       ContentCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  cover          Content?           @relation("ContentPackCover", fields: [coverContentId], references: [id], onDelete: SetNull)
   assets         ContentPackAsset[]
 
   @@unique([creatorId, name])
@@ -848,6 +851,7 @@ model Settings {
   minimumDelaySeconds          Int            @default(60)
   maximumRetries               Int            @default(3)
   debugMode                    Boolean        @default(false)
+  aiMessagingEnabled           Boolean        @default(true)
   createdAt                    DateTime       @default(now())
   updatedAt                    DateTime       @updatedAt
   creator                      Creator        @relation(fields: [creatorId], references: [id], onDelete: Cascade)

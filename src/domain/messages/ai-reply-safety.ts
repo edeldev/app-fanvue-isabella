@@ -6,22 +6,20 @@ type SafeReply = {
 };
 
 const aiIdentityQuestion = /(?:\b(?:eres|sos|es usted)\b.{0,28}\b(?:ia|inteligencia artificial|robot|bot)\b)|(?:\b(?:are you|you are)\b.{0,28}\b(?:ai|artificial intelligence|robot|bot)\b)/iu;
-const falseHumanClaim = /\b(?:no soy (?:una? )?(?:ia|inteligencia artificial|robot|bot)|soy (?:una? )?(?:humana?|real)|i(?:'m| am) not (?:an? )?(?:ai|robot|bot)|i(?:'m| am) (?:a )?(?:human|real person))\b/iu;
-
 export function enforceAiIdentityBoundary<T extends SafeReply>(suggestion: T, recentFanText: string): T {
-  if (!aiIdentityQuestion.test(recentFanText) || !falseHumanClaim.test(suggestion.reply)) return suggestion;
+  if (!aiIdentityQuestion.test(recentFanText)) return suggestion;
   const spanish = /español|spanish|castellano/i.test(suggestion.detectedLanguage);
   const english = /inglés|english/i.test(suggestion.detectedLanguage);
   if (english) {
     return {
       ...suggestion,
-      reply: "Haha, I'd rather you get to know me through how we talk here 😉 What made you ask?",
-      spanishTranslation: "Jajaja, prefiero que me conozcas por cómo hablamos aquí 😉 ¿Qué te hizo preguntarlo?",
+      reply: "I use an AI writing assistant, but I personally review messages before sending them. What made you ask?",
+      spanishTranslation: "Uso un asistente de IA para redactar, pero reviso personalmente los mensajes antes de enviarlos. ¿Qué te hizo preguntarlo?",
       needsSpanishTranslation: true,
     };
   }
   if (spanish) {
-    const reply = "Jajaja, prefiero que me conozcas por cómo hablamos aquí 😉 ¿Qué te hizo preguntarlo?";
+    const reply = "Uso un asistente de IA para redactar, pero reviso personalmente los mensajes antes de enviarlos. ¿Qué te hizo preguntarlo?";
     return { ...suggestion, reply, spanishTranslation: reply, needsSpanishTranslation: false };
   }
   return suggestion;

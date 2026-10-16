@@ -7,7 +7,7 @@ import { SettingsForm, type GlobalSettingsView } from "@/features/settings/setti
 import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 
-const defaults: GlobalSettingsView = { timezone: "America/Monterrey", sendWindowEnabled: false, sendingWindowStart: "09:00", sendingWindowEnd: "21:00", sendingWindowDays: [0, 1, 2, 3, 4, 5, 6], sendLimitsEnabled: false, maxMessagesPerHour: 30, maxMessagesPerDay: 200, minMinutesBetweenFanMessages: 60, minimumDelaySeconds: 60, maximumRetries: 3, debugMode: false };
+const defaults: GlobalSettingsView = { timezone: "America/Monterrey", sendWindowEnabled: false, sendingWindowStart: "09:00", sendingWindowEnd: "21:00", sendingWindowDays: [0, 1, 2, 3, 4, 5, 6], sendLimitsEnabled: false, maxMessagesPerHour: 30, maxMessagesPerDay: 200, minMinutesBetweenFanMessages: 60, minimumDelaySeconds: 60, maximumRetries: 3, debugMode: false, aiMessagingEnabled: true };
 
 export default async function SettingsPage() {
   const now = new Date();
@@ -17,7 +17,7 @@ export default async function SettingsPage() {
     prisma.integrationCredential.findUnique({ where: { creatorId_provider: { creatorId, provider: "FANVUE" } }, select: { tokenExpiresAt: true, scopes: true, updatedAt: true } }),
     prisma.schedulerHeartbeat.findUnique({ where: { id: "workflow-cron" } }),
   ]) : [null, null, null];
-  const initial: GlobalSettingsView = settings ? { timezone: settings.timezone, sendWindowEnabled: settings.sendWindowEnabled, sendingWindowStart: settings.sendingWindowStart, sendingWindowEnd: settings.sendingWindowEnd, sendingWindowDays: Array.isArray(settings.sendingWindowDays) ? settings.sendingWindowDays.filter((value): value is number => typeof value === "number") : defaults.sendingWindowDays, sendLimitsEnabled: settings.sendLimitsEnabled, maxMessagesPerHour: settings.maxMessagesPerHour, maxMessagesPerDay: settings.maxMessagesPerDay, minMinutesBetweenFanMessages: settings.minMinutesBetweenFanMessages, minimumDelaySeconds: settings.minimumDelaySeconds, maximumRetries: settings.maximumRetries, debugMode: settings.debugMode } : defaults;
+  const initial: GlobalSettingsView = settings ? { timezone: settings.timezone, sendWindowEnabled: settings.sendWindowEnabled, sendingWindowStart: settings.sendingWindowStart, sendingWindowEnd: settings.sendingWindowEnd, sendingWindowDays: Array.isArray(settings.sendingWindowDays) ? settings.sendingWindowDays.filter((value): value is number => typeof value === "number") : defaults.sendingWindowDays, sendLimitsEnabled: settings.sendLimitsEnabled, maxMessagesPerHour: settings.maxMessagesPerHour, maxMessagesPerDay: settings.maxMessagesPerDay, minMinutesBetweenFanMessages: settings.minMinutesBetweenFanMessages, minimumDelaySeconds: settings.minimumDelaySeconds, maximumRetries: settings.maximumRetries, debugMode: settings.debugMode, aiMessagingEnabled: settings.aiMessagingEnabled } : defaults;
   const cronHealthy = Boolean(heartbeat?.lastSucceededAt && now.getTime() - heartbeat.lastSucceededAt.getTime() < 150_000);
 
   return <div className="flex min-h-screen bg-[#101218] text-zinc-100"><Sidebar /><div className="min-w-0 flex-1"><Topbar /><main id="main-content" tabIndex={-1} className="mx-auto max-w-375 px-4 py-6 sm:px-5 sm:py-8 md:px-8">

@@ -4,6 +4,7 @@ import { evaluateWorkflowConditionGroup, workflowConditionLabels, workflowCondit
 import { fanvueRequest } from "@/lib/fanvue/client";
 import { sentMessageSchema } from "@/lib/fanvue/sync-schemas";
 import { prisma } from "@/lib/prisma";
+import { canReceivePaidOrIntimateContent } from "@/domain/fans/content-consent";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
 import { extendWorkflowPath } from "@/domain/workflows/transition-path";
 import { isInsideSendWindow, nextSendWindowOpening } from "@/domain/workflows/send-window";
@@ -315,6 +316,7 @@ async function executeMessage(enrollment: NonNullable<Awaited<ReturnType<typeof 
 }
 
 async function executePpv(enrollment: LoadedEnrollment, step: NonNullable<StepRecord>, executionId: string, now: Date) {
+  if (!canReceivePaidOrIntimateContent(enrollment.fan)) throw new Error("EXPLICIT_CONTENT_OPT_IN_REQUIRED");
   if (step.messageTemplateId && (!step.messageTemplate || step.messageTemplate.status !== "ACTIVE")) throw new Error("WORKFLOW_TEMPLATE_UNAVAILABLE");
   const metadata = step.messageTemplate ? readTemplateMetadata(step.messageTemplate.metadata) : readManualStepMetadata(step.config);
   if (!metadata.priceMinor || metadata.priceMinor < 300) throw new Error("WORKFLOW_PPV_PRICE_INVALID");
@@ -474,7 +476,7 @@ function loadEnrollment(creatorId: string, enrollmentId: string) {
   return prisma.workflowEnrollment.findFirst({
     where: { id: enrollmentId, creatorId },
     include: {
-      fan: { select: { fanvueUserId: true, displayName: true, username: true, isFollower: true, isSubscriber: true, isFreeTrialSubscriber: true, isAutoRenewingSubscriber: true, isNonRenewingSubscriber: true, isExpiredSubscriber: true, isCreatorAccount: true, isMuted: true, isOnline: true, isTopSpender: true, totalSpentMinor: true, automationPaused: true, doNotMessage: true, _count: { select: { purchases: { where: { reversedAt: null, amountMinor: { gt: 0 } } } } } } },
+      fan: { select: { fanvueUserId: true, displayName: true, username: true, isFollower: true, isSubscriber: true, isFreeTrialSubscriber: true, isAutoRenewingSubscriber: true, isNonRenewingSubscriber: true, isExpiredSubscriber: true, isCreatorAccount: true, isMuted: true, isOnline: true, isTopSpender: true, totalSpentMinor: true, automationPaused: true, doNotMessage: true, intimateContentOptIn: true, _count: { select: { purchases: { where: { reversedAt: null, amountMinor: { gt: 0 } } } } } } },
       currentStep: { include: { messageTemplate: true } },
       workflow: { include: { creator: { select: { settings: { select: { maximumRetries: true, minimumDelaySeconds: true } } } }, steps: { orderBy: { position: "asc" }, select: { id: true, position: true, name: true, type: true, config: true } } } },
     },

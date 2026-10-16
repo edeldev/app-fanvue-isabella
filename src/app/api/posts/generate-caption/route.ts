@@ -12,6 +12,7 @@ import {
   readCreatorSession,
 } from "@/lib/session/creator-session";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
@@ -62,6 +63,8 @@ export async function POST(request: Request) {
   if (!input.success) return Response.json({ error: "Solicitud inválida." }, { status: 400 });
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return Response.json({ error: "GEMINI_API_KEY no está configurada." }, { status: 503 });
+  const settings = await prisma.settings.findUnique({ where: { creatorId }, select: { aiMessagingEnabled: true } });
+  if (settings?.aiMessagingEnabled === false) return Response.json({ error: "La asistencia de IA está desactivada en Configuración." }, { status: 403 });
 
   try {
     const token = await getValidFanvueAccessToken(creatorId);
@@ -92,7 +95,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model,
         store: false,
-        system_instruction: `Eres copywriter de una creadora adulta en Fanvue. Analiza únicamente lo visible en la imagen y crea un caption en español listo para publicar. Todas las personas representadas deben ser adultas; si existe cualquier duda sobre la edad, evita sexualizar y usa un texto coqueto no explícito. El nivel solicitado es ${input.data.intensity}. En nivel coqueto crea intriga; en atrevido usa deseo y provocación directa; en explícito puedes usar lenguaje sexual adulto, consentido y sensual, sin violencia ni degradación. Debe sonar personal, seguro y magnético, nunca genérico, desesperado ni como IA. Usa 1 a 3 emojis naturales. No inventes lugares, acciones pasadas ni prendas que no aparezcan. Objetivo: ${input.data.objective === "ppv" ? "despertar curiosidad para desbloquear PPV sin revelar todo" : input.data.objective === "subscription" ? "crear deseo de suscribirse sin presionar" : "provocar respuestas y conversación"}. Devuelve un resumen visual privado y un solo caption.`,
+        system_instruction: `Eres copywriter de una creadora adulta en Fanvue. Analiza únicamente lo visible en la imagen y crea un caption en español listo para revisión humana antes de publicar. Todas las personas representadas deben ser adultas y haber consentido: si existe cualquier duda sobre edad o consentimiento, no sexualices. El nivel solicitado es ${input.data.intensity}. Solo permite sexualidad adulta y consentida. Rechaza o reconduce menores, apariencia juvenil ambigua, coerción, ausencia de consentimiento, incesto, personas dormidas o inconscientes, violencia, asfixia, fluidos corporales, drogas, armas, odio o autolesión. No uses degradación ni presión comercial. Debe sonar personal y seguro. Usa 1 a 3 emojis naturales. No inventes lugares, acciones pasadas ni prendas que no aparezcan. Objetivo: ${input.data.objective === "ppv" ? "despertar curiosidad para desbloquear PPV sin revelar todo" : input.data.objective === "subscription" ? "crear deseo de suscribirse sin presionar" : "provocar respuestas y conversación"}. Devuelve un resumen visual privado y un solo caption.`,
         input: [
           { type: "image", data: Buffer.from(bytes).toString("base64"), mime_type: mimeType },
           { type: "text", text: "Analiza esta imagen y escribe el caption solicitado." },

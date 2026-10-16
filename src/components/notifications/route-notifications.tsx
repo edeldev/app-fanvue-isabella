@@ -56,6 +56,7 @@ const messageErrors: Record<string, string> = {
   invalid_template: "La plantilla seleccionada ya no está disponible.",
   send_failed: "Fanvue no pudo enviar el mensaje. Inténtalo nuevamente.",
   do_not_message: "Este fan está marcado como ‘No contactar’. Retira la preferencia desde Fan Lifecycle para enviarle mensajes.",
+  explicit_opt_in_required: "Este fan no está suscrito ni tiene consentimiento explícito registrado para recibir PPV. Registra el opt-in desde Fan Lifecycle.",
   invalid_schedule: "Elige una fecha futura válida para programar el mensaje.",
 };
 const templateErrors: Record<string, string> = {

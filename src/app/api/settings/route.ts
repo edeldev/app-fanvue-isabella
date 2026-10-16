@@ -16,6 +16,7 @@ const settingsSchema = z.object({
   minimumDelaySeconds: z.number().int().min(1).max(86_400),
   maximumRetries: z.number().int().min(1).max(10),
   debugMode: z.boolean(),
+  aiMessagingEnabled: z.boolean(),
 });
 
 export async function PUT(request: Request) {

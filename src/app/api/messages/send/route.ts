@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
 import { consumeRateLimit, rateLimitPolicies } from "@/lib/rate-limit";
+import { canReceivePaidOrIntimateContent } from "@/domain/fans/content-consent";
 
 const mediaSchema = z.array(z.object({ uuid: z.string().uuid(), name: z.string(), mediaType: z.enum(["image", "video"]) })).max(10);
 const formSchema = z.object({ fanUuid: z.string().uuid(), text: z.string().trim().max(5000), templateId: z.string().optional(), price: z.string(), previewUuid: z.string().optional(), scheduledAt: z.string().datetime().optional() });
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
   });
   if (!fan) redirect("/messages?error=invalid_recipient");
   if (fan.doNotMessage) redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&error=do_not_message`);
+  if (price !== null && !canReceivePaidOrIntimateContent(fan)) redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&error=explicit_opt_in_required`);
   const template = parsed.data.templateId ? await prisma.messageTemplate.findFirst({
     where: { id: parsed.data.templateId, creatorId, status: "ACTIVE" },
     select: { id: true },

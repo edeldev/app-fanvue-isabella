@@ -4,6 +4,7 @@ import { sentMessageSchema } from "@/lib/fanvue/sync-schemas";
 import { prisma } from "@/lib/prisma";
 import { sanitizeErrorMessage } from "@/lib/logger";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
+import { canReceivePaidOrIntimateContent } from "@/domain/fans/content-consent";
 
 type ScheduledMedia = { uuid: string; name: string; mediaType: "image" | "video" };
 
@@ -44,6 +45,11 @@ export async function runDueScheduledMessages(now = new Date()) {
     if (!item) continue;
     if (item.fan.doNotMessage || item.fan.isCreatorAccount || (item.template?.status && item.template.status !== "ACTIVE")) {
       await prisma.scheduledMessage.update({ where: { id: item.id }, data: { status: "BLOCKED", lastError: item.fan.doNotMessage ? "FAN_DO_NOT_MESSAGE" : "RECIPIENT_OR_TEMPLATE_UNAVAILABLE" } });
+      result.blocked += 1;
+      continue;
+    }
+    if (item.priceMinor !== null && !canReceivePaidOrIntimateContent(item.fan)) {
+      await prisma.scheduledMessage.update({ where: { id: item.id }, data: { status: "BLOCKED", lastError: "EXPLICIT_CONTENT_OPT_IN_REQUIRED" } });
       result.blocked += 1;
       continue;
     }

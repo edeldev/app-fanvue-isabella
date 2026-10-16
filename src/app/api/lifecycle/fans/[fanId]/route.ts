@@ -15,6 +15,7 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("SET_STAGE"), stage: z.enum(lifecycleStages as [typeof lifecycleStages[number], ...typeof lifecycleStages[number][]]).nullable() }),
   z.object({ action: z.literal("SET_AUTOMATION_PAUSE"), paused: z.boolean(), reason: z.string().trim().max(240).optional() }),
   z.object({ action: z.literal("SET_DO_NOT_MESSAGE"), blocked: z.boolean(), reason: z.string().trim().max(240).optional() }),
+  z.object({ action: z.literal("SET_INTIMATE_CONTENT_CONSENT"), consented: z.boolean(), source: z.string().trim().max(120).optional() }),
   z.object({ action: z.literal("CONFIRM_MEMORY"), memoryId: z.string().min(1) }),
   z.object({ action: z.literal("DISMISS_MEMORY"), memoryId: z.string().min(1) }),
   z.object({ action: z.literal("REFRESH_MEMORY") }),
@@ -78,6 +79,12 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     ]);
   } else if (data.action === "REFRESH_MEMORY") {
     await refreshFanMemory(creatorId, fanId);
+  } else if (data.action === "SET_INTIMATE_CONTENT_CONSENT") {
+    const now = new Date();
+    await prisma.$transaction([
+      prisma.fan.update({ where: { id: fanId }, data: { intimateContentOptIn: data.consented, intimateContentOptInAt: data.consented ? now : null, intimateContentOptInSource: data.consented ? data.source || "Confirmado manualmente por la creadora." : null } }),
+      prisma.fanEvent.create({ data: { creatorId, fanId, type: data.consented ? "INTIMATE_CONTENT_OPT_IN" : "INTIMATE_CONTENT_OPT_OUT", occurredAt: now, payload: { source: data.consented ? data.source || "MANUAL" : null } } }),
+    ]);
   } else if (data.action === "SET_DO_NOT_MESSAGE") {
     const now = new Date();
     const reason = data.reason || "Marcado manualmente desde Fan Lifecycle.";
