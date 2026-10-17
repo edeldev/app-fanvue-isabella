@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { fanvueRequest } from "@/lib/fanvue/client";
 import { prisma } from "@/lib/prisma";
+import { reconcileRenewalSignals } from "@/domain/lifecycle/renewal-signals";
 import { getValidFanvueAccessToken } from "./get-access-token";
 import { triggerWorkflowForFan } from "@/services/workflows/trigger-workflow";
 import { pauseEnrollmentsOnFanReply, recordFanReplyInActiveWorkflows, resetSilenceWaitEnrollments, routeReplyWaitEnrollments } from "@/services/workflows/manage-enrollment";
@@ -71,7 +72,7 @@ async function refreshFanSpending(creatorId: string, fanId: string, fanvueUserId
   return insight.spending.total.total;
 }
 
-async function refreshSubscriptionSegments(creatorId: string, fanId: string, fanvueUserId: string) {
+async function refreshSubscriptionSegments(creatorId: string, fanId: string, fanvueUserId: string, apiAutoRenewalEnabled: boolean | null, active: boolean) {
   const token = await getValidFanvueAccessToken(creatorId);
   const [freeTrials, autoRenewing, nonRenewing] = await Promise.all([
     fetchAllCursorPages("/v1/chats/lists/smart/free_trial_subscribers", token, creatorListPageSchema),
@@ -81,7 +82,12 @@ async function refreshSubscriptionSegments(creatorId: string, fanId: string, fan
   const belongsTo = (members: typeof freeTrials) => members.some((member) => member.uuid === fanvueUserId);
   const isFreeTrialSubscriber = belongsTo(freeTrials);
   await prisma.$transaction([
-    prisma.fan.update({ where: { id: fanId }, data: { isFreeTrialSubscriber, isAutoRenewingSubscriber: belongsTo(autoRenewing), isNonRenewingSubscriber: belongsTo(nonRenewing) } }),
+    prisma.fan.update({ where: { id: fanId }, data: {
+      isFreeTrialSubscriber: active && isFreeTrialSubscriber,
+      ...(active
+        ? reconcileRenewalSignals(apiAutoRenewalEnabled, belongsTo(autoRenewing), belongsTo(nonRenewing))
+        : { isAutoRenewingSubscriber: false, isNonRenewingSubscriber: false, renewalSignalsConflict: false }),
+    } }),
     prisma.subscription.updateMany({ where: { creatorId, fanId, status: { in: ["ACTIVE", "CANCEL_AT_PERIOD_END"] } }, data: { isFreeTrial: isFreeTrialSubscriber } }),
   ]);
 }
@@ -237,8 +243,9 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
       data: {
         isSubscriber: active,
         isExpiredSubscriber: !active,
-        isAutoRenewingSubscriber: active && !data.cancel_at_period_end,
-        isNonRenewingSubscriber: active && data.cancel_at_period_end,
+        isAutoRenewingSubscriber: false,
+        isNonRenewingSubscriber: false,
+        renewalSignalsConflict: false,
         isCreatorAccount: false,
       },
     });
@@ -256,7 +263,7 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
       : type === "creator.subscription.renewed" ? "SUBSCRIPTION_RENEWED"
         : type === "creator.subscription.deactivated" ? "SUBSCRIPTION_DEACTIVATED"
           : "RENEWAL_CHANGED";
-    await refreshSubscriptionSegments(creatorId, fan.id, fan.fanvueUserId);
+    await refreshSubscriptionSegments(creatorId, fan.id, fan.fanvueUserId, active ? !data.cancel_at_period_end : null, active);
     const refreshedFan = await prisma.fan.findUnique({ where: { id: fan.id }, select: { isSubscriber: true, isFreeTrialSubscriber: true } });
     if (active && refreshedFan?.isSubscriber && !refreshedFan.isFreeTrialSubscriber) {
       await completeMatchingWorkflowGoals(creatorId, fan.id, { kind: "PAID_SUBSCRIPTION" }, { subscriptionId: data.id, occurredAt: data.created_at ?? new Date().toISOString() });

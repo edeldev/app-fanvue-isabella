@@ -201,6 +201,8 @@ model Fan {
   isFreeTrialSubscriber      Boolean               @default(false)
   isAutoRenewingSubscriber   Boolean               @default(false)
   isNonRenewingSubscriber    Boolean               @default(false)
+  renewalSignalsConflict     Boolean               @default(false)
+  firstSubscribedAt          DateTime?
   isExpiredSubscriber        Boolean               @default(false)
   isCreatorAccount           Boolean               @default(false)
   isMuted                    Boolean               @default(false)

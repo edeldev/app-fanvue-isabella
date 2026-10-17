@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getValidFanvueAccessToken } from "./get-access-token";
 import { isFreshFanvueOnline } from "@/domain/fans/filters";
 import { recalculateFanLifecycle } from "@/services/lifecycle/recalculate-fan-lifecycle";
+import { reconcileRenewalSignals } from "@/domain/lifecycle/renewal-signals";
 import { refreshFanMemory } from "@/services/intelligence/refresh-fan-memory";
 
 export interface InitialSyncResult {
@@ -106,8 +107,8 @@ export async function runInitialFanvueSync(creatorId: string): Promise<InitialSy
   await processInBatches(subscribers, async (subscriber) => {
       const fan = await prisma.fan.upsert({
         where: { creatorId_fanvueUserId: { creatorId, fanvueUserId: subscriber.uuid } },
-        update: { username: subscriber.handle, displayName: subscriber.displayName, avatarUrl: subscriber.avatarUrl, isSubscriber: true, isCreatorAccount: false, isTopSpender: subscriber.isTopSpender },
-        create: { creatorId, fanvueUserId: subscriber.uuid, username: subscriber.handle, displayName: subscriber.displayName, avatarUrl: subscriber.avatarUrl, isSubscriber: true, isCreatorAccount: false, isTopSpender: subscriber.isTopSpender },
+        update: { username: subscriber.handle, displayName: subscriber.displayName, avatarUrl: subscriber.avatarUrl, isSubscriber: true, isCreatorAccount: false, isTopSpender: subscriber.isTopSpender, firstSubscribedAt: subscriber.firstSubscribedAt ? new Date(subscriber.firstSubscribedAt) : undefined },
+        create: { creatorId, fanvueUserId: subscriber.uuid, username: subscriber.handle, displayName: subscriber.displayName, avatarUrl: subscriber.avatarUrl, isSubscriber: true, isCreatorAccount: false, isTopSpender: subscriber.isTopSpender, firstSubscribedAt: subscriber.firstSubscribedAt ? new Date(subscriber.firstSubscribedAt) : null },
       });
       if (subscriber.subscription) {
         const startedAt = new Date(subscriber.subscription.currentPeriodStart);
@@ -142,6 +143,23 @@ export async function runInitialFanvueSync(creatorId: string): Promise<InitialSy
   await updateSegment("isAutoRenewingSubscriber", autoRenewingSubscribers);
   await updateSegment("isNonRenewingSubscriber", nonRenewingSubscribers);
   await updateSegment("isMuted", mutedFans);
+  await prisma.fan.updateMany({ where: { creatorId, isSubscriber: false }, data: {
+    isAutoRenewingSubscriber: false,
+    isNonRenewingSubscriber: false,
+    renewalSignalsConflict: false,
+  } });
+  const autoRenewingIds = new Set(autoRenewingSubscribers.map((fan) => fan.uuid));
+  const nonRenewingIds = new Set(nonRenewingSubscribers.map((fan) => fan.uuid));
+  await processInBatches(subscribers, async (subscriber) => {
+    await prisma.fan.update({
+      where: { creatorId_fanvueUserId: { creatorId, fanvueUserId: subscriber.uuid } },
+      data: reconcileRenewalSignals(
+        subscriber.subscription?.autoRenewalEnabled ?? null,
+        autoRenewingIds.has(subscriber.uuid),
+        nonRenewingIds.has(subscriber.uuid),
+      ),
+    });
+  });
   await prisma.subscription.updateMany({ where: { creatorId }, data: { isFreeTrial: false } });
   await prisma.subscription.updateMany({ where: { creatorId, fan: { isFreeTrialSubscriber: true }, status: { in: ["ACTIVE", "CANCEL_AT_PERIOD_END"] } }, data: { isFreeTrial: true } });
 

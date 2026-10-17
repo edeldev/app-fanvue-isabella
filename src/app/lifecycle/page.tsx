@@ -5,6 +5,8 @@ import type { FanLifecycleStage, Prisma } from "@prisma/client";
 import { Sidebar } from "@/components/app-shell/sidebar";
 import { Topbar } from "@/components/app-shell/topbar";
 import { lifecyclePresentation, lifecycleStages } from "@/domain/lifecycle/presentation";
+import { describeSubscriptionPeriod } from "@/domain/lifecycle/subscription-period";
+import { renewalLabel } from "@/domain/lifecycle/renewal-signals";
 import { buildPurchaseBreakdown, primaryRevenueCategory, revenueCategoryLabels } from "@/domain/fans/purchase-breakdown";
 import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
@@ -96,10 +98,9 @@ export default async function LifecyclePage({ searchParams }: { searchParams: Se
         memories: { where: { status: "ACTIVE", category: "PURCHASE_INTENT" }, select: { id: true } },
         purchases: { where: { amountMinor: { gt: 0 }, reversedAt: null }, select: { amountMinor: true, source: true, externalMessageId: true, externalPostId: true, reversedAt: true } },
         subscriptions: {
-          where: { isFreeTrial: false, status: { in: ["ACTIVE", "CANCEL_AT_PERIOD_END"] } },
           orderBy: { startedAt: "desc" },
-          take: 1,
-          select: { id: true, startedAt: true, currentPeriodEndsAt: true, autoRenewalEnabled: true },
+          take: 5,
+          select: { id: true, startedAt: true, currentPeriodEndsAt: true, autoRenewalEnabled: true, status: true },
         },
       },
     }),
@@ -133,8 +134,8 @@ export default async function LifecyclePage({ searchParams }: { searchParams: Se
           const duplicateUsername = Boolean(fan.username && duplicateUsernames.has(fan.username));
           const badges = tableBadges(fan, firstBuyerSet.has(fan.id), repeatBuyerSet.has(fan.id));
           const primaryCategory = primaryRevenueCategory(buildPurchaseBreakdown(fan.purchases));
-          const paidSubscription = fan.isSubscriber && !fan.isFreeTrialSubscriber ? fan.subscriptions[0] : null;
-          return <Link key={fan.id} href={`/lifecycle/fans/${fan.id}`} className="grid gap-4 p-5 transition hover:bg-white/[.025] md:grid-cols-[minmax(220px,.9fr)_minmax(260px,1.15fr)_minmax(240px,1fr)_auto] md:items-center"><div className="min-w-0"><p className="truncate font-medium text-zinc-100">{fan.displayName || fan.username || "Fan sin nombre"}</p><p className="mt-1 truncate text-xs text-zinc-600">@{fan.username || "sin-usuario"}</p>{duplicateUsername ? <p className="mt-1 text-[10px] text-amber-400/80">Mismo @usuario · Fanvue ID …{fan.fanvueUserId.slice(-8)}</p> : null}</div><div><div className="flex flex-wrap gap-1.5">{badges.map((badge) => <span key={badge.label} className={`rounded-full border px-2.5 py-1 text-[10px] font-medium ${badge.tone}`}>{badge.label}</span>)}</div>{paidSubscription ? <div className="mt-2.5 flex items-start gap-2 rounded-xl border border-violet-400/10 bg-violet-400/[.045] px-3 py-2"><CalendarDays className="mt-0.5 size-3.5 shrink-0 text-violet-300"/><div className="text-[10px] leading-4 text-zinc-500"><span className="text-zinc-300">Inicio:</span> {subscriptionDate.format(paidSubscription.startedAt)}<span className="mx-1.5 text-zinc-700">·</span><span className="text-zinc-300">Vence:</span> {paidSubscription.currentPeriodEndsAt ? subscriptionDate.format(paidSubscription.currentPeriodEndsAt) : "sin fecha confirmada"}</div></div> : null}</div><div><p className="line-clamp-2 text-xs leading-5 text-zinc-500">{tableSummary(fan, firstBuyerSet.has(fan.id), repeatBuyerSet.has(fan.id))}</p><div className="mt-2 flex flex-wrap gap-1">{fan.tags.map(({ tag }) => <span key={tag.id} className="rounded bg-white/5 px-2 py-0.5 text-[10px] text-zinc-500">{tag.name}</span>)}</div></div><div className="flex items-center gap-4"><span className="text-right"><span className="block whitespace-nowrap text-sm font-semibold text-white">{money.format(fan.totalSpentMinor / 100)}</span>{primaryCategory ? <span className="mt-1 block whitespace-nowrap text-[10px] text-violet-300/70">Principal: {revenueCategoryLabels[primaryCategory]}</span> : null}</span><ArrowRight className="size-4 text-zinc-600"/></div></Link>;
+          const subscription = fan.isSubscriber ? describeSubscriptionPeriod(fan.subscriptions) : null;
+          return <Link key={fan.id} href={`/lifecycle/fans/${fan.id}`} className="grid gap-4 p-5 transition hover:bg-white/[.025] md:grid-cols-[minmax(220px,.9fr)_minmax(260px,1.15fr)_minmax(240px,1fr)_auto] md:items-center"><div className="min-w-0"><p className="truncate font-medium text-zinc-100">{fan.displayName || fan.username || "Fan sin nombre"}</p><p className="mt-1 truncate text-xs text-zinc-600">@{fan.username || "sin-usuario"}</p>{duplicateUsername ? <p className="mt-1 text-[10px] text-amber-400/80">Mismo @usuario · Fanvue ID …{fan.fanvueUserId.slice(-8)}</p> : null}</div><div><div className="flex flex-wrap gap-1.5">{badges.map((badge) => <span key={badge.label} className={`rounded-full border px-2.5 py-1 text-[10px] font-medium ${badge.tone}`}>{badge.label}</span>)}</div>{subscription ? <div className="mt-2.5 flex items-start gap-2 rounded-xl border border-violet-400/10 bg-violet-400/[.045] px-3 py-2"><CalendarDays className="mt-0.5 size-3.5 shrink-0 text-violet-300"/><div className="text-[10px] leading-4 text-zinc-500">{fan.firstSubscribedAt ? <><span className="text-zinc-300">Primera suscripción:</span> {subscriptionDate.format(fan.firstSubscribedAt)}<span className="mx-1.5 text-zinc-700">·</span></> : null}{subscription.period ? <><span className="text-zinc-300">Periodo actual:</span> {subscriptionDate.format(subscription.period.startedAt)}<span className="mx-1.5 text-zinc-700">·</span></> : null}<span className="text-zinc-300">{subscription.endLabel}:</span> {subscription.endValue ? subscriptionDate.format(subscription.endValue) : "sin fecha confirmada"}{subscription.stale ? <span className="ml-1 text-amber-300">· último periodo registrado ya terminó</span> : subscription.pending ? <span className="ml-1 text-amber-300">· periodo pendiente de confirmación</span> : null}<span className="mt-1 block">Renovación: {renewalLabel(fan)}</span></div></div> : null}</div><div><p className="line-clamp-2 text-xs leading-5 text-zinc-500">{tableSummary(fan, firstBuyerSet.has(fan.id), repeatBuyerSet.has(fan.id))}</p><div className="mt-2 flex flex-wrap gap-1">{fan.tags.map(({ tag }) => <span key={tag.id} className="rounded bg-white/5 px-2 py-0.5 text-[10px] text-zinc-500">{tag.name}</span>)}</div></div><div className="flex items-center gap-4"><span className="text-right"><span className="block whitespace-nowrap text-sm font-semibold text-white">{money.format(fan.totalSpentMinor / 100)}</span>{primaryCategory ? <span className="mt-1 block whitespace-nowrap text-[10px] text-violet-300/70">Principal: {revenueCategoryLabels[primaryCategory]}</span> : null}</span><ArrowRight className="size-4 text-zinc-600"/></div></Link>;
         })}</div> : <div className="grid min-h-60 place-items-center text-center"><div><ContactRound className="mx-auto mb-3 size-7 text-zinc-700"/><p className="text-sm text-zinc-400">No hay fans con estos filtros.</p></div></div>}
         {filteredTotal > PAGE_SIZE ? <nav aria-label="Paginación de fans" className="flex items-center justify-between border-t border-white/8 p-4"><Link aria-disabled={page <= 1} href={pageHref(Math.max(1, page - 1))} className={`rounded-lg border px-3 py-2 text-xs ${page <= 1 ? "pointer-events-none border-white/5 text-zinc-700" : "border-white/10 text-zinc-300 hover:bg-white/5"}`}>Anterior</Link><span className="text-xs text-zinc-500">Página {Math.min(page, totalPages)} de {totalPages}</span><Link aria-disabled={page >= totalPages} href={pageHref(Math.min(totalPages, page + 1))} className={`rounded-lg border px-3 py-2 text-xs ${page >= totalPages ? "pointer-events-none border-white/5 text-zinc-700" : "border-white/10 text-zinc-300 hover:bg-white/5"}`}>Siguiente</Link></nav> : null}
       </section>
@@ -149,12 +150,15 @@ type TableFan = {
   isSubscriber: boolean;
   isFreeTrialSubscriber: boolean;
   isNonRenewingSubscriber: boolean;
+  isAutoRenewingSubscriber: boolean;
+  renewalSignalsConflict: boolean;
+  firstSubscribedAt: Date | null;
   isExpiredSubscriber: boolean;
   isArchived: boolean;
   totalSpentMinor: number;
   memories: { id: string }[];
   purchases: Array<{ amountMinor: number; source: string; externalMessageId: string | null; externalPostId: string | null; reversedAt: Date | null }>;
-  subscriptions: Array<{ id: string; startedAt: Date; currentPeriodEndsAt: Date | null; autoRenewalEnabled: boolean | null }>;
+  subscriptions: Array<{ id: string; startedAt: Date; currentPeriodEndsAt: Date | null; autoRenewalEnabled: boolean | null; status: string }>;
 };
 
 type TableBadge = { label: string; tone: string };
@@ -169,7 +173,6 @@ function tableBadges(fan: TableFan, isFirstBuyer: boolean, isRepeatBuyer: boolea
   if (fan.memories.length) badges.push({ label: "Intención de compra", tone: "border-fuchsia-400/25 bg-fuchsia-400/10 text-fuchsia-300" });
   if (fan.isSubscriber) {
     if (fan.isFreeTrialSubscriber) badges.push({ label: "Prueba activa", tone: "border-sky-400/25 bg-sky-400/10 text-sky-300" });
-    else if (fan.isNonRenewingSubscriber) badges.push({ label: "No renovará", tone: "border-orange-400/25 bg-orange-400/10 text-orange-300" });
     else badges.push({ label: "Suscriptor de pago", tone: "border-violet-400/25 bg-violet-400/10 text-violet-300" });
   } else if (fan.isExpiredSubscriber) badges.push({ label: "Suscripción vencida", tone: "border-rose-400/25 bg-rose-400/10 text-rose-300" });
   if (fan.isFollower) badges.push({ label: "Seguidor", tone: "border-cyan-400/20 bg-cyan-400/[.08] text-cyan-300" });
@@ -183,7 +186,7 @@ function tableSummary(fan: TableFan, isFirstBuyer: boolean, isRepeatBuyer: boole
   if (isRepeatBuyer) details.push("Compró contenido PPV al menos dos veces");
   else if (isFirstBuyer) details.push("Realizó su primera compra PPV");
   if (fan.memories.length) details.push("expresó intención comercial");
-  if (fan.isSubscriber) details.push(fan.isFreeTrialSubscriber ? "tiene una prueba activa" : fan.isNonRenewingSubscriber ? "mantiene acceso, pero no renovará" : "tiene suscripción de pago activa");
+  if (fan.isSubscriber) details.push(fan.isFreeTrialSubscriber ? "tiene una prueba activa" : "tiene suscripción de pago activa");
   else if (fan.isExpiredSubscriber) details.push("su suscripción está vencida");
   if (fan.isFollower) details.push("sigue la cuenta");
   return details.length ? `${details.join(" · ")}.` : "Contacto sincronizado sin una relación activa confirmada.";
