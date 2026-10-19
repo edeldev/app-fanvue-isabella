@@ -97,8 +97,10 @@ export function WorkflowManager({ workflows, templates, defaults, analytics, ini
     PUBLISHED: workflows.filter((workflow) => workflow.status === "PUBLISHED").length,
     ARCHIVED: workflows.filter((workflow) => workflow.status === "ARCHIVED").length,
   };
+  const publishedWithoutLimits = workflows.filter((workflow) => workflow.status === "PUBLISHED" && !workflow.sendLimitsEnabled);
 
   return <section>
+    {publishedWithoutLimits.length ? <div role="status" className="mb-4 rounded-2xl border border-amber-400/20 bg-amber-400/[.05] px-4 py-3 text-xs leading-5 text-amber-100/80"><p className="font-semibold text-amber-200">Auditoría: {publishedWithoutLimits.length} flujo{publishedWithoutLimits.length === 1 ? " publicado sin tope propio" : "s publicados sin tope propio"}</p><p className="mt-1">{publishedWithoutLimits.map((workflow) => workflow.name).join(", ")}. Sus versiones no se alteraron, pero el límite global obligatorio ahora protege sus envíos. Revísalos antes de campañas grandes; el tope no autoriza mensajes no solicitados.</p></div> : null}
     <div className="rounded-2xl border border-white/8 bg-white/[.025] p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><h2 className="font-medium text-white">Mis workflows</h2><p className="mt-1 text-xs text-zinc-500">Busca, filtra y abre solo el flujo que quieras revisar.</p></div>

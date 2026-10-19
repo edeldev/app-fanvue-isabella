@@ -44,6 +44,7 @@ export function buildAudienceWhere(creatorId: string, include: AudienceSegment[]
     creatorId,
     isCreatorAccount: false,
     doNotMessage: false,
+    automationPaused: false,
     OR: include.map(audienceSegmentWhere),
     ...(exclude.length ? { NOT: { OR: exclude.map(audienceSegmentWhere) } } : {}),
   };

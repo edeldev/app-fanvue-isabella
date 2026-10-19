@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Bot, CalendarClock, Check, Copy, FileText, Languages, LoaderCircle, Plus, RefreshCw, Send, Sparkles, WandSparkles, X } from "lucide-react";
@@ -15,6 +15,8 @@ function renderTemplate(text: string, fanName: string, username: string) {
 }
 
 type ScheduledMessage = { id: string; text: string | null; scheduledAt: string; priceMinor: number | null; mediaCount: number };
+type DeliveryReview = { id: string; text: string | null; scheduledAt: string };
+type ReviewAction = "confirm_sent" | "discard";
 type AiSuggestion = {
   reply: string;
   spanishTranslation: string;
@@ -25,8 +27,9 @@ type AiSuggestion = {
 };
 type AiMode = "reply" | "improve";
 
-export function MessageComposer({ fanUuid, fanName, username, templates, doNotMessage = false, scheduledMessages = [] }: { fanUuid: string; fanName: string; username: string; templates: Template[]; doNotMessage?: boolean; scheduledMessages?: ScheduledMessage[] }) {
+export function MessageComposer({ fanUuid, fanName, username, templates, doNotMessage = false, scheduledMessages = [], deliveryReviews = [] }: { fanUuid: string; fanName: string; username: string; templates: Template[]; doNotMessage?: boolean; scheduledMessages?: ScheduledMessage[]; deliveryReviews?: DeliveryReview[] }) {
   const router = useRouter();
+  const navigationKey = useSearchParams().toString();
   const [text, setText] = useState("");
   const [templateId, setTemplateId] = useState("");
   const [mediaOpen, setMediaOpen] = useState(false);
@@ -35,6 +38,9 @@ export function MessageComposer({ fanUuid, fanName, username, templates, doNotMe
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduledLocal, setScheduledLocal] = useState("");
   const [cancelling, setCancelling] = useState("");
+  const [reviewChoice, setReviewChoice] = useState<{ id: string; action: ReviewAction } | null>(null);
+  const [reviewVerified, setReviewVerified] = useState(false);
+  const [reviewBusy, setReviewBusy] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<AiSuggestion | null>(null);
@@ -42,6 +48,9 @@ export function MessageComposer({ fanUuid, fanName, username, templates, doNotMe
   const [aiError, setAiError] = useState("");
   const [aiMode, setAiMode] = useState<AiMode>("reply");
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const setSendIntentInput = useCallback((node: HTMLInputElement | null) => {
+    if (node) node.value = crypto.randomUUID();
+  }, []);
   const selected = useMemo(() => templates.find(template => template.id === templateId), [templateId, templates]);
   const matches = useMemo(() => {
     if (!command) return [];
@@ -107,6 +116,28 @@ export function MessageComposer({ fanUuid, fanName, username, templates, doNotMe
     } finally { setCancelling(""); }
   }
 
+  async function resolveDeliveryReview() {
+    if (!reviewChoice || (reviewChoice.action === "confirm_sent" && !reviewVerified)) return;
+    setReviewBusy(true);
+    try {
+      const response = await fetch(`/api/messages/scheduled/${reviewChoice.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: reviewChoice.action, verifiedInFanvue: reviewVerified }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.error || "No se pudo cerrar la revisión.");
+      enqueueSnackbar(reviewChoice.action === "confirm_sent" ? "Envío verificado y cerrado sin repetirlo." : "Mensaje descartado sin reenviar.", { variant: "success" });
+      setReviewChoice(null);
+      setReviewVerified(false);
+      router.refresh();
+    } catch (error) {
+      enqueueSnackbar(error instanceof Error ? error.message : "No se pudo cerrar la revisión.", { variant: "error" });
+    } finally {
+      setReviewBusy(false);
+    }
+  }
+
   async function generateAiSuggestion(mode: AiMode = "reply") {
     if (mode === "improve" && !text.trim()) return;
     setAiMode(mode);
@@ -157,8 +188,25 @@ export function MessageComposer({ fanUuid, fanName, username, templates, doNotMe
   const scheduledAt = scheduledLocal ? new Date(scheduledLocal).toISOString() : "";
 
   return <form action="/api/messages/send" method="post" className="relative shrink-0 border-t border-white/8 bg-[#12141a] p-3">
-    <input type="hidden" name="fanUuid" value={fanUuid} /><input type="hidden" name="templateId" value={templateId} /><input type="hidden" name="scheduledAt" value={scheduledAt} />
+    <input type="hidden" name="fanUuid" value={fanUuid} /><input type="hidden" name="templateId" value={templateId} /><input type="hidden" name="scheduledAt" value={scheduledAt} /><input type="hidden" name="sendIntentId" key={`${fanUuid}:${navigationKey}`} ref={setSendIntentInput} defaultValue="" />
     {doNotMessage ? <div className="mb-3 rounded-xl border border-rose-400/20 bg-rose-400/8 px-4 py-3"><p className="text-xs font-semibold text-rose-200">Fan marcado como “No contactar”</p><p className="mt-1 text-[11px] text-rose-200/60">Los mensajes manuales, programados y automáticos están bloqueados hasta retirar la preferencia.</p></div> : null}
+    {deliveryReviews.length ? <div role="alert" className="mb-3 rounded-xl border border-amber-400/20 bg-amber-400/[.05] px-4 py-3 text-xs text-amber-100/80">
+      <p className="font-semibold text-amber-200">{deliveryReviews.length} mensaje{deliveryReviews.length === 1 ? " requiere" : "s requieren"} revisión</p>
+      <p className="mt-1">El envío pudo llegar a Fanvue, pero no se confirmó en la app. Comprueba el chat en Fanvue; ninguna de estas acciones reenviará el mensaje.</p>
+      <div className="mt-3 space-y-2">{deliveryReviews.map((message) => <div key={message.id} className="rounded-lg border border-amber-400/10 bg-black/15 p-3">
+        <p className="truncate text-[11px] text-amber-100/80">{message.text || "Mensaje con archivos"} · {new Date(message.scheduledAt).toLocaleString("es-MX")}</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button type="button" disabled={reviewBusy} onClick={() => { setReviewChoice({ id: message.id, action: "confirm_sent" }); setReviewVerified(false); }} className="rounded-lg border border-emerald-400/25 px-2.5 py-1.5 text-[11px] text-emerald-300 hover:bg-emerald-400/10 disabled:opacity-40">Ya llegó a Fanvue</button>
+          <button type="button" disabled={reviewBusy} onClick={() => { setReviewChoice({ id: message.id, action: "discard" }); setReviewVerified(false); }} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-zinc-300 hover:bg-white/5 disabled:opacity-40">Descartar sin reenviar</button>
+        </div>
+        {reviewChoice?.id === message.id ? <div className="mt-3 rounded-lg border border-amber-400/15 bg-amber-400/5 p-3">
+          <p className="text-[11px] text-amber-100">{reviewChoice.action === "confirm_sent" ? "Confirma que viste este mensaje en la conversación de Fanvue." : "Se cerrará la revisión sin enviar nada. Si no llegó, podrás redactar uno nuevo manualmente."}</p>
+          {reviewChoice.action === "confirm_sent" ? <label className="mt-2 flex cursor-pointer items-center gap-2 text-[11px] text-amber-100"><input type="checkbox" checked={reviewVerified} onChange={(event) => setReviewVerified(event.target.checked)} className="accent-emerald-400" />Lo comprobé en Fanvue</label> : null}
+          <div className="mt-3 flex gap-2"><button type="button" disabled={reviewBusy || (reviewChoice.action === "confirm_sent" && !reviewVerified)} onClick={() => void resolveDeliveryReview()} className="rounded-lg bg-amber-300 px-2.5 py-1.5 text-[11px] font-medium text-zinc-950 disabled:opacity-40">{reviewBusy ? "Guardando…" : "Confirmar decisión"}</button><button type="button" disabled={reviewBusy} onClick={() => setReviewChoice(null)} className="rounded-lg px-2.5 py-1.5 text-[11px] text-zinc-400 hover:text-white">Volver</button></div>
+        </div> : null}
+      </div>)}</div>
+    </div> : null}
+    {mediaOpen ? <p className="mb-3 rounded-xl border border-amber-400/15 bg-amber-400/[.04] px-3 py-2 text-[11px] leading-5 text-amber-200/80">Para enviar fotos o videos a un fan no suscrito, registra antes su consentimiento en Fan Lifecycle. Aplica también a archivos gratuitos.</p> : null}
     {scheduledMessages.length ? <div className="mb-3 rounded-xl border border-sky-400/15 bg-sky-400/[.04] p-3"><div className="flex items-center gap-2 text-xs font-medium text-sky-200"><CalendarClock className="size-4" />Próximos mensajes</div><div className="mt-2 space-y-1.5">{scheduledMessages.map((message) => <div key={message.id} className="flex items-center gap-3 rounded-lg bg-black/15 px-3 py-2"><div className="min-w-0 flex-1"><p className="truncate text-[11px] text-zinc-300">{message.text || `${message.mediaCount} archivo${message.mediaCount === 1 ? "" : "s"}${message.priceMinor ? ` · PPV $${(message.priceMinor / 100).toFixed(2)}` : ""}`}</p><time className="text-[10px] text-zinc-600">{new Date(message.scheduledAt).toLocaleString("es-MX")}</time></div><button type="button" disabled={cancelling === message.id} onClick={() => void cancelScheduled(message.id)} aria-label="Cancelar mensaje programado" className="grid size-8 place-items-center rounded-lg text-zinc-600 hover:bg-rose-400/10 hover:text-rose-300 disabled:opacity-40">{cancelling === message.id ? <LoaderCircle className="size-3.5 animate-spin" /> : <X className="size-3.5" />}</button></div>)}</div></div> : null}
     {aiOpen ? <section className="mb-3 overflow-hidden rounded-2xl border border-violet-400/20 bg-gradient-to-br from-violet-500/[.09] via-[#181922] to-fuchsia-500/[.04] shadow-xl shadow-black/15" aria-live="polite">
       <div className="flex items-start justify-between gap-3 border-b border-white/8 px-4 py-3">

@@ -18,4 +18,21 @@ describe("enforceAiIdentityBoundary", () => {
   it("does not alter unrelated replies", () => {
     expect(enforceAiIdentityBoundary(base, "¿Cómo estuvo tu día?")).toEqual(base);
   });
+
+  it.each([
+    ["Português", "Você é uma IA?", "Uso um assistente"],
+    ["Français", "Tu es un bot ?", "J'utilise un assistant"],
+    ["Deutsch", "Bist du ein Bot?", "Ich nutze einen"],
+    ["Italiano", "Sei un bot?", "Uso un assistente"],
+    ["English", "Are you an AI?", "I use an AI"],
+  ])("answers transparently in %s with a Spanish preview", (detectedLanguage, question, expected) => {
+    const result = enforceAiIdentityBoundary({ ...base, detectedLanguage }, question);
+    expect(result.reply).toContain(expected);
+    expect(result.spanishTranslation).toContain("asistente de IA");
+    expect(result.needsSpanishTranslation).toBe(true);
+  });
+
+  it("does not mistake a mention of AI for a question about the assistant", () => {
+    expect(enforceAiIdentityBoundary(base, "Vi una foto hecha con IA.")).toEqual(base);
+  });
 });

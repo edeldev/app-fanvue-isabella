@@ -4,15 +4,19 @@ import { evaluateWorkflowConditionGroup, workflowConditionLabels, workflowCondit
 import { fanvueRequest } from "@/lib/fanvue/client";
 import { sentMessageSchema } from "@/lib/fanvue/sync-schemas";
 import { prisma } from "@/lib/prisma";
-import { canReceivePaidOrIntimateContent } from "@/domain/fans/content-consent";
+import { canReceivePaidOrIntimateContent, canReceiveMessageMedia } from "@/domain/fans/content-consent";
+import { mandatoryAutomatedSendLimits } from "@/domain/messages/mandatory-send-limits";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
 import { extendWorkflowPath } from "@/domain/workflows/transition-path";
 import { isInsideSendWindow, nextSendWindowOpening } from "@/domain/workflows/send-window";
 import { markWorkflowSendFailed, markWorkflowSendSucceeded, reserveWorkflowSend } from "./send-rate-limit";
-import { maximumWorkflowAttempts, workflowRetryDecision } from "@/domain/workflows/retry-policy";
+import { ConfirmedSendPersistenceError, maximumWorkflowAttempts, workflowRetryDecision, workflowSendRetryDecision } from "@/domain/workflows/retry-policy";
 import { sanitizeErrorMessage } from "@/lib/logger";
 import { scheduleWorkflowStep } from "@/domain/workflows/step-schedule";
 import { silenceWaitDeadline } from "@/domain/workflows/silence-wait";
+import { reserveAutomatedSendBudget } from "@/services/messages/automated-send-budget";
+import { nextWorkflowStep } from "@/domain/workflows/next-step";
+import { assertSendRecipient, SendRecipientIneligibleError } from "@/services/messages/assert-send-recipient";
 
 type LoadedEnrollment = NonNullable<Awaited<ReturnType<typeof loadEnrollment>>>;
 type StepRecord = LoadedEnrollment["currentStep"];
@@ -182,7 +186,9 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
     }
     return await finishLocalStep(enrollment, step, execution.id, now);
   } catch (error) {
-    const decision = workflowRetryDecision(error, execution.attempt, { maximumAttempts, minimumDelaySeconds: retrySettings?.minimumDelaySeconds });
+    const decision = step.type === "SEND_MESSAGE" || step.type === "SEND_PPV"
+      ? workflowSendRetryDecision(error, execution.attempt, { maximumAttempts, minimumDelaySeconds: retrySettings?.minimumDelaySeconds })
+      : workflowRetryDecision(error, execution.attempt, { maximumAttempts, minimumDelaySeconds: retrySettings?.minimumDelaySeconds });
     const errorMessage = sanitizeErrorMessage(error instanceof Error ? error.message : "Error inesperado");
     if (decision.retryable && decision.delaySeconds !== null) {
       const retryAt = new Date(now.getTime() + decision.delaySeconds * 1_000);
@@ -194,7 +200,7 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
       return { outcome: "RETRY_SCHEDULED", nextStep: step.name, shouldContinue: false };
     }
     await prisma.$transaction([
-      prisma.automationExecution.update({ where: { id: execution.id }, data: { status: "FAILED", decision: "CANCEL", reasonCode: decision.reasonCode, reason: errorMessage, finishedAt: new Date(), nextRetryAt: null } }),
+      prisma.automationExecution.update({ where: { id: execution.id }, data: { status: "FAILED", decision: "CANCEL", reasonCode: decision.reasonCode, reason: errorMessage, evidence: error instanceof ConfirmedSendPersistenceError ? { fanvueMessageId: error.fanvueMessageId } : undefined, finishedAt: new Date(), nextRetryAt: null } }),
       prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { status: "FAILED", nextRunAt: null, lastResult: { reasonCode: decision.reasonCode, attempt: execution.attempt, error: errorMessage } } }),
       prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, executionId: execution.id, eventType: "WORKFLOW_STEP_FAILED", level: "ERROR", reasonCode: decision.reasonCode, explanation: decision.reasonCode === "MAXIMUM_RETRIES_REACHED" ? `${step.name} agotó ${maximumWorkflowAttempts} intentos; el workflow fue detenido.` : `${step.name} encontró un error que no es seguro reintentar; el workflow fue detenido.`, metadata: { error: errorMessage, attempt: execution.attempt } } }),
     ]);
@@ -275,6 +281,7 @@ async function executeMessage(enrollment: NonNullable<Awaited<ReturnType<typeof 
   if (step.messageTemplateId && (!step.messageTemplate || step.messageTemplate.status !== "ACTIVE")) throw new Error("WORKFLOW_TEMPLATE_UNAVAILABLE");
   const metadata = step.messageTemplate ? readTemplateMetadata(step.messageTemplate.metadata) : readManualStepMetadata(step.config);
   if (metadata.priceMinor) throw new Error("WORKFLOW_TEMPLATE_REQUIRES_PPV_STEP");
+  if (!canReceiveMessageMedia(enrollment.fan, metadata.mediaUuids.length)) throw new Error("EXPLICIT_CONTENT_OPT_IN_REQUIRED");
   const text = renderTemplateVariables(step.messageTemplate?.text ?? metadata.text, enrollment.fan);
   if (!text && metadata.mediaUuids.length === 0) throw new Error("WORKFLOW_TEMPLATE_EMPTY");
 
@@ -284,15 +291,17 @@ async function executeMessage(enrollment: NonNullable<Awaited<ReturnType<typeof 
   const token = await getValidFanvueAccessToken(enrollment.creatorId);
   let sent;
   try {
+    await assertSendRecipient(enrollment.creatorId, enrollment.fanId, metadata.mediaUuids.length, false);
     sent = await fanvueRequest(`/v1/chats/${enrollment.fan.fanvueUserId}/message`, token, sentMessageSchema, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: text || null, mediaUuids: metadata.mediaUuids, mediaPreviewUuid: null, price: null }),
     });
   } catch (error) {
-    if (reservation.reservationId) await markWorkflowSendFailed(reservation.reservationId);
+    if (reservation.reservationId && (error instanceof SendRecipientIneligibleError || workflowSendRetryDecision(error, 1).reasonCode !== "FANVUE_AMBIGUOUS_SEND_RESPONSE")) await markWorkflowSendFailed(reservation.reservationId);
     throw error;
   }
+  try {
   const conversation = await prisma.conversation.upsert({
     where: { creatorId_fanId: { creatorId: enrollment.creatorId, fanId: enrollment.fanId } },
     update: { lastMessageAt: now, lastOutboundAt: now },
@@ -301,6 +310,7 @@ async function executeMessage(enrollment: NonNullable<Awaited<ReturnType<typeof 
   const next = nextStep(enrollment.workflow.steps, step);
   const schedule = scheduleNext(next, now);
 
+  if (reservation.reservationId) await markWorkflowSendSucceeded(reservation.reservationId, now);
   await prisma.$transaction([
     prisma.message.upsert({
       where: { creatorId_fanvueMessageId: { creatorId: enrollment.creatorId, fanvueMessageId: sent.messageUuid } },
@@ -311,8 +321,10 @@ async function executeMessage(enrollment: NonNullable<Awaited<ReturnType<typeof 
     prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { ...schedule, lastRunAt: now, lastResult: { stepId: step.id, fanvueMessageId: sent.messageUuid } } }),
     prisma.automationLog.create({ data: { creatorId: enrollment.creatorId, fanId: enrollment.fanId, enrollmentId: enrollment.id, executionId, eventType: "WORKFLOW_MESSAGE_SENT", explanation: `${step.name}: ${step.messageTemplate ? `plantilla ${step.messageTemplate.name}` : "mensaje manual"} enviado a ${enrollment.fan.displayName || enrollment.fan.username || "fan"}.`, metadata: { templateId: step.messageTemplate?.id ?? null, fanvueMessageId: sent.messageUuid } } }),
   ]);
-  if (reservation.reservationId) await markWorkflowSendSucceeded(reservation.reservationId, now);
   return { outcome: "MESSAGE_SENT", nextStep: next?.name ?? null, shouldContinue: schedule.status === "ACTIVE" };
+  } catch {
+    throw new ConfirmedSendPersistenceError(sent.messageUuid);
+  }
 }
 
 async function executePpv(enrollment: LoadedEnrollment, step: NonNullable<StepRecord>, executionId: string, now: Date) {
@@ -329,15 +341,17 @@ async function executePpv(enrollment: LoadedEnrollment, step: NonNullable<StepRe
   const token = await getValidFanvueAccessToken(enrollment.creatorId);
   let sent;
   try {
+    await assertSendRecipient(enrollment.creatorId, enrollment.fanId, metadata.mediaUuids.length, true);
     sent = await fanvueRequest(`/v1/chats/${enrollment.fan.fanvueUserId}/message`, token, sentMessageSchema, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: text || null, mediaUuids: lockedMediaUuids, mediaPreviewUuid: metadata.previewUuid, price: metadata.priceMinor }),
     });
   } catch (error) {
-    if (reservation.reservationId) await markWorkflowSendFailed(reservation.reservationId);
+    if (reservation.reservationId && (error instanceof SendRecipientIneligibleError || workflowSendRetryDecision(error, 1).reasonCode !== "FANVUE_AMBIGUOUS_SEND_RESPONSE")) await markWorkflowSendFailed(reservation.reservationId);
     throw error;
   }
+  try {
   const conversation = await prisma.conversation.upsert({
     where: { creatorId_fanId: { creatorId: enrollment.creatorId, fanId: enrollment.fanId } },
     update: { lastMessageAt: now, lastOutboundAt: now },
@@ -345,6 +359,7 @@ async function executePpv(enrollment: LoadedEnrollment, step: NonNullable<StepRe
   });
   const next = nextStep(enrollment.workflow.steps, step);
   const schedule = scheduleNext(next, now);
+  if (reservation.reservationId) await markWorkflowSendSucceeded(reservation.reservationId, now);
   await prisma.$transaction([
     prisma.message.upsert({
       where: { creatorId_fanvueMessageId: { creatorId: enrollment.creatorId, fanvueMessageId: sent.messageUuid } },
@@ -355,8 +370,10 @@ async function executePpv(enrollment: LoadedEnrollment, step: NonNullable<StepRe
     prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { ...schedule, lastRunAt: now, lastResult: { stepId: step.id, fanvueMessageId: sent.messageUuid, priceMinor: metadata.priceMinor } } }),
     prisma.automationLog.create({ data: { creatorId: enrollment.creatorId, fanId: enrollment.fanId, enrollmentId: enrollment.id, executionId, eventType: "WORKFLOW_PPV_SENT", explanation: `${step.name}: PPV ${step.messageTemplate ? `con plantilla ${step.messageTemplate.name}` : "manual"} de $${(metadata.priceMinor / 100).toFixed(2)} enviado a ${enrollment.fan.displayName || enrollment.fan.username || "fan"}.`, metadata: { templateId: step.messageTemplate?.id ?? null, fanvueMessageId: sent.messageUuid, priceMinor: metadata.priceMinor } } }),
   ]);
-  if (reservation.reservationId) await markWorkflowSendSucceeded(reservation.reservationId, now);
   return { outcome: "PPV_SENT", nextStep: next?.name ?? null, shouldContinue: schedule.status === "ACTIVE" };
+  } catch {
+    throw new ConfirmedSendPersistenceError(sent.messageUuid);
+  }
 }
 
 async function executeWorkflowChange(enrollment: LoadedEnrollment, step: NonNullable<StepRecord>, executionId: string, now: Date) {
@@ -415,26 +432,43 @@ function scheduleWait(step: { config: Prisma.JsonValue }, now: Date) {
 }
 
 async function prepareWorkflowSend(enrollment: LoadedEnrollment, step: NonNullable<StepRecord>, executionId: string, now: Date) {
-  if (!enrollment.workflow.sendLimitsEnabled) return { allowed: true as const, reservationId: "" };
-  const reservation = await reserveWorkflowSend({
+  let reservationId = "";
+  if (enrollment.workflow.sendLimitsEnabled) {
+    const reservation = await reserveWorkflowSend({
+      creatorId: enrollment.creatorId,
+      workflowId: enrollment.workflowId,
+      fanId: enrollment.fanId,
+      enrollmentId: enrollment.id,
+      stepId: step.id,
+      maxPerHour: enrollment.workflow.maxMessagesPerHour,
+      maxPerDay: enrollment.workflow.maxMessagesPerDay,
+      minFanIntervalMinutes: enrollment.workflow.minMinutesBetweenFanMessages,
+      now,
+    });
+    if (!reservation.allowed) return deferWorkflowSend(enrollment, step, executionId, reservation.reasonCode, reservation.nextRunAt, now);
+    reservationId = reservation.reservationId;
+  }
+  const budget = await reserveAutomatedSendBudget({
     creatorId: enrollment.creatorId,
-    workflowId: enrollment.workflowId,
     fanId: enrollment.fanId,
-    enrollmentId: enrollment.id,
-    stepId: step.id,
-    maxPerHour: enrollment.workflow.maxMessagesPerHour,
-    maxPerDay: enrollment.workflow.maxMessagesPerDay,
-    minFanIntervalMinutes: enrollment.workflow.minMinutesBetweenFanMessages,
+    limits: mandatoryAutomatedSendLimits(enrollment.workflow.creator.settings),
     now,
   });
-  if (reservation.allowed) return reservation;
-  const reason = reservation.reasonCode === "HOURLY_SEND_LIMIT" ? "se alcanzó el máximo por hora" : reservation.reasonCode === "DAILY_SEND_LIMIT" ? "se alcanzó el máximo de 24 horas" : "todavía no transcurre el intervalo mínimo para este fan";
+  if (!budget.allowed) {
+    if (reservationId) await markWorkflowSendFailed(reservationId);
+    return deferWorkflowSend(enrollment, step, executionId, budget.reasonCode, budget.nextRunAt, now);
+  }
+  return { allowed: true as const, reservationId };
+}
+
+async function deferWorkflowSend(enrollment: LoadedEnrollment, step: NonNullable<StepRecord>, executionId: string, reasonCode: string, nextRunAt: Date, now: Date) {
+  const reason = reasonCode === "HOURLY_SEND_LIMIT" || reasonCode === "AUTOMATED_HOURLY_LIMIT" ? "se alcanzó el máximo por hora" : reasonCode === "DAILY_SEND_LIMIT" || reasonCode === "AUTOMATED_DAILY_LIMIT" ? "se alcanzó el máximo de 24 horas" : "todavía no transcurre el intervalo mínimo para este fan";
   await prisma.$transaction([
-    prisma.automationExecution.update({ where: { id: executionId }, data: { status: "SKIPPED", decision: "WAIT", reasonCode: reservation.reasonCode, reason, finishedAt: now, nextRetryAt: reservation.nextRunAt } }),
-    prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { status: "WAITING", nextRunAt: reservation.nextRunAt, lastResult: { reasonCode: reservation.reasonCode, nextRunAt: reservation.nextRunAt.toISOString() } } }),
-    prisma.automationLog.create({ data: { creatorId: enrollment.creatorId, fanId: enrollment.fanId, enrollmentId: enrollment.id, executionId, eventType: "WORKFLOW_SEND_LIMIT_DEFERRED", reasonCode: reservation.reasonCode, explanation: `${step.name}: ${reason}; se intentará nuevamente el ${reservation.nextRunAt.toLocaleString("es-MX")}.`, metadata: { nextRunAt: reservation.nextRunAt.toISOString(), workflowId: enrollment.workflowId } } }),
+    prisma.automationExecution.update({ where: { id: executionId }, data: { status: "SKIPPED", decision: "WAIT", reasonCode, reason, finishedAt: now, nextRetryAt: nextRunAt } }),
+    prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { status: "WAITING", nextRunAt, lastResult: { reasonCode, nextRunAt: nextRunAt.toISOString() } } }),
+    prisma.automationLog.create({ data: { creatorId: enrollment.creatorId, fanId: enrollment.fanId, enrollmentId: enrollment.id, executionId, eventType: "WORKFLOW_SEND_LIMIT_DEFERRED", reasonCode, explanation: `${step.name}: ${reason}; se intentará nuevamente el ${nextRunAt.toLocaleString("es-MX")}.`, metadata: { nextRunAt: nextRunAt.toISOString(), workflowId: enrollment.workflowId } } }),
   ]);
-  return { allowed: false as const, result: { outcome: reservation.reasonCode, nextStep: step.name, shouldContinue: false } };
+  return { allowed: false as const, result: { outcome: reasonCode, nextStep: step.name, shouldContinue: false } };
 }
 
 function jsonRecord(value: Prisma.JsonValue | null): Record<string, unknown> {
@@ -444,9 +478,7 @@ function jsonRecord(value: Prisma.JsonValue | null): Record<string, unknown> {
 }
 
 function nextStep(steps: { id: string; position: number; name: string; type: string; config: Prisma.JsonValue }[], step: { position: number; config: Prisma.JsonValue }) {
-  const targetKey = jsonRecord(step.config).nextTargetKey;
-  if (typeof targetKey === "string") return steps.find((candidate) => jsonRecord(candidate.config).stepKey === targetKey);
-  return steps.find((candidate) => candidate.position === step.position + 1);
+  return nextWorkflowStep(steps, step);
 }
 
 function readTemplateMetadata(value: Prisma.JsonValue | null) {
@@ -476,9 +508,9 @@ function loadEnrollment(creatorId: string, enrollmentId: string) {
   return prisma.workflowEnrollment.findFirst({
     where: { id: enrollmentId, creatorId },
     include: {
-      fan: { select: { fanvueUserId: true, displayName: true, username: true, isFollower: true, isSubscriber: true, isFreeTrialSubscriber: true, isAutoRenewingSubscriber: true, isNonRenewingSubscriber: true, isExpiredSubscriber: true, isCreatorAccount: true, isMuted: true, isOnline: true, isTopSpender: true, totalSpentMinor: true, automationPaused: true, doNotMessage: true, intimateContentOptIn: true, _count: { select: { purchases: { where: { reversedAt: null, amountMinor: { gt: 0 } } } } } } },
+      fan: { select: { fanvueUserId: true, displayName: true, username: true, isFollower: true, isSubscriber: true, isFreeTrialSubscriber: true, isAutoRenewingSubscriber: true, isNonRenewingSubscriber: true, isExpiredSubscriber: true, isCreatorAccount: true, isMuted: true, isOnline: true, isTopSpender: true, totalSpentMinor: true, automationPaused: true, doNotMessage: true, intimateContentOptIn: true, intimateContentOptInSource: true, _count: { select: { purchases: { where: { reversedAt: null, amountMinor: { gt: 0 } } } } } } },
       currentStep: { include: { messageTemplate: true } },
-      workflow: { include: { creator: { select: { settings: { select: { maximumRetries: true, minimumDelaySeconds: true } } } }, steps: { orderBy: { position: "asc" }, select: { id: true, position: true, name: true, type: true, config: true } } } },
+      workflow: { include: { creator: { select: { settings: { select: { maximumRetries: true, minimumDelaySeconds: true, sendLimitsEnabled: true, maxMessagesPerHour: true, maxMessagesPerDay: true, minMinutesBetweenFanMessages: true } } } }, steps: { orderBy: { position: "asc" }, select: { id: true, position: true, name: true, type: true, config: true } } } },
     },
   });
 }

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { mandatorySendCeilings } from "@/domain/messages/mandatory-send-limits";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 
 const settingsSchema = z.object({
@@ -9,9 +10,9 @@ const settingsSchema = z.object({
   sendingWindowStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   sendingWindowEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   sendingWindowDays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
-  sendLimitsEnabled: z.boolean(),
-  maxMessagesPerHour: z.number().int().min(1).max(1_000),
-  maxMessagesPerDay: z.number().int().min(1).max(10_000),
+  sendLimitsEnabled: z.literal(true),
+  maxMessagesPerHour: z.number().int().min(1).max(mandatorySendCeilings.perHour),
+  maxMessagesPerDay: z.number().int().min(1).max(mandatorySendCeilings.perDay),
   minMinutesBetweenFanMessages: z.number().int().min(0).max(43_200),
   minimumDelaySeconds: z.number().int().min(1).max(86_400),
   maximumRetries: z.number().int().min(1).max(10),

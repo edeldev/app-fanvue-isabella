@@ -177,6 +177,14 @@ export default async function MessagesPage({ searchParams }: Props) {
         select: { id: true, text: true, scheduledAt: true, priceMinor: true, media: true },
       })
     : [];
+  const deliveryReviews = creatorId && selected
+    ? await prisma.scheduledMessage.findMany({
+        where: { creatorId, fanId: selected.fan.id, status: "NEEDS_REVIEW" },
+        orderBy: { updatedAt: "desc" },
+        take: 5,
+        select: { id: true, text: true, scheduledAt: true },
+      })
+    : [];
   let messages: Array<{
     uuid: string;
     text: string | null;
@@ -542,6 +550,7 @@ export default async function MessagesPage({ searchParams }: Props) {
                     }
                     username={selected.fan.username || ""}
                     doNotMessage={selected.fan.doNotMessage}
+                    deliveryReviews={deliveryReviews.map((message) => ({ id: message.id, text: message.text, scheduledAt: message.scheduledAt.toISOString() }))}
                     scheduledMessages={scheduledMessages.map((message) => ({
                       id: message.id,
                       text: message.text,

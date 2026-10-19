@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FanvueAuthenticationError, FanvueError } from "@/lib/fanvue/errors";
-import { workflowRetryDecision } from "./retry-policy";
+import { ConfirmedSendPersistenceError, workflowRetryDecision, workflowSendRetryDecision } from "./retry-policy";
 
 describe("workflowRetryDecision", () => {
   it("retries temporary failures with increasing delays", () => {
@@ -20,5 +20,18 @@ describe("workflowRetryDecision", () => {
 
   it("does not retry an ambiguous successful response", () => {
     expect(workflowRetryDecision(new FanvueError("invalid response", 502, "FANVUE_INVALID_RESPONSE"), 1)).toMatchObject({ retryable: false, reasonCode: "FANVUE_AMBIGUOUS_SEND_RESPONSE" });
+  });
+});
+
+describe("workflowSendRetryDecision", () => {
+  it("never repeats a message Fanvue already confirmed", () => {
+    expect(workflowSendRetryDecision(new ConfirmedSendPersistenceError("message-1"), 1)).toEqual({ retryable: false, reasonCode: "FANVUE_SEND_CONFIRMED_PERSISTENCE_FAILED", delaySeconds: null });
+  });
+  it("retries only confirmed rate limits and respects Retry-After", () => {
+    expect(workflowSendRetryDecision(new FanvueError("limited", 429, "FANVUE_RATE_LIMIT", 420), 1)).toMatchObject({ retryable: true, reasonCode: "FANVUE_RATE_LIMIT", delaySeconds: 420 });
+  });
+
+  it.each([new TypeError("connection lost"), new SyntaxError("invalid JSON response"), new FanvueError("timeout", 408, "FANVUE_API_ERROR"), new FanvueError("unavailable", 503, "FANVUE_API_ERROR"), new FanvueError("invalid response", 502, "FANVUE_INVALID_RESPONSE")])("stops ambiguous sends for manual review", (error) => {
+    expect(workflowSendRetryDecision(error, 1)).toEqual({ retryable: false, reasonCode: "FANVUE_AMBIGUOUS_SEND_RESPONSE", delaySeconds: null });
   });
 });

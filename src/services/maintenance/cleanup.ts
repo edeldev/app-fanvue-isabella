@@ -34,7 +34,8 @@ export async function runScheduledCleanup(now = new Date()) {
           createdAt: { lt: notificationCutoff },
         },
       }),
-      prisma.webhookEvent.deleteMany({ where: { processedAt: { not: null, lt: webhookCutoff } } }),
+      // Failed deliveries may contain personal data too; they must not live forever.
+      prisma.webhookEvent.deleteMany({ where: { receivedAt: { lt: webhookCutoff } } }),
       prisma.automationLog.deleteMany({
         where: {
           occurredAt: { lt: operationalCutoff },

@@ -198,10 +198,12 @@ export default async function WorkflowsPage({ searchParams }: { searchParams: Pr
     sendWindowStartMinute: timeToMinute(settingsRecord?.sendingWindowStart ?? "09:00"),
     sendWindowEndMinute: timeToMinute(settingsRecord?.sendingWindowEnd ?? "21:00"),
     sendWindowDays: Array.isArray(settingsRecord?.sendingWindowDays) ? settingsRecord.sendingWindowDays.filter((value): value is number => typeof value === "number") : [0, 1, 2, 3, 4, 5, 6],
-    sendLimitsEnabled: settingsRecord?.sendLimitsEnabled ?? false,
+    // New workflows start with limits even when the global opt-in is off.
+    // Existing published workflows keep their saved configuration.
+    sendLimitsEnabled: true,
     maxMessagesPerHour: settingsRecord?.maxMessagesPerHour ?? 30,
     maxMessagesPerDay: settingsRecord?.maxMessagesPerDay ?? 200,
-    minMinutesBetweenFanMessages: settingsRecord?.minMinutesBetweenFanMessages ?? 60,
+    minMinutesBetweenFanMessages: settingsRecord?.sendLimitsEnabled ? settingsRecord.minMinutesBetweenFanMessages : 0,
   };
 
   const fans = fanRecords.map((fan) => ({

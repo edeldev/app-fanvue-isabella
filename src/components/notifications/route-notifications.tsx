@@ -54,9 +54,11 @@ const messageErrors: Record<string, string> = {
     "Selecciona una vista gratuita y al menos un archivo bloqueado.",
   invalid_recipient: "Este contacto no puede recibir mensajes actualmente.",
   invalid_template: "La plantilla seleccionada ya no está disponible.",
-  send_failed: "Fanvue no pudo enviar el mensaje. Inténtalo nuevamente.",
+  send_failed: "Fanvue rechazó el mensaje o no pudo prepararse. Revisa el contenido antes de intentarlo nuevamente.",
+  send_review: "No se pudo confirmar si Fanvue recibió el mensaje. Revisa la conversación antes de intentar enviarlo otra vez.",
+  send_pending: "Este envío ya está en proceso. Espera a que termine antes de intentarlo de nuevo.",
   do_not_message: "Este fan está marcado como ‘No contactar’. Retira la preferencia desde Fan Lifecycle para enviarle mensajes.",
-  explicit_opt_in_required: "Este fan no está suscrito ni tiene consentimiento explícito registrado para recibir PPV. Registra el opt-in desde Fan Lifecycle.",
+  explicit_opt_in_required: "Este fan no está suscrito ni tiene consentimiento explícito registrado para recibir archivos multimedia o PPV. Registra el opt-in desde Fan Lifecycle.",
   invalid_schedule: "Elige una fecha futura válida para programar el mensaje.",
 };
 const templateErrors: Record<string, string> = {

@@ -2,8 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { executeEnrollmentUntilBlocked } from "@/services/workflows/execute-enrollment";
 import type { SchedulerRunResult } from "./scheduler";
 import { resumeEnrollmentAfterFanSilence } from "@/services/workflows/manage-enrollment";
+import { reconcileInterruptedWorkflowSends } from "@/services/workflows/reconcile-interrupted-sends";
 
 export async function runDueWorkflows(creatorId: string, now = new Date()): Promise<SchedulerRunResult> {
+  await reconcileInterruptedWorkflowSends(now, creatorId);
   const due = await prisma.workflowEnrollment.findMany({
     where: {
       creatorId,
@@ -43,6 +45,7 @@ export async function runDueWorkflows(creatorId: string, now = new Date()): Prom
 }
 
 export async function runDueWorkflowsForAllCreators(now = new Date()) {
+  await reconcileInterruptedWorkflowSends(now);
   const dueCreators = await prisma.workflowEnrollment.findMany({
     where: {
       status: { in: ["ACTIVE", "WAITING", "PAUSED"] },

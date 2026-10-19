@@ -109,7 +109,7 @@ export default async function AutomationPage() {
                   <div className="flex flex-col justify-between gap-1 sm:flex-row"><p className="text-xs text-zinc-300">{failure.enrollment.workflow.name} · {failure.step.name}</p><span className="text-[10px] text-zinc-600"><LocalDateTime value={failure.updatedAt} /></span></div>
                   <p className="mt-1 text-[11px] text-zinc-500">{failure.fan.displayName || failure.fan.username || "Fan sin nombre"}{failure.reasonCode ? ` · ${failure.reasonCode}` : ""}</p>
                   {failure.reason ? <p className="mt-2 text-[11px] text-red-300/70">{failure.reason}</p> : null}
-                  <FailureRecoveryActions enrollmentId={failure.enrollment.id} workflowName={failure.enrollment.workflow.name} stepName={failure.step.name} />
+                  <FailureRecoveryActions enrollmentId={failure.enrollment.id} workflowName={failure.enrollment.workflow.name} stepName={failure.step.name} sendStatusUncertain={failure.reasonCode === "FANVUE_AMBIGUOUS_SEND_RESPONSE"} sendConfirmed={failure.reasonCode === "FANVUE_SEND_CONFIRMED_PERSISTENCE_FAILED"} />
                 </div>)}</div> : <div className="mt-5 flex items-center gap-2 text-sm text-emerald-300/70"><CheckCircle2 className="size-4" /> No hay ejecuciones fallidas.</div>}
               </article>
             </section>
