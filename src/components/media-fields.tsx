@@ -40,18 +40,21 @@ export function MediaFields({
   initialPreviewUuid = null,
   onValueChange,
   priceEnabled = true,
+  allowSfwAttestation = false,
 }: {
   initialMedia?: AttachedMedia[];
   initialPriceMinor?: number | null;
   initialPreviewUuid?: string | null;
   onValueChange?: (value: { media: AttachedMedia[]; priceMinor: number | null; previewUuid: string | null }) => void;
   priceEnabled?: boolean;
+  allowSfwAttestation?: boolean;
 }) {
   const [media, setMedia] = useState<AttachedMedia[]>(initialMedia);
   const [price, setPrice] = useState(
     initialPriceMinor ? (initialPriceMinor / 100).toFixed(2) : "",
   );
   const [previewUuid, setPreviewUuid] = useState(initialPreviewUuid ?? "");
+  const [sfwAttestation, setSfwAttestation] = useState({ signature: "", attested: false });
   const [uploading, setUploading] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -65,6 +68,8 @@ export function MediaFields({
   const missingLockedMedia = Boolean(
     price && previewUuid && media.every((item) => item.uuid === previewUuid),
   );
+  const mediaSignature = media.map((item) => item.uuid).join("|");
+  const sfwAttested = sfwAttestation.signature === mediaSignature && sfwAttestation.attested;
 
   useEffect(() => {
     const urls = objectUrls.current;
@@ -191,6 +196,7 @@ export function MediaFields({
         )}
       />
       <input type="hidden" name="previewUuid" value={previewUuid} />
+      {allowSfwAttestation ? <input type="hidden" name="sfwAttested" value={!price && sfwAttested ? "yes" : ""} /> : null}
       <div><p className="text-xs font-medium text-zinc-400">Contenido multimedia <span className="font-normal text-zinc-700">(opcional)</span></p><p className="mt-1 text-[10px] leading-4 text-zinc-600">Sube archivos nuevos o reutiliza fotos y videos que ya existen en Fanvue.</p></div><div className="flex flex-wrap items-center gap-2">
         <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-zinc-300 hover:bg-white/10">
           <ImagePlus className="size-4" />
@@ -298,6 +304,7 @@ export function MediaFields({
           </p>
         </div>
       ) : null}
+      {allowSfwAttestation && media.length > 0 && !price ? <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-400/15 bg-emerald-400/[.035] p-3 text-xs leading-5 text-zinc-300"><input type="checkbox" checked={sfwAttested} onChange={(event) => setSfwAttestation({ signature: mediaSignature, attested: event.target.checked })} className="mt-1 accent-emerald-400" /><span><span className="block font-medium text-emerald-200">Contenido gratuito apto para todo público</span><span className="mt-0.5 block text-zinc-500">Confirmo que todos los archivos de este envío son SFW: sin desnudos, contenido íntimo ni poses sexuales. Una foto de comida, cabello o rostro puede enviarse a seguidores sin consentimiento de contenido íntimo.</span></span></label> : null}
       {vaultOpen ? <VaultMediaPicker selectedUuids={media.map((item) => item.uuid)} remaining={10 - media.length} onClose={() => setVaultOpen(false)} onAdd={(incoming) => { setMedia((current) => [...current, ...incoming].slice(0, 10)); setVaultOpen(false); enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo agregado" : "archivos agregados"} desde la bóveda.`, { variant: "success" }); }} /> : null}
       {libraryOpen ? <ContentLibraryPicker selectedUuids={media.map((item) => item.uuid)} remaining={10 - media.length} onClose={() => setLibraryOpen(false)} onAdd={(incoming, suggestedPriceMinor) => { setMedia((current) => [...new Map([...current, ...incoming].map((item) => [item.uuid, item])).values()].slice(0, 10)); if (!price && suggestedPriceMinor) setPrice((suggestedPriceMinor / 100).toFixed(2)); setLibraryOpen(false); enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo agregado" : "archivos agregados"} desde Content Library.`, { variant: "success" }); }} /> : null}
     </div>

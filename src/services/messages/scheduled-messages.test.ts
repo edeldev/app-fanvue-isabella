@@ -96,6 +96,20 @@ describe("runDueScheduledMessages", () => {
     expect(mocks.fanvueRequest).not.toHaveBeenCalled();
   });
 
+  it("keeps the SFW classification for a scheduled free message", async () => {
+    mocks.findUnique.mockResolvedValue({ ...item, media: [{ uuid: "media-1", name: "Comida", mediaType: "image", sfwAttested: true }] });
+    mocks.fanvueRequest.mockRejectedValue(new Error("network disconnected"));
+    await runDueScheduledMessages(now);
+    expect(mocks.assertSendRecipient).toHaveBeenCalledWith(item.creatorId, item.fanId, 1, false, "SFW");
+  });
+
+  it("never treats paid media as SFW, even with a stale attestation", async () => {
+    mocks.findUnique.mockResolvedValue({ ...item, priceMinor: 500, media: [{ uuid: "media-1", name: "Foto", mediaType: "image", sfwAttested: true }] });
+    const result = await runDueScheduledMessages(now);
+    expect(result.blocked).toBe(1);
+    expect(mocks.fanvueRequest).not.toHaveBeenCalled();
+  });
+
   it("keeps an ambiguous Fanvue result out of the automatic retry queue", async () => {
     mocks.fanvueRequest.mockRejectedValue(new Error("network disconnected"));
     const result = await runDueScheduledMessages(now);

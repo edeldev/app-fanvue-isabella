@@ -48,7 +48,9 @@ const syncNotices: Record<string, Notice> = {
 const messageErrors: Record<string, string> = {
   rate_limited:
     "Has realizado demasiados envíos. Espera un momento e inténtalo nuevamente.",
-  invalid_message: "El mensaje está vacío o contiene datos inválidos.",
+  invalid_message: "No pudimos validar este envío. Recarga la conversación e inténtalo otra vez.",
+  empty_message: "Escribe un mensaje o adjunta al menos un archivo antes de enviarlo.",
+  invalid_media: "No pudimos validar los archivos adjuntos. Vuelve a agregarlos e inténtalo otra vez.",
   invalid_price: "El PPV necesita archivos y un precio mínimo de $3.00.",
   invalid_ppv_preview:
     "Selecciona una vista gratuita y al menos un archivo bloqueado.",
@@ -58,7 +60,9 @@ const messageErrors: Record<string, string> = {
   send_review: "No se pudo confirmar si Fanvue recibió el mensaje. Revisa la conversación antes de intentar enviarlo otra vez.",
   send_pending: "Este envío ya está en proceso. Espera a que termine antes de intentarlo de nuevo.",
   do_not_message: "Este fan está marcado como ‘No contactar’. Retira la preferencia desde Fan Lifecycle para enviarle mensajes.",
-  explicit_opt_in_required: "Este fan no está suscrito ni tiene consentimiento explícito registrado para recibir archivos multimedia o PPV. Registra el opt-in desde Fan Lifecycle.",
+  explicit_opt_in_required: "Este contenido requiere suscripción activa o consentimiento registrado. Revisa el fan en Fan Lifecycle.",
+  ppv_requires_subscription_or_consent: "PPV no enviado: este fan no tiene suscripción activa ni consentimiento para recibir contenido íntimo. No se realizó ningún cobro.",
+  media_requires_sfw_or_consent: "Archivos no enviados: confirma que son SFW o registra consentimiento para contenido íntimo en Fan Lifecycle.",
   invalid_schedule: "Elige una fecha futura válida para programar el mensaje.",
 };
 const templateErrors: Record<string, string> = {
@@ -91,7 +95,8 @@ export function RouteNotifications() {
   useEffect(() => {
     const serialized = searchParams.toString();
     const key = `${pathname}?${serialized}`;
-    if (!serialized || handled.current === key) return;
+    if (!serialized) { handled.current = ""; return; }
+    if (handled.current === key) return;
     const notices: Notice[] = [];
     const fanvue = searchParams.get("fanvue");
     const sync = searchParams.get("sync");

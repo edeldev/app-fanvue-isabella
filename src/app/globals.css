@@ -53,22 +53,6 @@ select:disabled { cursor: not-allowed; }
   box-shadow: none;
 }
 
-.app-snackbar {
-  min-width: min(360px, calc(100vw - 2rem)) !important;
-  border-radius: 1rem !important;
-  border: 1px solid rgb(255 255 255 / 0.1) !important;
-  background: rgb(23 25 32 / 0.97) !important;
-  color: #f4f4f5 !important;
-  box-shadow: 0 24px 60px rgb(0 0 0 / 0.45) !important;
-  backdrop-filter: blur(16px);
-  font-size: 0.875rem !important;
-  line-height: 1.4 !important;
-}
-.app-snackbar.notistack-MuiContent-success { border-color: rgb(52 211 153 / 0.25) !important; }
-.app-snackbar.notistack-MuiContent-error { border-color: rgb(248 113 113 / 0.25) !important; }
-.app-snackbar.notistack-MuiContent-warning { border-color: rgb(251 191 36 / 0.25) !important; }
-.app-snackbar.notistack-MuiContent-info { border-color: rgb(56 189 248 / 0.25) !important; }
-
 @keyframes message-send-check {
   0% { opacity: 0; transform: scale(0.55); }
   65% { opacity: 1; transform: scale(1.16); }

@@ -10,7 +10,9 @@ describe("sendEligibilityFailure", () => {
 
   it("requires current consent for media and PPV", () => {
     expect(sendEligibilityFailure(fan, 1, false)).toBe("EXPLICIT_CONTENT_OPT_IN_REQUIRED");
+    expect(sendEligibilityFailure(fan, 1, false, "SFW")).toBeNull();
     expect(sendEligibilityFailure(fan, 1, true)).toBe("EXPLICIT_CONTENT_OPT_IN_REQUIRED");
+    expect(sendEligibilityFailure(fan, 1, true, "SFW")).toBe("EXPLICIT_CONTENT_OPT_IN_REQUIRED");
     expect(sendEligibilityFailure({ ...fan, intimateContentOptIn: true }, 1, true)).toBe("EXPLICIT_CONTENT_OPT_IN_REQUIRED");
     expect(sendEligibilityFailure({ ...fan, intimateContentOptIn: true, intimateContentOptInSource: "fanvue-message:msg-1" }, 1, true)).toBeNull();
   });

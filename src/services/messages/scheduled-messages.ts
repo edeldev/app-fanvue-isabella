@@ -10,7 +10,7 @@ import { reserveAutomatedSendBudget } from "@/services/messages/automated-send-b
 import { mandatoryAutomatedSendLimits } from "@/domain/messages/mandatory-send-limits";
 import { assertSendRecipient, SendRecipientIneligibleError } from "@/services/messages/assert-send-recipient";
 
-type ScheduledMedia = { uuid: string; name: string; mediaType: "image" | "video" };
+type ScheduledMedia = { uuid: string; name: string; mediaType: "image" | "video"; sfwAttested: boolean };
 
 function readMedia(value: Prisma.JsonValue | null): ScheduledMedia[] {
   if (!Array.isArray(value)) return [];
@@ -18,7 +18,7 @@ function readMedia(value: Prisma.JsonValue | null): ScheduledMedia[] {
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
     const record = item as Record<string, unknown>;
     return typeof record.uuid === "string" && typeof record.name === "string" && (record.mediaType === "image" || record.mediaType === "video")
-      ? [{ uuid: record.uuid, name: record.name, mediaType: record.mediaType }]
+      ? [{ uuid: record.uuid, name: record.name, mediaType: record.mediaType, sfwAttested: record.sfwAttested === true }]
       : [];
   });
 }
@@ -58,7 +58,9 @@ export async function runDueScheduledMessages(now = new Date()) {
       result.blocked += 1;
       continue;
     }
-    if ((item.priceMinor !== null && !canReceivePaidOrIntimateContent(item.fan)) || !canReceiveMessageMedia(item.fan, readMedia(item.media).length)) {
+    const scheduledMedia = readMedia(item.media);
+    const mediaSafety = item.priceMinor === null && scheduledMedia.length > 0 && scheduledMedia.every((entry) => entry.sfwAttested) ? "SFW" : "UNREVIEWED";
+    if ((item.priceMinor !== null && !canReceivePaidOrIntimateContent(item.fan)) || !canReceiveMessageMedia(item.fan, scheduledMedia.length, mediaSafety)) {
       await prisma.scheduledMessage.update({ where: { id: item.id }, data: { status: "BLOCKED", lastError: "EXPLICIT_CONTENT_OPT_IN_REQUIRED" } });
       result.blocked += 1;
       continue;
@@ -70,10 +72,10 @@ export async function runDueScheduledMessages(now = new Date()) {
       continue;
     }
     try {
-      const media = readMedia(item.media);
+      const media = scheduledMedia;
       const lockedMedia = item.mediaPreviewUuid ? media.filter((entry) => entry.uuid !== item.mediaPreviewUuid) : media;
       const token = await getValidFanvueAccessToken(item.creatorId);
-      await assertSendRecipient(item.creatorId, item.fanId, media.length, item.priceMinor !== null);
+      await assertSendRecipient(item.creatorId, item.fanId, media.length, item.priceMinor !== null, mediaSafety);
       const sent = await fanvueRequest(`/v1/chats/${item.fan.fanvueUserId}/message`, token, sentMessageSchema, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

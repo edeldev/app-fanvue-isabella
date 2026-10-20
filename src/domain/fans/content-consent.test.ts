@@ -17,6 +17,7 @@ describe("canReceivePaidOrIntimateContent", () => {
     const follower = { isSubscriber: false, isFreeTrialSubscriber: false, intimateContentOptIn: false };
     expect(canReceiveMessageMedia(follower, 0)).toBe(true);
     expect(canReceiveMessageMedia(follower, 1)).toBe(false);
+    expect(canReceiveMessageMedia(follower, 1, "SFW")).toBe(true);
     expect(canReceiveMessageMedia({ ...follower, intimateContentOptIn: true, intimateContentOptInSource: "fanvue-message:msg-1" }, 1)).toBe(true);
     expect(canReceiveMessageMedia({ ...follower, isFreeTrialSubscriber: true }, 1)).toBe(true);
   });
