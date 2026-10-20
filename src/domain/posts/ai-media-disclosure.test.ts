@@ -18,5 +18,6 @@ describe("preparePostText", () => {
   it("uses a confirmed bio disclosure without repeating the caption disclosure", () => {
     expect(preparePostText("Hola", "ai_generated", true, true)).toBe("Hola");
     expect(preparePostText("", "ai_generated", true, true)).toBe("");
+    expect(preparePostText("Hola", undefined, true, true)).toBe("Hola");
   });
 });

@@ -34,11 +34,12 @@ const PAGE_SIZE = 6;
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 type StatusFilter = "ALL" | WorkflowView["status"];
 
-export function WorkflowManager({ workflows, templates, defaults, analytics, initialQuery = "", openCreator = false }: {
+export function WorkflowManager({ workflows, templates, defaults, analytics, profileAiLabelConfirmed = false, initialQuery = "", openCreator = false }: {
   workflows: WorkflowView[];
   templates: TemplateOption[];
   defaults: WorkflowDefaultsView;
   analytics: WorkflowAnalyticsView[];
+  profileAiLabelConfirmed?: boolean;
   initialQuery?: string;
   openCreator?: boolean;
 }) {
@@ -87,7 +88,7 @@ export function WorkflowManager({ workflows, templates, defaults, analytics, ini
   if (editor !== undefined) {
     return <section>
       <button type="button" onClick={() => setEditor(undefined)} className="mb-4 inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-zinc-400 hover:bg-white/5 hover:text-white"><ChevronLeft className="size-4" />Volver a mis workflows</button>
-      <WorkflowEditor key={editor?.id ?? "new"} value={editor} defaults={defaults} templates={templates} publishedWorkflows={workflows.filter((workflow) => workflow.status === "PUBLISHED" && workflow.isPrimary)} busy={busy} onClose={() => setEditor(undefined)} onSave={save} />
+      <WorkflowEditor key={editor?.id ?? "new"} value={editor} defaults={defaults} templates={templates} publishedWorkflows={workflows.filter((workflow) => workflow.status === "PUBLISHED" && workflow.isPrimary)} profileAiLabelConfirmed={profileAiLabelConfirmed} busy={busy} onClose={() => setEditor(undefined)} onSave={save} />
     </section>;
   }
 

@@ -8,11 +8,13 @@ import {
   Copy,
   Download,
   GripVertical,
+  Film,
   ImageIcon,
   Images,
   LoaderCircle,
   PackageOpen,
   Plus,
+  Search,
   Trash2,
   Upload,
   X,
@@ -52,6 +54,13 @@ const types = [
   "BUNDLE",
   "CUSTOM",
 ];
+
+function packCardPreview(pack: Pack) {
+  const featured = pack.assets.find((asset) => asset.id === pack.coverContentId);
+  const ordered = featured ? [featured, ...pack.assets.filter((asset) => asset.id !== featured.id)] : pack.assets;
+  const visibleCount = ordered.length > 4 ? 3 : ordered.length;
+  return { visible: ordered.slice(0, visibleCount), remaining: ordered.length - visibleCount };
+}
 
 export function PackManager({ embedded = false }: { embedded?: boolean }) {
   const [data, setData] = useState<Data | null>(null);
@@ -174,7 +183,9 @@ export function PackManager({ embedded = false }: { embedded?: boolean }) {
         </div>
       ) : data?.packs.length ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {data.packs.map((pack) => (
+          {data.packs.map((pack) => {
+            const preview = packCardPreview(pack);
+            return (
             <article
               key={pack.id}
               className="group overflow-hidden rounded-2xl border border-white/8 bg-[#15171d] transition hover:-translate-y-0.5 hover:border-violet-400/25"
@@ -184,12 +195,16 @@ export function PackManager({ embedded = false }: { embedded?: boolean }) {
                 onClick={() => setEditing(pack)}
                 className="relative block aspect-[16/9] w-full cursor-pointer overflow-hidden bg-gradient-to-br from-violet-950/50 to-black/30 text-left"
               >
-                {pack.coverUrl ? (
-                  <img
-                    src={pack.coverUrl}
-                    alt={`Portada de ${pack.name}`}
-                    className="size-full object-cover transition duration-300 group-hover:scale-[1.03]"
-                  />
+                {preview.visible.length ? (
+                  <span className={`grid size-full gap-1 p-1 ${pack.assets.length >= 4 ? "grid-cols-2 grid-rows-2" : pack.assets.length === 3 ? "grid-cols-3" : pack.assets.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
+                    {preview.visible.map((asset) => (
+                      <span key={asset.id} className="relative min-h-0 overflow-hidden rounded-lg bg-black/35">
+                        <PackAssetPreview asset={asset} compact />
+                        {asset.type === "video" ? <span className="pointer-events-none absolute bottom-2 right-2 rounded-md bg-black/75 p-1 text-white"><Film className="size-3.5" /></span> : null}
+                      </span>
+                    ))}
+                    {preview.remaining > 0 ? <span className="grid min-h-0 place-items-center rounded-lg border border-white/10 bg-gradient-to-br from-violet-400/15 to-black/70 text-lg font-semibold text-white">+{preview.remaining}</span> : null}
+                  </span>
                 ) : (
                   <span className="absolute inset-0 grid place-items-center">
                     <PackageOpen className="size-10 text-violet-400/35" />
@@ -247,7 +262,7 @@ export function PackManager({ embedded = false }: { embedded?: boolean }) {
                 </div>
               </div>
             </article>
-          ))}
+          ); })}
         </div>
       ) : (
         <div className="grid min-h-80 place-items-center rounded-2xl border border-dashed border-white/10 text-zinc-500">
@@ -361,6 +376,7 @@ function PackEditor({
   const [ordered, setOrdered] = useState(pack.assets.map((asset) => asset.id));
   const [cover, setCover] = useState(pack.coverContentId ?? ordered[0] ?? "");
   const [dragged, setDragged] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState<
     "all" | "photos" | "videos" | null
   >(null);
@@ -386,7 +402,10 @@ function PackEditor({
   };
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
+    setSaving(true);
     const form = new FormData(event.currentTarget);
+    try {
     const response = await fetch(`/api/content-packs/${pack.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -404,12 +423,14 @@ function PackEditor({
       }),
     });
     const body = await response.json();
-    if (!response.ok)
-      return enqueueSnackbar(body.error || "No se pudo guardar.", {
-        variant: "error",
-      });
+    if (!response.ok) throw new Error(body.error || "No se pudo guardar.");
     enqueueSnackbar("Pack actualizado.", { variant: "success" });
     await onSaved();
+    } catch (error) {
+      enqueueSnackbar(error instanceof Error ? error.message : "No se pudo guardar.", { variant: "error" });
+    } finally {
+      setSaving(false);
+    }
   }
   async function download(mode: "all" | "photos" | "videos") {
     if (!ordered.length || downloading) return;
@@ -434,12 +455,16 @@ function PackEditor({
   }
 
   return (
-    <div className="fixed inset-0 z-[130] grid place-items-center bg-black/75 p-3">
+    <div className="fixed inset-0 z-[130] grid place-items-center bg-black/80 p-2 backdrop-blur-sm sm:p-5" role="dialog" aria-modal="true" aria-label={`Editar ${pack.name}`}>
       <form
         onSubmit={save}
-        className="max-h-[94vh] w-full max-w-5xl overflow-y-auto rounded-3xl border border-white/10 bg-[#15171d] p-5"
+        className="flex max-h-[94dvh] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[#15171d] shadow-2xl shadow-black/70"
       >
-        <Header title={pack.name} onClose={onClose} />
+        <div className="shrink-0 border-b border-white/8 bg-[#191b23] px-5 py-4 sm:px-7">
+          <div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-violet-300">Content Library / Packs</p><h2 className="mt-1 truncate text-xl font-semibold tracking-tight text-white">{pack.name}</h2><p className="mt-1 text-xs text-zinc-500">Organiza el contenido, elige la portada y guarda los cambios.</p></div><button type="button" onClick={onClose} aria-label="Cerrar editor" className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-xl border border-white/10 text-zinc-400 transition hover:bg-white/5 hover:text-white"><X className="size-4" /></button></div>
+          <div className="mt-4 flex flex-wrap gap-2 text-[11px]"><span className="rounded-full border border-violet-400/20 bg-violet-400/8 px-3 py-1 text-violet-200">{ordered.length} archivos en el Pack</span><span className="rounded-full border border-white/10 px-3 py-1 text-zinc-400">{statusLabel(pack.status)}</span></div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-1 sm:px-7">
         <Fields pack={pack} categories={categories} />
         <section className="mt-5 rounded-2xl border border-violet-400/15 bg-violet-400/[.04] p-4">
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
@@ -479,10 +504,12 @@ function PackEditor({
             </div> : <p className="text-xs text-zinc-500">Descarga no disponible hasta confirmar su alcance con Fanvue.</p>}
           </div>
         </section>
-        <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_300px]">
-          <div className="space-y-2">
+        <div className="mt-6 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <section className="min-w-0 rounded-2xl border border-white/8 bg-black/10 p-3 sm:p-4">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-2 px-1"><div><h3 className="text-sm font-semibold text-white">Archivos del Pack</h3><p className="mt-1 text-[11px] text-zinc-500">Arrastra o usa las flechas para ordenar. La portada se mostrará en la biblioteca.</p></div><span className="rounded-full bg-white/5 px-2.5 py-1 text-[10px] text-zinc-400">{ordered.length} en total</span></div>
+            <div className="max-h-[45dvh] space-y-2 overflow-y-auto pr-1">
             {ordered.map((id, index) => {
-              const asset = assets.find((item) => item.id === id);
+              const asset = assets.find((item) => item.id === id) ?? pack.assets.find((item) => item.id === id);
               if (!asset) return null;
               return (
                 <div
@@ -491,52 +518,31 @@ function PackEditor({
                   onDragStart={() => setDragged(id)}
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={() => drop(id)}
-                  className="flex items-center gap-2 rounded-xl border border-white/8 p-3"
+                  className={`group flex min-w-0 items-center gap-2 rounded-xl border px-2 py-2 transition-colors sm:gap-3 ${cover === id ? "border-violet-400/30 bg-violet-400/[.055]" : "border-white/8 bg-[#1b1d25] hover:border-white/15"}`}
                 >
-                  <GripVertical className="size-4 cursor-grab text-zinc-600" />
-                  <Link
-                    href={`/content-library?asset=${encodeURIComponent(id)}`}
-                    className="min-w-0 flex-1 truncate text-xs hover:text-violet-300"
-                    title="Abrir detalle del contenido"
-                  >
-                    {index + 1}. {asset.name}
-                  </Link>
+                  <GripVertical className="size-4 shrink-0 cursor-grab text-zinc-600 group-hover:text-zinc-400" />
+                  <span className="block size-14 shrink-0 overflow-hidden rounded-lg border border-white/8"><PackAssetPreview asset={asset} compact /></span>
+                  <div className="min-w-0 flex-1"><Link href={`/content-library?asset=${encodeURIComponent(id)}`} className="block truncate text-xs font-medium text-zinc-200 hover:text-violet-300" title="Abrir detalle del contenido">{asset.name}</Link><p className="mt-1 text-[10px] text-zinc-500">{String(index + 1).padStart(2, "0")} · {asset.type === "video" ? "Video" : "Foto"}</p></div>
                   <button
                     type="button"
                     onClick={() => setCover(id)}
-                    className={`cursor-pointer rounded px-2 py-1 text-[10px] ${cover === id ? "bg-violet-500" : "text-zinc-600"}`}
+                    aria-label={`${cover === id ? "Portada actual" : "Elegir como portada"}: ${asset.name}`}
+                    aria-pressed={cover === id}
+                    className={`shrink-0 cursor-pointer rounded-lg border px-2 py-1.5 text-[10px] font-medium transition ${cover === id ? "border-violet-400/30 bg-violet-500 text-white" : "border-white/10 text-zinc-400 hover:border-violet-400/30 hover:text-violet-300"}`}
                   >
-                    Portada
+                    {cover === id ? "Portada" : "Elegir portada"}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => move(id, -1)}
-                    disabled={!index}
-                  >
-                    <ArrowUp className="size-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => move(id, 1)}
-                    disabled={index === ordered.length - 1}
-                  >
-                    <ArrowDown className="size-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setOrdered((current) =>
-                        current.filter((value) => value !== id),
-                      )
-                    }
-                  >
-                    <Trash2 className="size-4 text-red-300" />
-                  </button>
+                  <div className="flex items-center gap-0.5 border-l border-white/10 pl-1 sm:pl-2"><button type="button" onClick={() => move(id, -1)} disabled={!index} aria-label={`Subir ${asset.name}`} className="grid size-7 cursor-pointer place-items-center rounded-lg text-zinc-400 hover:bg-white/8 hover:text-white disabled:cursor-not-allowed disabled:opacity-25 sm:size-8"><ArrowUp className="size-4" /></button><button type="button" onClick={() => move(id, 1)} disabled={index === ordered.length - 1} aria-label={`Bajar ${asset.name}`} className="grid size-7 cursor-pointer place-items-center rounded-lg text-zinc-400 hover:bg-white/8 hover:text-white disabled:cursor-not-allowed disabled:opacity-25 sm:size-8"><ArrowDown className="size-4" /></button></div>
+                  <button type="button" onClick={() => { setOrdered((current) => current.filter((value) => value !== id)); if (cover === id) setCover(ordered.find((value) => value !== id) ?? ""); }} aria-label={`Quitar ${asset.name} del Pack`} title="Quitar del Pack (no borra el archivo)" className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg text-zinc-500 transition hover:bg-red-400/10 hover:text-red-300"><Trash2 className="size-4" /></button>
                 </div>
               );
             })}
-          </div>
+            {!ordered.length ? <div className="grid min-h-40 place-items-center rounded-xl border border-dashed border-white/10 text-center text-xs text-zinc-500">El Pack aún no tiene archivos. Agrégalos desde el panel de la derecha.</div> : null}
+            </div>
+          </section>
+          <aside className="min-w-0 rounded-2xl border border-white/8 bg-[#1b1d25] p-3 sm:p-4">
           <AssetPicker
+            purpose="add"
             assets={assets.filter((asset) => !ordered.includes(asset.id))}
             selected={[]}
             onChange={(ids) =>
@@ -550,18 +556,18 @@ function PackEditor({
               setOrdered((current) => [...new Set([...current, ...imported.map((item) => item.id)])]);
             }}
           />
+          </aside>
         </div>
-        <div className="mt-5 flex justify-between">
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-white/8 bg-[#191b23] px-5 py-4 sm:px-7">
           <button
             type="button"
             onClick={onDelete}
-            className="cursor-pointer rounded-xl border border-red-400/20 px-4 py-2 text-red-300"
+            className="cursor-pointer rounded-xl border border-red-400/15 px-3 py-2 text-xs font-medium text-red-300 transition hover:bg-red-400/8"
           >
             Eliminar Pack
           </button>
-          <button className="cursor-pointer rounded-xl bg-violet-500 px-5 py-2 font-semibold">
-            Guardar cambios
-          </button>
+          <div className="flex items-center gap-2"><button type="button" onClick={onClose} className="cursor-pointer rounded-xl border border-white/10 px-4 py-2.5 text-xs font-medium text-zinc-300 hover:bg-white/5">Cancelar</button><button disabled={saving} className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-violet-500 px-5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-violet-950/30 transition hover:bg-violet-400 disabled:cursor-wait disabled:opacity-60">{saving ? <LoaderCircle className="size-4 animate-spin" /> : null}{saving ? "Guardando…" : "Guardar cambios"}</button></div>
         </div>
       </form>
     </div>
@@ -608,15 +614,19 @@ function AssetPicker({
   selected,
   onChange,
   onImport,
+  purpose = "create",
 }: {
   assets: Asset[];
   selected: string[];
   onChange: (ids: string[]) => void;
   onImport: (media: AttachedMedia[]) => Promise<void>;
+  purpose?: "create" | "add";
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [query, setQuery] = useState("");
+  const visibleAssets = assets.filter((asset) => asset.name.toLocaleLowerCase("es").includes(query.trim().toLocaleLowerCase("es")));
 
   async function addMedia(media: AttachedMedia[]) {
     if (!media.length || importing) return;
@@ -653,10 +663,12 @@ function AssetPicker({
   }
 
   return (
-    <div className="mt-5">
-      <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs text-zinc-300">Contenido del Pack</p><p className="mt-0.5 text-[10px] text-zinc-600">{selected.length} seleccionado · los archivos se guardan una sola vez y este Pack los referencia.</p></div><div className="flex gap-2"><input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm" multiple className="hidden" onChange={(event) => void uploadFromMac(event)} /><button type="button" disabled={importing} onClick={() => inputRef.current?.click()} className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-2 text-[10px] text-zinc-300 hover:border-violet-400/30 disabled:opacity-40">{importing ? <LoaderCircle className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}Desde Mac</button><button type="button" disabled={importing} onClick={() => setVaultOpen(true)} className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-2 text-[10px] text-zinc-300 hover:border-violet-400/30 disabled:opacity-40"><Images className="size-3.5" />Desde Fanvue</button></div></div>
-      <div className="mt-2 grid max-h-64 grid-cols-2 gap-2 overflow-y-auto">
-        {assets.map((asset) => {
+    <div className={purpose === "create" ? "mt-5" : ""}>
+      <div><div className="flex items-center justify-between gap-2"><h3 className="text-sm font-semibold text-white">{purpose === "add" ? "Agregar archivos" : "Seleccionar archivos"}</h3><span className="rounded-full bg-white/5 px-2.5 py-1 text-[10px] text-zinc-400">{assets.length} disponibles</span></div><p className="mt-1 text-[11px] leading-4 text-zinc-500">{purpose === "add" ? "Elige contenido de la biblioteca o importa más archivos." : `${selected.length} seleccionados para este Pack.`}</p></div>
+      <div className="mt-4 grid grid-cols-2 gap-2"><input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm" multiple className="hidden" onChange={(event) => void uploadFromMac(event)} /><button type="button" disabled={importing} onClick={() => inputRef.current?.click()} className="flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[.025] px-2 text-[11px] font-medium text-zinc-300 transition hover:border-violet-400/30 hover:bg-violet-400/5 disabled:opacity-40">{importing ? <LoaderCircle className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}Desde Mac</button><button type="button" disabled={importing} onClick={() => setVaultOpen(true)} className="flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[.025] px-2 text-[11px] font-medium text-zinc-300 transition hover:border-violet-400/30 hover:bg-violet-400/5 disabled:opacity-40"><Images className="size-3.5" />Desde Fanvue</button></div>
+      <label className="mt-4 flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 focus-within:border-violet-400/40"><Search className="size-4 text-zinc-600" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar archivo…" aria-label="Buscar archivo para el Pack" className="min-w-0 flex-1 bg-transparent text-xs text-zinc-200 outline-none placeholder:text-zinc-600" /></label>
+      <div className="mt-3 grid max-h-[42dvh] grid-cols-2 gap-2 overflow-y-auto pr-1">
+        {visibleAssets.map((asset) => {
           const chosen = selected.includes(asset.id);
           return (
             <button
@@ -669,22 +681,25 @@ function AssetPicker({
                     : [...selected, asset.id],
                 )
               }
-              className={`overflow-hidden rounded-xl border text-left text-xs ${chosen ? "border-violet-400 bg-violet-400/10 ring-2 ring-violet-400/10" : "border-white/8 text-zinc-500 hover:border-white/20"}`}
+              aria-label={`${chosen ? "Quitar" : "Agregar"} ${asset.name}`}
+              aria-pressed={chosen}
+              className={`group overflow-hidden rounded-xl border text-left text-xs transition ${chosen ? "border-violet-400 bg-violet-400/10 ring-2 ring-violet-400/10" : "border-white/8 bg-black/10 text-zinc-500 hover:border-violet-400/30 hover:bg-violet-400/5"}`}
             >
               <PackAssetPreview asset={asset} />
-              <span className="block truncate px-2.5 py-2">{asset.name}</span>
+              <span className="block truncate px-2.5 py-2 text-[10px] text-zinc-400" title={asset.name}>{asset.name}</span>
             </button>
           );
         })}
+        {!visibleAssets.length ? <p className="col-span-2 rounded-xl border border-dashed border-white/10 px-3 py-8 text-center text-xs text-zinc-500">{query ? "No hay archivos con ese nombre." : "No hay más archivos. Importa desde Mac o Fanvue."}</p> : null}
       </div>
       {vaultOpen ? <VaultMediaPicker selectedUuids={assets.flatMap((asset) => asset.fanvueContentId ? [asset.fanvueContentId] : [])} remaining={10} onClose={() => setVaultOpen(false)} onAdd={(media) => void addMedia(media)} /> : null}
     </div>
   );
 }
 
-function PackAssetPreview({ asset }: { asset: Asset }) {
+function PackAssetPreview({ asset, compact = false }: { asset: Asset; compact?: boolean }) {
   const source = asset.thumbnailUrl ?? asset.url;
   const [state, setState] = useState<{ source?: string; status: "loading" | "loaded" | "error" }>({ source, status: source ? "loading" : "error" });
   const status = state.source === source ? state.status : source ? "loading" : "error";
-  return <span className="relative block aspect-video overflow-hidden bg-black/30">{status === "loading" ? <span className="absolute inset-0 grid place-items-center text-zinc-600"><LoaderCircle className="size-5 animate-spin" /></span> : null}{status === "error" ? <span className="absolute inset-0 grid place-items-center text-zinc-700"><ImageIcon className="size-5" /></span> : null}{source ? asset.type === "video" && !asset.thumbnailUrl ? <video src={source} muted preload="metadata" onLoadedData={() => setState({ source, status: "loaded" })} onError={() => setState({ source, status: "error" })} className={`size-full object-cover ${status === "loaded" ? "opacity-100" : "opacity-0"}`} /> : <img src={source} alt={asset.name} loading="lazy" onLoad={() => setState({ source, status: "loaded" })} onError={() => setState({ source, status: "error" })} className={`size-full object-cover ${status === "loaded" ? "opacity-100" : "opacity-0"}`} /> : null}</span>;
+  return <span className={`relative block overflow-hidden bg-black/30 ${compact ? "size-full" : "aspect-video size-full"}`}>{status === "loading" ? <span className="absolute inset-0 grid place-items-center text-zinc-600"><LoaderCircle className="size-5 animate-spin" /></span> : null}{status === "error" ? <span className="absolute inset-0 grid place-items-center text-zinc-700">{asset.type === "video" ? <Film className="size-5" /> : <ImageIcon className="size-5" />}</span> : null}{source ? asset.type === "video" && !asset.thumbnailUrl ? <video src={source} muted preload="metadata" onLoadedData={() => setState({ source, status: "loaded" })} onError={() => setState({ source, status: "error" })} className={`size-full object-cover ${status === "loaded" ? "opacity-100" : "opacity-0"}`} /> : <img src={source} alt={asset.name} loading="lazy" onLoad={() => setState({ source, status: "loaded" })} onError={() => setState({ source, status: "error" })} className={`size-full object-cover ${status === "loaded" ? "opacity-100" : "opacity-0"}`} /> : null}</span>;
 }

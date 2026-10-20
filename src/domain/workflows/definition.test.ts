@@ -58,7 +58,7 @@ describe("workflowDefinitionInputSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("requires the origin of manual workflow media", () => {
+  it("allows unclassified manual media at schema level for accounts with a confirmed AI profile label", () => {
     const result = workflowDefinitionInputSchema.safeParse({
       name: "Contenido sin clasificar", priority: 1, isPrimary: true,
       steps: [
@@ -66,8 +66,7 @@ describe("workflowDefinitionInputSchema", () => {
         { name: "Finalizar", type: "END", config: { stepKey: "end" } },
       ],
     });
-    expect(result.success).toBe(false);
-    if (!result.success) expect(result.error.issues.some((issue) => issue.path.includes("manualMediaOrigin"))).toBe(true);
+    expect(result.success).toBe(true);
   });
 
   it("requires at least one enabled day when a send window is provided", () => {

@@ -139,7 +139,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Revisa el texto, precio, audiencia y archivos." }, { status: 400 });
   }
   const { text, mediaUuids, mediaPreviewUuid, price, audience, publishAt, mediaOrigin } = input.data;
-  const disclosureSettings = mediaUuids.length && mediaOrigin === "ai_generated"
+  const disclosureSettings = mediaUuids.length
     ? await prisma.settings.findUnique({ where: { creatorId }, select: { aiProfileLabelConfirmed: true } })
     : null;
   let publishText: string;

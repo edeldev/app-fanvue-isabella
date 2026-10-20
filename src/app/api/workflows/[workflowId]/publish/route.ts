@@ -25,12 +25,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ wo
     select: { id: true, metadata: true },
   });
   if (templates.length !== templateIds.length) return Response.json({ error: "Una plantilla del flujo ya no está disponible." }, { status: 400 });
+  const profileAiLabelConfirmed = (await prisma.settings.findUnique({ where: { creatorId }, select: { aiProfileLabelConfirmed: true } }))?.aiProfileLabelConfirmed === true;
   const metadataById = new Map(templates.map((template) => [template.id, template.metadata]));
   for (const step of workflow.steps) {
     if (!step.messageTemplateId) continue;
     const rawMetadata = metadataById.get(step.messageTemplateId);
     const metadata = rawMetadata && typeof rawMetadata === "object" && !Array.isArray(rawMetadata) ? rawMetadata as Record<string, unknown> : {};
-    if (Array.isArray(metadata.media) && metadata.media.length > 0 && metadata.mediaOrigin !== "original" && metadata.mediaOrigin !== "ai_generated") {
+    if (!profileAiLabelConfirmed && Array.isArray(metadata.media) && metadata.media.length > 0 && metadata.mediaOrigin !== "original" && metadata.mediaOrigin !== "ai_generated") {
       return Response.json({ error: `La plantilla del paso “${step.name}” tiene archivos sin clasificar. Edítala antes de publicar.` }, { status: 400 });
     }
   }

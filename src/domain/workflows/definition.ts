@@ -33,9 +33,6 @@ export const workflowStepInputSchema = z.object({
     if (!step.messageTemplateId) {
       const text = typeof step.config.manualText === "string" ? step.config.manualText.trim() : "";
       const media = Array.isArray(step.config.manualMedia) ? step.config.manualMedia.filter((item) => typeof item === "object" && item !== null && !Array.isArray(item) && typeof (item as Record<string, unknown>).uuid === "string") : [];
-      if (media.length > 0 && !["original", "ai_generated"].includes(String(step.config.manualMediaOrigin))) {
-        context.addIssue({ code: "custom", path: ["config", "manualMediaOrigin"], message: "Clasifica las fotos o videos como originales o generados con IA." });
-      }
       if (step.type === "SEND_MESSAGE" && !text && media.length === 0) {
         context.addIssue({ code: "custom", path: ["config", "manualText"], message: "Escribe un mensaje o agrega contenido multimedia." });
       }

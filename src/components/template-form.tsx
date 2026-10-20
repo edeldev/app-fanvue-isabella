@@ -19,7 +19,9 @@ const categories = {
 
 export function TemplateForm({
   template,
+  profileAiLabelConfirmed = false,
 }: {
+  profileAiLabelConfirmed?: boolean;
   template?: {
     id: string;
     name: string;
@@ -131,7 +133,8 @@ export function TemplateForm({
         allowSfwAttestation
         onValueChange={(value) => setMediaCount(value.media.length)}
       />
-      {mediaCount > 0 ? <fieldset className="rounded-xl border border-white/8 bg-black/10 p-3">
+      {profileAiLabelConfirmed && mediaOrigin ? <input type="hidden" name="mediaOrigin" value={mediaOrigin} /> : null}
+      {mediaCount > 0 && !profileAiLabelConfirmed ? <fieldset className="rounded-xl border border-white/8 bg-black/10 p-3">
         <legend className="px-1 text-xs font-medium text-zinc-300">Origen de las fotos o videos</legend>
         <p className="mb-3 text-[11px] leading-5 text-zinc-500">Confirma si alguno de los archivos fue generado o alterado de forma importante con IA.</p>
         <label className="flex items-center gap-2 text-xs text-zinc-300"><input required type="radio" name="mediaOrigin" value="original" checked={mediaOrigin === "original"} onChange={() => setMediaOrigin("original")} />No, son originales</label>

@@ -21,7 +21,15 @@ export async function GET() {
     prisma.contentCategory.findMany({ where: { creatorId }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.content.findMany({ where: { creatorId, isArchived: false }, orderBy: { createdAt: "desc" }, take: 500, select: { id: true, name: true, type: true, fanvueContentId: true } }),
   ]);
-  const mediaUuids = [...new Set(assets.flatMap((asset) => asset.fanvueContentId ? [asset.fanvueContentId] : []))];
+  // A Pack can contain archived or older media outside the 500-item picker page.
+  // Resolve its own members too, otherwise its cover and previews disappear.
+  const mediaUuids = [...new Set([
+    ...assets.flatMap((asset) => asset.fanvueContentId ? [asset.fanvueContentId] : []),
+    ...packs.flatMap((pack) => [
+      ...(pack.cover?.fanvueContentId ? [pack.cover.fanvueContentId] : []),
+      ...pack.assets.flatMap(({ content }) => content.fanvueContentId ? [content.fanvueContentId] : []),
+    ]),
+  ])];
   const mediaUrls = new Map<string, { url?: string; thumbnailUrl?: string }>();
   if (mediaUuids.length) {
     try {

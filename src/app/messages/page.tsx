@@ -78,6 +78,7 @@ export default async function MessagesPage({ searchParams }: Props) {
   const creatorId = readCreatorSession(
     (await cookies()).get(CREATOR_SESSION_COOKIE)?.value,
   );
+  const profileAiLabelConfirmed = creatorId ? (await prisma.settings.findUnique({ where: { creatorId }, select: { aiProfileLabelConfirmed: true } }))?.aiProfileLabelConfirmed === true : false;
   const query = params.q?.trim() ?? "";
   const activeFilter = conversationFilters.some((item) => item.value === params.filter)
     ? params.filter!
@@ -543,6 +544,7 @@ export default async function MessagesPage({ searchParams }: Props) {
                     )}
                   </MessageHistory>
                   <MessageComposer
+                    profileAiLabelConfirmed={profileAiLabelConfirmed}
                     key={selected.fan.id}
                     fanUuid={selected.fan.fanvueUserId}
                     fanName={

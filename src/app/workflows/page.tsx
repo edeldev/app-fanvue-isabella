@@ -340,7 +340,7 @@ export default async function WorkflowsPage({ searchParams }: { searchParams: Pr
           </div>
           {creatorId ? (
             <>
-              <WorkflowManager workflows={workflows} templates={templateOptions} defaults={workflowDefaults} analytics={workflowAnalytics} initialQuery={initialQuery} openCreator={openCreator} />
+              <WorkflowManager workflows={workflows} templates={templateOptions} defaults={workflowDefaults} analytics={workflowAnalytics} profileAiLabelConfirmed={settingsRecord?.aiProfileLabelConfirmed === true} initialQuery={initialQuery} openCreator={openCreator} />
               <WorkflowAnalyticsPanel analytics={workflowAnalytics} stepAnalytics={stepAnalytics} />
               <EnrollmentPanel
                 fans={fans}

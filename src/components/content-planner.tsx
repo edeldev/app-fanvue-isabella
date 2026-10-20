@@ -187,7 +187,7 @@ export function ContentPlanner({ profileAiLabelConfirmed = false }: { profileAiL
       });
       return;
     }
-    if (mediaValue.media.length > 0 && !mediaOrigin) {
+    if (mediaValue.media.length > 0 && !mediaOrigin && !profileAiLabelConfirmed) {
       enqueueSnackbar("Confirma si las fotos o videos fueron generados o alterados con IA.", { variant: "warning" });
       return;
     }
@@ -264,7 +264,7 @@ export function ContentPlanner({ profileAiLabelConfirmed = false }: { profileAiL
         <div className="space-y-6 p-5 sm:p-6">
           <MediaFields key={mediaKey} onValueChange={setMediaValue} />
 
-          {mediaValue.media.length > 0 ? (
+          {mediaValue.media.length > 0 && !profileAiLabelConfirmed ? (
             <fieldset className="rounded-2xl border border-white/10 bg-black/10 p-4">
               <legend className="px-1 text-xs font-medium text-zinc-200">Origen de las fotos o videos</legend>
               <p className="mt-1 text-xs leading-5 text-zinc-500">Indica si alguno fue generado o alterado de forma importante con IA. La IA que ayuda a escribir el texto no convierte por sí sola una foto real en contenido generado con IA.</p>

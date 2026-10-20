@@ -16,6 +16,16 @@ async function assertReferencesBelongToCreator(
   creatorId: string,
   input: ReturnType<typeof workflowDefinitionInputSchema.parse>,
 ) {
+  const profileAiLabelConfirmed = (await prisma.settings.findUnique({ where: { creatorId }, select: { aiProfileLabelConfirmed: true } }))?.aiProfileLabelConfirmed === true;
+  if (!profileAiLabelConfirmed) {
+    for (const step of input.steps) {
+      if (step.messageTemplateId || (step.type !== "SEND_MESSAGE" && step.type !== "SEND_PPV")) continue;
+      const media = Array.isArray(step.config.manualMedia) ? step.config.manualMedia : [];
+      if (media.length > 0 && step.config.manualMediaOrigin !== "original" && step.config.manualMediaOrigin !== "ai_generated") {
+        throw new Error("Clasifica las fotos o videos del flujo como originales o generados con IA.");
+      }
+    }
+  }
   const templateIds = [...new Set(input.steps.flatMap((step) => step.messageTemplateId ? [step.messageTemplateId] : []))];
   const targetIds = [...new Set(input.steps.flatMap((step) => typeof step.config.targetWorkflowId === "string" ? [step.config.targetWorkflowId] : []))];
   const [templates, targets] = await Promise.all([
