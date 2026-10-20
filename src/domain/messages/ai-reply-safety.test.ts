@@ -35,4 +35,18 @@ describe("enforceAiIdentityBoundary", () => {
   it("does not mistake a mention of AI for a question about the assistant", () => {
     expect(enforceAiIdentityBoundary(base, "Vi una foto hecha con IA.")).toEqual(base);
   });
+  it("clearly acknowledges the AI-labelled account when directly asked", () => {
+    const result = enforceAiIdentityBoundary(base, "¿Eres una IA o una persona?", true);
+    expect(result.reply).toMatch(/^Sí, esta cuenta usa IA/);
+    expect(result.reply).toContain("etiqueta AI");
+  });
+  it("acknowledges the AI-labelled account in the fan's language", () => {
+    const result = enforceAiIdentityBoundary({ ...base, detectedLanguage: "English" }, "Are you an AI?", true);
+    expect(result.reply).toMatch(/^Yes, this account uses AI/);
+    expect(result.spanishTranslation).toMatch(/^Sí, esta cuenta usa IA/);
+  });
+  it.each(["¿Eres real?", "Are you a real person?", "Você é real?"])("answers a direct reality question for an AI-labelled account: %s", (question) => {
+    const result = enforceAiIdentityBoundary(base, question, true);
+    expect(result.reply).toMatch(/^Sí, esta cuenta usa IA/);
+  });
 });

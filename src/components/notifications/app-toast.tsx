@@ -17,13 +17,13 @@ export const AppToast = forwardRef<HTMLDivElement, CustomContentProps>(function 
   const Icon = style.icon;
 
   return <SnackbarContent ref={ref} role={variant === "error" ? "alert" : "status"} className="!min-w-0 w-[min(430px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-[#1c1e27]/95 p-0 text-zinc-100 shadow-[0_18px_50px_rgba(0,0,0,.38)] backdrop-blur-xl">
-    <div className="flex items-start gap-3.5 px-4 py-3.5">
+    <div className="flex w-full items-start gap-3.5 px-4 py-3.5">
       <span className={`mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl ${style.surface} ${style.tone}`}><Icon className="size-[18px]" strokeWidth={2} /></span>
       <div className="min-w-0 flex-1 pt-0.5">
         <p className="text-[13px] font-semibold tracking-[-0.01em] text-white">{style.title}</p>
         <div className="mt-0.5 break-words text-[12px] leading-[1.55] text-zinc-400">{message}</div>
       </div>
-      <button type="button" aria-label="Cerrar notificación" onClick={() => closeSnackbar(id)} className="-mr-1 -mt-1 grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg text-zinc-600 transition hover:bg-white/[.07] hover:text-zinc-300"><X className="size-4" /></button>
+      <button type="button" aria-label="Cerrar notificación" onClick={() => closeSnackbar(id)} className="ml-auto grid size-8 shrink-0 cursor-pointer place-items-center self-center rounded-lg text-zinc-500 transition hover:bg-white/[.07] hover:text-zinc-200"><X className="size-4" /></button>
     </div>
   </SnackbarContent>;
 });

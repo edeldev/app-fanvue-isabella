@@ -59,9 +59,10 @@ const emptyMedia: MediaValue = {
   previewUuid: null,
 };
 
-export function ContentPlanner() {
+export function ContentPlanner({ profileAiLabelConfirmed = false }: { profileAiLabelConfirmed?: boolean }) {
   const [text, setText] = useState("");
   const [mediaValue, setMediaValue] = useState<MediaValue>(emptyMedia);
+  const [mediaOrigin, setMediaOrigin] = useState<"original" | "ai_generated" | "">("");
   const [audience, setAudience] = useState<Post["audience"]>(
     "followers-and-subscribers",
   );
@@ -186,6 +187,10 @@ export function ContentPlanner() {
       });
       return;
     }
+    if (mediaValue.media.length > 0 && !mediaOrigin) {
+      enqueueSnackbar("Confirma si las fotos o videos fueron generados o alterados con IA.", { variant: "warning" });
+      return;
+    }
     setPublishing(true);
     try {
       const response = await fetch("/api/posts", {
@@ -195,6 +200,7 @@ export function ContentPlanner() {
           text: text.trim(),
           mediaUuids: mediaValue.media.map((item) => item.uuid),
           mediaPreviewUuid: mediaValue.previewUuid,
+          mediaOrigin: mediaValue.media.length ? mediaOrigin : undefined,
           price: mediaValue.priceMinor,
           audience,
           publishAt:
@@ -214,6 +220,7 @@ export function ContentPlanner() {
       );
       setText("");
       setMediaValue(emptyMedia);
+      setMediaOrigin("");
       setVisualSummary("");
       setScheduledAt("");
       setPublishMode("now");
@@ -256,6 +263,18 @@ export function ContentPlanner() {
 
         <div className="space-y-6 p-5 sm:p-6">
           <MediaFields key={mediaKey} onValueChange={setMediaValue} />
+
+          {mediaValue.media.length > 0 ? (
+            <fieldset className="rounded-2xl border border-white/10 bg-black/10 p-4">
+              <legend className="px-1 text-xs font-medium text-zinc-200">Origen de las fotos o videos</legend>
+              <p className="mt-1 text-xs leading-5 text-zinc-500">Indica si alguno fue generado o alterado de forma importante con IA. La IA que ayuda a escribir el texto no convierte por sí sola una foto real en contenido generado con IA.</p>
+              <div className="mt-3 flex flex-wrap gap-4 text-xs text-zinc-300">
+                <label className="flex cursor-pointer items-center gap-2"><input type="radio" name="post-media-origin" checked={mediaOrigin === "original"} onChange={() => setMediaOrigin("original")} />No, son originales</label>
+                <label className="flex cursor-pointer items-center gap-2"><input type="radio" name="post-media-origin" checked={mediaOrigin === "ai_generated"} onChange={() => setMediaOrigin("ai_generated")} />Sí, hay medios generados o alterados con IA</label>
+              </div>
+              {mediaOrigin === "ai_generated" ? <p className="mt-3 rounded-xl border border-violet-400/20 bg-violet-400/5 px-3 py-2 text-xs text-violet-200">{profileAiLabelConfirmed ? "Fanvue muestra la etiqueta AI en tu perfil; no repetiremos el aviso en este post." : "Se añadirá al post: “Contenido visual generado o alterado con IA.”"}</p> : null}
+            </fieldset>
+          ) : null}
 
           <div className="rounded-2xl border border-violet-400/15 bg-violet-400/[.035] p-4">
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">

@@ -51,11 +51,23 @@ describe("workflowDefinitionInputSchema", () => {
     const result = workflowDefinitionInputSchema.safeParse({
       name: "PPV rápido", priority: 1, isPrimary: true,
       steps: [
-        { name: "PPV manual", type: "SEND_PPV", config: { stepKey: "ppv", manualText: "Tengo algo para ti", manualMedia: [{ uuid: "b908a82f-3b73-480b-b5a8-5d8d051c2d6b", name: "Foto", mediaType: "image" }], manualPriceMinor: 500, manualPreviewUuid: null, replyPauseMode: "DISABLED" } },
+        { name: "PPV manual", type: "SEND_PPV", config: { stepKey: "ppv", manualText: "Tengo algo para ti", manualMedia: [{ uuid: "b908a82f-3b73-480b-b5a8-5d8d051c2d6b", name: "Foto", mediaType: "image" }], manualMediaOrigin: "original", manualPriceMinor: 500, manualPreviewUuid: null, replyPauseMode: "DISABLED" } },
         { name: "Finalizar", type: "END", config: { stepKey: "end" } },
       ],
     });
     expect(result.success).toBe(true);
+  });
+
+  it("requires the origin of manual workflow media", () => {
+    const result = workflowDefinitionInputSchema.safeParse({
+      name: "Contenido sin clasificar", priority: 1, isPrimary: true,
+      steps: [
+        { name: "Foto manual", type: "SEND_MESSAGE", config: { stepKey: "photo", manualMedia: [{ uuid: "b908a82f-3b73-480b-b5a8-5d8d051c2d6b", name: "Foto", mediaType: "image" }] } },
+        { name: "Finalizar", type: "END", config: { stepKey: "end" } },
+      ],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues.some((issue) => issue.path.includes("manualMediaOrigin"))).toBe(true);
   });
 
   it("requires at least one enabled day when a send window is provided", () => {

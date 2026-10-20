@@ -51,6 +51,7 @@ const messageErrors: Record<string, string> = {
   invalid_message: "No pudimos validar este envío. Recarga la conversación e inténtalo otra vez.",
   empty_message: "Escribe un mensaje o adjunta al menos un archivo antes de enviarlo.",
   invalid_media: "No pudimos validar los archivos adjuntos. Vuelve a agregarlos e inténtalo otra vez.",
+  media_origin_required: "Indica si los archivos son originales o generados con IA antes de enviarlos.",
   invalid_price: "El PPV necesita archivos y un precio mínimo de $3.00.",
   invalid_ppv_preview:
     "Selecciona una vista gratuita y al menos un archivo bloqueado.",

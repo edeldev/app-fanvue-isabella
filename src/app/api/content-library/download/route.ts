@@ -9,6 +9,9 @@ import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
 export async function GET(request: Request) {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
   if (!creatorId) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  // Fanvue prohibits apps that export paid/subscriber/PPV media off-platform.
+  // Keep this route closed until Fanvue confirms the permitted scope in writing.
+  if (process.env.FANVUE_CREATOR_MEDIA_EXPORT_APPROVED !== "true") return NextResponse.json({ error: "Descarga desactivada hasta confirmar con Fanvue que esta exportación está permitida." }, { status: 403 });
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Contenido inválido" }, { status: 400 });
   const asset = await prisma.content.findFirst({ where: { id, creatorId }, select: { fanvueContentId: true, name: true } });

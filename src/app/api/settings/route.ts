@@ -18,6 +18,7 @@ const settingsSchema = z.object({
   maximumRetries: z.number().int().min(1).max(10),
   debugMode: z.boolean(),
   aiMessagingEnabled: z.boolean(),
+  aiProfileLabelConfirmed: z.boolean(),
 });
 
 export async function PUT(request: Request) {

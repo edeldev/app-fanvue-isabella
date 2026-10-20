@@ -33,13 +33,16 @@ export async function POST(request: Request) {
     if (!data.success) redirect("/templates?error=invalid");
     const media = mediaSchema.safeParse(parseJson(form.get("mediaJson")));
     if (!media.success || (!data.data.text && media.data.length === 0)) redirect("/templates?error=invalid");
+    const mediaOrigin = z.enum(["original", "ai_generated"]).safeParse(form.get("mediaOrigin"));
+    if (media.data.length > 0 && !mediaOrigin.success) redirect("/templates?error=invalid");
     const priceValue = String(form.get("price") || "").trim();
     const priceMinor = priceValue ? Math.round(Number(priceValue) * 100) : null;
     if (priceMinor !== null && (!Number.isInteger(priceMinor) || priceMinor < 300 || media.data.length === 0)) redirect("/templates?error=invalid");
     const previewValue = String(form.get("previewUuid") || "");
     const previewUuid = previewValue && media.data.some(item => item.uuid === previewValue) ? previewValue : null;
     if (priceMinor !== null && !hasLockedPpvMedia(media.data, previewUuid)) redirect("/templates?error=ppv_requires_locked_media");
-    const metadata = { media: media.data, priceMinor, previewUuid };
+    const sfwAttested = priceMinor === null && media.data.length > 0 && form.get("sfwAttested") === "yes";
+    const metadata = { media: media.data, priceMinor, previewUuid, sfwAttested, mediaOrigin: media.data.length ? mediaOrigin.data : null };
     if (action === "create") {
       const template = await prisma.messageTemplate.create({ data: { creatorId, ...data.data, type: media.data.length ? "MEDIA" : "TEXT", status: "ACTIVE", metadata } });
       await syncContentLibraryUsage(creatorId, template.id, media.data);

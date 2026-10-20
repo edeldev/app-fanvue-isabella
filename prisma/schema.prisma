@@ -854,6 +854,7 @@ model Settings {
   maximumRetries               Int            @default(3)
   debugMode                    Boolean        @default(false)
   aiMessagingEnabled           Boolean        @default(true)
+  aiProfileLabelConfirmed      Boolean        @default(false)
   createdAt                    DateTime       @default(now())
   updatedAt                    DateTime       @updatedAt
   creator                      Creator        @relation(fields: [creatorId], references: [id], onDelete: Cascade)

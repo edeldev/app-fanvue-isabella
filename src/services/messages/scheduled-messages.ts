@@ -9,8 +9,9 @@ import { FanvueError } from "@/lib/fanvue/errors";
 import { reserveAutomatedSendBudget } from "@/services/messages/automated-send-budget";
 import { mandatoryAutomatedSendLimits } from "@/domain/messages/mandatory-send-limits";
 import { assertSendRecipient, SendRecipientIneligibleError } from "@/services/messages/assert-send-recipient";
+import { prepareOutboundMediaText } from "@/domain/messages/media-disclosure";
 
-type ScheduledMedia = { uuid: string; name: string; mediaType: "image" | "video"; sfwAttested: boolean };
+type ScheduledMedia = { uuid: string; name: string; mediaType: "image" | "video"; sfwAttested: boolean; mediaOrigin: "original" | "ai_generated" | null };
 
 function readMedia(value: Prisma.JsonValue | null): ScheduledMedia[] {
   if (!Array.isArray(value)) return [];
@@ -18,7 +19,7 @@ function readMedia(value: Prisma.JsonValue | null): ScheduledMedia[] {
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
     const record = item as Record<string, unknown>;
     return typeof record.uuid === "string" && typeof record.name === "string" && (record.mediaType === "image" || record.mediaType === "video")
-      ? [{ uuid: record.uuid, name: record.name, mediaType: record.mediaType, sfwAttested: record.sfwAttested === true }]
+      ? [{ uuid: record.uuid, name: record.name, mediaType: record.mediaType, sfwAttested: record.sfwAttested === true, mediaOrigin: record.mediaOrigin === "original" || record.mediaOrigin === "ai_generated" ? record.mediaOrigin : null }]
       : [];
   });
 }
@@ -50,7 +51,7 @@ export async function runDueScheduledMessages(now = new Date()) {
     result.claimed += 1;
     const item = await prisma.scheduledMessage.findUnique({
       where: { id: candidate.id },
-      include: { fan: true, template: { select: { id: true, status: true } }, creator: { select: { settings: { select: { sendLimitsEnabled: true, maxMessagesPerHour: true, maxMessagesPerDay: true, minMinutesBetweenFanMessages: true } } } } },
+      include: { fan: true, template: { select: { id: true, status: true } }, creator: { select: { settings: { select: { aiProfileLabelConfirmed: true, sendLimitsEnabled: true, maxMessagesPerHour: true, maxMessagesPerDay: true, minMinutesBetweenFanMessages: true } } } } },
     });
     if (!item) continue;
     if (item.fan.doNotMessage || item.fan.isCreatorAccount || (item.template?.status && item.template.status !== "ACTIVE")) {
@@ -59,6 +60,15 @@ export async function runDueScheduledMessages(now = new Date()) {
       continue;
     }
     const scheduledMedia = readMedia(item.media);
+    let sendText: string;
+    try {
+      sendText = prepareOutboundMediaText(item.text ?? "", scheduledMedia[0]?.mediaOrigin, scheduledMedia.length, item.creator.settings?.aiProfileLabelConfirmed === true);
+      if (sendText.length > 5000) throw new Error("MESSAGE_TOO_LONG");
+    } catch (error) {
+      await prisma.scheduledMessage.update({ where: { id: item.id }, data: { status: "BLOCKED", lastError: error instanceof Error && error.message === "MESSAGE_TOO_LONG" ? "MESSAGE_TOO_LONG" : "MEDIA_ORIGIN_REQUIRED" } });
+      result.blocked += 1;
+      continue;
+    }
     const mediaSafety = item.priceMinor === null && scheduledMedia.length > 0 && scheduledMedia.every((entry) => entry.sfwAttested) ? "SFW" : "UNREVIEWED";
     if ((item.priceMinor !== null && !canReceivePaidOrIntimateContent(item.fan)) || !canReceiveMessageMedia(item.fan, scheduledMedia.length, mediaSafety)) {
       await prisma.scheduledMessage.update({ where: { id: item.id }, data: { status: "BLOCKED", lastError: "EXPLICIT_CONTENT_OPT_IN_REQUIRED" } });
@@ -79,7 +89,7 @@ export async function runDueScheduledMessages(now = new Date()) {
       const sent = await fanvueRequest(`/v1/chats/${item.fan.fanvueUserId}/message`, token, sentMessageSchema, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: item.text || null, mediaUuids: lockedMedia.map((entry) => entry.uuid), mediaPreviewUuid: item.mediaPreviewUuid, price: item.priceMinor }),
+        body: JSON.stringify({ text: sendText || null, mediaUuids: lockedMedia.map((entry) => entry.uuid), mediaPreviewUuid: item.mediaPreviewUuid, price: item.priceMinor }),
       });
       const conversation = await prisma.conversation.upsert({
         where: { creatorId_fanId: { creatorId: item.creatorId, fanId: item.fanId } },
@@ -89,8 +99,8 @@ export async function runDueScheduledMessages(now = new Date()) {
       await prisma.$transaction([
         prisma.message.upsert({
           where: { creatorId_fanvueMessageId: { creatorId: item.creatorId, fanvueMessageId: sent.messageUuid } },
-          update: { text: item.text, templateId: item.templateId, status: "SENT", mediaUuids: media.map((entry) => entry.uuid), mediaPreviewUuid: item.mediaPreviewUuid, priceMinor: item.priceMinor },
-          create: { creatorId: item.creatorId, conversationId: conversation.id, fanvueMessageId: sent.messageUuid, templateId: item.templateId, direction: "OUTBOUND", status: "SENT", text: item.text, mediaUuids: media.map((entry) => entry.uuid), mediaPreviewUuid: item.mediaPreviewUuid, priceMinor: item.priceMinor, sentAt: now },
+          update: { text: sendText, templateId: item.templateId, status: "SENT", mediaUuids: media.map((entry) => entry.uuid), mediaPreviewUuid: item.mediaPreviewUuid, priceMinor: item.priceMinor },
+          create: { creatorId: item.creatorId, conversationId: conversation.id, fanvueMessageId: sent.messageUuid, templateId: item.templateId, direction: "OUTBOUND", status: "SENT", text: sendText, mediaUuids: media.map((entry) => entry.uuid), mediaPreviewUuid: item.mediaPreviewUuid, priceMinor: item.priceMinor, sentAt: now },
         }),
         prisma.scheduledMessage.update({ where: { id: item.id }, data: { status: "SENT", sentAt: now, fanvueMessageId: sent.messageUuid, lastError: null } }),
       ]);

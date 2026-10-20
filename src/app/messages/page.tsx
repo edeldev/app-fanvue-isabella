@@ -605,6 +605,8 @@ function readTemplateMetadata(value: unknown) {
     : [];
   return {
     media,
+    mediaOrigin: metadata.mediaOrigin === "original" ? "original" as const : metadata.mediaOrigin === "ai_generated" ? "ai_generated" as const : null,
+    sfwAttested: metadata.sfwAttested === true,
     priceMinor:
       typeof metadata.priceMinor === "number" ? metadata.priceMinor : null,
     previewUuid:

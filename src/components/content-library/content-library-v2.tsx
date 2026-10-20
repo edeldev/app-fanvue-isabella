@@ -1120,13 +1120,19 @@ function AssetPreview({
           <SectionTitle>Dónde se utiliza</SectionTitle>
           <Usage asset={asset} />
           <div className="mt-6 grid grid-cols-2 gap-2">
-            <a
-              href={`/api/content-library/download?id=${encodeURIComponent(asset.id)}`}
-              className="flex items-center justify-center gap-2 rounded-xl border border-white/10 px-3 py-3 text-xs text-zinc-300 hover:bg-white/5"
-            >
-              <Download className="size-4" />
-              Descargar
-            </a>
+            {process.env.NEXT_PUBLIC_FANVUE_CREATOR_MEDIA_EXPORT_APPROVED === "true" ? (
+              <a
+                href={`/api/content-library/download?id=${encodeURIComponent(asset.id)}`}
+                className="flex items-center justify-center gap-2 rounded-xl border border-white/10 px-3 py-3 text-xs text-zinc-300 hover:bg-white/5"
+              >
+                <Download className="size-4" />
+                Descargar
+              </a>
+            ) : (
+              <span className="flex items-center justify-center rounded-xl border border-white/10 px-3 py-3 text-center text-xs text-zinc-500" title="Pendiente de confirmar con Fanvue">
+                Descarga no disponible
+              </span>
+            )}
             <button
               type="button"
               onClick={() => onMutate({ isFavorite: !asset.isFavorite })}
@@ -1423,7 +1429,7 @@ function SelectionBar({
       </div>
       <Action icon={<PackageOpen />} label="Agregar a Pack" onClick={onPack} />
       <Action icon={<ListFilter />} label="Organizar" onClick={onOrganize} />
-      <Action
+      {process.env.NEXT_PUBLIC_FANVUE_CREATOR_MEDIA_EXPORT_APPROVED === "true" ? <Action
         icon={
           downloadProgress !== undefined ? (
             <LoaderCircle className="animate-spin" />
@@ -1439,7 +1445,7 @@ function SelectionBar({
               : "Descargar"
         }
         onClick={onDownload}
-      />
+      /> : null}
       <Action icon={<Heart />} label="Favorito" onClick={onFavorite} />
       <Action icon={<Archive />} label="Archivar" onClick={onArchive} />
       <Action icon={<Trash2 />} label="Eliminar" onClick={onDelete} danger />

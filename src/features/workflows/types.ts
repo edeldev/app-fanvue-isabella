@@ -40,6 +40,7 @@ export interface TemplateOption {
   priceMinor: number | null;
   previewUuid: string | null;
   mediaCount: number;
+  sfwAttested: boolean;
 }
 
 export interface FanOption {

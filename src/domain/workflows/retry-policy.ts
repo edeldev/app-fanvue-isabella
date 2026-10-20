@@ -18,6 +18,9 @@ export class ConfirmedSendPersistenceError extends Error {
 export function workflowRetryDecision(error: unknown, attempt: number, options: { maximumAttempts?: number; minimumDelaySeconds?: number } = {}): WorkflowRetryDecision {
   const maximumAttempts = options.maximumAttempts ?? maximumWorkflowAttempts;
   const minimumDelaySeconds = options.minimumDelaySeconds ?? 60;
+  if (error instanceof Error && error.message === "MEDIA_ORIGIN_REQUIRED") {
+    return { retryable: false, reasonCode: "MEDIA_ORIGIN_REQUIRED", delaySeconds: null };
+  }
   if (error instanceof FanvueAuthenticationError || (error instanceof FanvueError && [401, 403].includes(error.status))) {
     return { retryable: false, reasonCode: "FANVUE_AUTHORIZATION_REQUIRED", delaySeconds: null };
   }

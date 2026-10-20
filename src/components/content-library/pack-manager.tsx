@@ -449,7 +449,7 @@ function PackEditor({
                 Genera un ZIP sin duplicar los archivos originales.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            {process.env.NEXT_PUBLIC_FANVUE_CREATOR_MEDIA_EXPORT_APPROVED === "true" ? <div className="flex flex-wrap gap-2">
               {(
                 [
                   ["all", "Todo"],
@@ -476,7 +476,7 @@ function PackEditor({
                     : label}
                 </button>
               ))}
-            </div>
+            </div> : <p className="text-xs text-zinc-500">Descarga no disponible hasta confirmar su alcance con Fanvue.</p>}
           </div>
         </section>
         <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_300px]">

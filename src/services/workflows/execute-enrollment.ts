@@ -5,6 +5,7 @@ import { fanvueRequest } from "@/lib/fanvue/client";
 import { sentMessageSchema } from "@/lib/fanvue/sync-schemas";
 import { prisma } from "@/lib/prisma";
 import { canReceivePaidOrIntimateContent, canReceiveMessageMedia } from "@/domain/fans/content-consent";
+import { workflowMessageMediaSafety } from "@/domain/workflows/media-safety";
 import { mandatoryAutomatedSendLimits } from "@/domain/messages/mandatory-send-limits";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
 import { extendWorkflowPath } from "@/domain/workflows/transition-path";
@@ -17,6 +18,7 @@ import { silenceWaitDeadline } from "@/domain/workflows/silence-wait";
 import { reserveAutomatedSendBudget } from "@/services/messages/automated-send-budget";
 import { nextWorkflowStep } from "@/domain/workflows/next-step";
 import { assertSendRecipient, SendRecipientIneligibleError } from "@/services/messages/assert-send-recipient";
+import { prepareOutboundMediaText } from "@/domain/messages/media-disclosure";
 
 type LoadedEnrollment = NonNullable<Awaited<ReturnType<typeof loadEnrollment>>>;
 type StepRecord = LoadedEnrollment["currentStep"];
@@ -202,7 +204,7 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
     await prisma.$transaction([
       prisma.automationExecution.update({ where: { id: execution.id }, data: { status: "FAILED", decision: "CANCEL", reasonCode: decision.reasonCode, reason: errorMessage, evidence: error instanceof ConfirmedSendPersistenceError ? { fanvueMessageId: error.fanvueMessageId } : undefined, finishedAt: new Date(), nextRetryAt: null } }),
       prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { status: "FAILED", nextRunAt: null, lastResult: { reasonCode: decision.reasonCode, attempt: execution.attempt, error: errorMessage } } }),
-      prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, executionId: execution.id, eventType: "WORKFLOW_STEP_FAILED", level: "ERROR", reasonCode: decision.reasonCode, explanation: decision.reasonCode === "MAXIMUM_RETRIES_REACHED" ? `${step.name} agotó ${maximumWorkflowAttempts} intentos; el workflow fue detenido.` : `${step.name} encontró un error que no es seguro reintentar; el workflow fue detenido.`, metadata: { error: errorMessage, attempt: execution.attempt } } }),
+        prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, executionId: execution.id, eventType: "WORKFLOW_STEP_FAILED", level: "ERROR", reasonCode: decision.reasonCode, explanation: decision.reasonCode === "MAXIMUM_RETRIES_REACHED" ? `${step.name} agotó ${maximumWorkflowAttempts} intentos; el workflow fue detenido.` : decision.reasonCode === "MEDIA_ORIGIN_REQUIRED" ? `${step.name} se detuvo porque los archivos no están clasificados como originales o generados con IA.` : `${step.name} encontró un error que no es seguro reintentar; el workflow fue detenido.`, metadata: { error: errorMessage, attempt: execution.attempt } } }),
     ]);
     throw error;
   }
@@ -280,9 +282,16 @@ async function executeCondition(enrollment: LoadedEnrollment, step: NonNullable<
 async function executeMessage(enrollment: NonNullable<Awaited<ReturnType<typeof loadEnrollment>>>, step: NonNullable<StepRecord>, executionId: string, now: Date) {
   if (step.messageTemplateId && (!step.messageTemplate || step.messageTemplate.status !== "ACTIVE")) throw new Error("WORKFLOW_TEMPLATE_UNAVAILABLE");
   const metadata = step.messageTemplate ? readTemplateMetadata(step.messageTemplate.metadata) : readManualStepMetadata(step.config);
+  if (step.messageTemplate) {
+    assertPublishedMediaUnchanged(step.config, metadata.mediaUuids);
+    assertPublishedOriginUnchanged(step.config, metadata.mediaOrigin);
+    metadata.mediaOrigin = publishedMediaOrigin(step.config) ?? metadata.mediaOrigin;
+  }
   if (metadata.priceMinor) throw new Error("WORKFLOW_TEMPLATE_REQUIRES_PPV_STEP");
-  if (!canReceiveMessageMedia(enrollment.fan, metadata.mediaUuids.length)) throw new Error("EXPLICIT_CONTENT_OPT_IN_REQUIRED");
-  const text = renderTemplateVariables(step.messageTemplate?.text ?? metadata.text, enrollment.fan);
+  const mediaSafety = workflowMessageMediaSafety({ stepType: step.type, config: step.config, templateMetadata: step.messageTemplate?.metadata, mediaUuids: metadata.mediaUuids });
+  if (!canReceiveMessageMedia(enrollment.fan, metadata.mediaUuids.length, mediaSafety)) throw new Error("EXPLICIT_CONTENT_OPT_IN_REQUIRED");
+  const text = prepareOutboundMediaText(renderTemplateVariables(step.messageTemplate?.text ?? metadata.text, enrollment.fan), metadata.mediaOrigin, metadata.mediaUuids.length, enrollment.workflow.creator.settings?.aiProfileLabelConfirmed === true);
+  if (text.length > 5000) throw new Error("WORKFLOW_MESSAGE_TOO_LONG");
   if (!text && metadata.mediaUuids.length === 0) throw new Error("WORKFLOW_TEMPLATE_EMPTY");
 
   const reservation = await prepareWorkflowSend(enrollment, step, executionId, now);
@@ -291,7 +300,7 @@ async function executeMessage(enrollment: NonNullable<Awaited<ReturnType<typeof 
   const token = await getValidFanvueAccessToken(enrollment.creatorId);
   let sent;
   try {
-    await assertSendRecipient(enrollment.creatorId, enrollment.fanId, metadata.mediaUuids.length, false);
+    await assertSendRecipient(enrollment.creatorId, enrollment.fanId, metadata.mediaUuids.length, false, mediaSafety);
     sent = await fanvueRequest(`/v1/chats/${enrollment.fan.fanvueUserId}/message`, token, sentMessageSchema, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -331,11 +340,17 @@ async function executePpv(enrollment: LoadedEnrollment, step: NonNullable<StepRe
   if (!canReceivePaidOrIntimateContent(enrollment.fan)) throw new Error("EXPLICIT_CONTENT_OPT_IN_REQUIRED");
   if (step.messageTemplateId && (!step.messageTemplate || step.messageTemplate.status !== "ACTIVE")) throw new Error("WORKFLOW_TEMPLATE_UNAVAILABLE");
   const metadata = step.messageTemplate ? readTemplateMetadata(step.messageTemplate.metadata) : readManualStepMetadata(step.config);
+  if (step.messageTemplate) {
+    assertPublishedMediaUnchanged(step.config, metadata.mediaUuids);
+    assertPublishedOriginUnchanged(step.config, metadata.mediaOrigin);
+    metadata.mediaOrigin = publishedMediaOrigin(step.config) ?? metadata.mediaOrigin;
+  }
   if (!metadata.priceMinor || metadata.priceMinor < 300) throw new Error("WORKFLOW_PPV_PRICE_INVALID");
   if (metadata.previewUuid && !metadata.mediaUuids.includes(metadata.previewUuid)) throw new Error("WORKFLOW_PPV_PREVIEW_INVALID");
   const lockedMediaUuids = metadata.mediaUuids.filter((uuid) => uuid !== metadata.previewUuid);
   if (!lockedMediaUuids.length) throw new Error("WORKFLOW_PPV_LOCKED_MEDIA_REQUIRED");
-  const text = renderTemplateVariables(step.messageTemplate?.text ?? metadata.text, enrollment.fan);
+  const text = prepareOutboundMediaText(renderTemplateVariables(step.messageTemplate?.text ?? metadata.text, enrollment.fan), metadata.mediaOrigin, metadata.mediaUuids.length, enrollment.workflow.creator.settings?.aiProfileLabelConfirmed === true);
+  if (text.length > 5000) throw new Error("WORKFLOW_MESSAGE_TOO_LONG");
   const reservation = await prepareWorkflowSend(enrollment, step, executionId, now);
   if (!reservation.allowed) return reservation.result;
   const token = await getValidFanvueAccessToken(enrollment.creatorId);
@@ -482,7 +497,7 @@ function nextStep(steps: { id: string; position: number; name: string; type: str
 }
 
 function readTemplateMetadata(value: Prisma.JsonValue | null) {
-  if (typeof value !== "object" || !value || Array.isArray(value)) return { text: "", mediaUuids: [], priceMinor: null, previewUuid: null };
+  if (typeof value !== "object" || !value || Array.isArray(value)) return { text: "", mediaUuids: [], priceMinor: null, previewUuid: null, mediaOrigin: null };
   const metadata = value as Record<string, unknown>;
   const media = Array.isArray(metadata.media) ? metadata.media : [];
   return {
@@ -490,6 +505,7 @@ function readTemplateMetadata(value: Prisma.JsonValue | null) {
     mediaUuids: media.flatMap((item) => typeof item === "object" && item && "uuid" in item && typeof item.uuid === "string" ? [item.uuid] : []),
     priceMinor: typeof metadata.priceMinor === "number" ? metadata.priceMinor : null,
     previewUuid: typeof metadata.previewUuid === "string" ? metadata.previewUuid : null,
+    mediaOrigin: metadata.mediaOrigin === "original" ? "original" as const : metadata.mediaOrigin === "ai_generated" ? "ai_generated" as const : null,
   };
 }
 
@@ -501,7 +517,26 @@ function readManualStepMetadata(value: Prisma.JsonValue | null) {
     mediaUuids: media.flatMap((item) => typeof item === "object" && item && !Array.isArray(item) && "uuid" in item && typeof item.uuid === "string" ? [item.uuid] : []),
     priceMinor: typeof config.manualPriceMinor === "number" ? config.manualPriceMinor : null,
     previewUuid: typeof config.manualPreviewUuid === "string" ? config.manualPreviewUuid : null,
+    mediaOrigin: config.manualMediaOrigin === "original" ? "original" as const : config.manualMediaOrigin === "ai_generated" ? "ai_generated" as const : null,
   };
+}
+
+function publishedMediaOrigin(value: Prisma.JsonValue | null) {
+  const origin = jsonRecord(value).publishedMediaOrigin;
+  return origin === "original" ? "original" as const : origin === "ai_generated" ? "ai_generated" as const : null;
+}
+
+function assertPublishedMediaUnchanged(value: Prisma.JsonValue | null, currentMediaUuids: string[]) {
+  const snapshot = jsonRecord(value).publishedMediaUuids;
+  if (!Array.isArray(snapshot)) return;
+  if (snapshot.length !== currentMediaUuids.length || snapshot.some((uuid, index) => uuid !== currentMediaUuids[index])) {
+    throw new Error("WORKFLOW_TEMPLATE_MEDIA_CHANGED");
+  }
+}
+
+function assertPublishedOriginUnchanged(value: Prisma.JsonValue | null, currentOrigin: "original" | "ai_generated" | null) {
+  const snapshot = publishedMediaOrigin(value);
+  if (snapshot && snapshot !== currentOrigin) throw new Error("WORKFLOW_TEMPLATE_ORIGIN_CHANGED");
 }
 
 function loadEnrollment(creatorId: string, enrollmentId: string) {
@@ -510,7 +545,7 @@ function loadEnrollment(creatorId: string, enrollmentId: string) {
     include: {
       fan: { select: { fanvueUserId: true, displayName: true, username: true, isFollower: true, isSubscriber: true, isFreeTrialSubscriber: true, isAutoRenewingSubscriber: true, isNonRenewingSubscriber: true, isExpiredSubscriber: true, isCreatorAccount: true, isMuted: true, isOnline: true, isTopSpender: true, totalSpentMinor: true, automationPaused: true, doNotMessage: true, intimateContentOptIn: true, intimateContentOptInSource: true, _count: { select: { purchases: { where: { reversedAt: null, amountMinor: { gt: 0 } } } } } } },
       currentStep: { include: { messageTemplate: true } },
-      workflow: { include: { creator: { select: { settings: { select: { maximumRetries: true, minimumDelaySeconds: true, sendLimitsEnabled: true, maxMessagesPerHour: true, maxMessagesPerDay: true, minMinutesBetweenFanMessages: true } } } }, steps: { orderBy: { position: "asc" }, select: { id: true, position: true, name: true, type: true, config: true } } } },
+      workflow: { include: { creator: { select: { settings: { select: { aiProfileLabelConfirmed: true, maximumRetries: true, minimumDelaySeconds: true, sendLimitsEnabled: true, maxMessagesPerHour: true, maxMessagesPerDay: true, minMinutesBetweenFanMessages: true } } } }, steps: { orderBy: { position: "asc" }, select: { id: true, position: true, name: true, type: true, config: true } } } },
     },
   });
 }

@@ -11,7 +11,8 @@ const object = (value: unknown): Record<string, unknown> => typeof value === "ob
 function templateMetadata(value: unknown) {
   const metadata = object(value);
   const media = Array.isArray(metadata.media) ? metadata.media.flatMap((value) => { const item = object(value); return typeof item.uuid === "string" && typeof item.name === "string" && typeof item.mediaType === "string" ? [{ uuid: item.uuid, name: item.name, mediaType: item.mediaType }] : []; }) : [];
-  return { media, priceMinor: typeof metadata.priceMinor === "number" ? metadata.priceMinor : null, previewUuid: typeof metadata.previewUuid === "string" ? metadata.previewUuid : null };
+  const mediaOrigin: "original" | "ai_generated" | null = metadata.mediaOrigin === "original" || metadata.mediaOrigin === "ai_generated" ? metadata.mediaOrigin : null;
+  return { media, priceMinor: typeof metadata.priceMinor === "number" ? metadata.priceMinor : null, previewUuid: typeof metadata.previewUuid === "string" ? metadata.previewUuid : null, sfwAttested: metadata.sfwAttested === true, mediaOrigin };
 }
 
 export default async function TemplatesPage() {

@@ -14,6 +14,7 @@ const safe = (name: string) => name.replace(/[^a-zA-Z0-9._ -]/g, "_");
 export async function POST(request: Request) {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
   if (!creatorId) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  if (process.env.FANVUE_CREATOR_MEDIA_EXPORT_APPROVED !== "true") return NextResponse.json({ error: "Descarga ZIP desactivada hasta confirmar con Fanvue que esta exportación está permitida." }, { status: 403 });
   const parsed = inputSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Selección inválida" }, { status: 400 });
   const records = await prisma.content.findMany({ where: { creatorId, id: { in: parsed.data.ids }, ...(parsed.data.mode === "photos" ? { type: "image" } : parsed.data.mode === "videos" ? { type: "video" } : {}) }, select: { id: true, fanvueContentId: true, name: true, type: true } });

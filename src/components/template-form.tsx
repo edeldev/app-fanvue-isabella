@@ -28,9 +28,13 @@ export function TemplateForm({
     media: AttachedMedia[];
     priceMinor: number | null;
     previewUuid: string | null;
+    sfwAttested: boolean;
+    mediaOrigin?: "original" | "ai_generated" | null;
   };
 }) {
   const [text, setText] = useState(template?.text ?? "");
+  const [mediaCount, setMediaCount] = useState(template?.media.length ?? 0);
+  const [mediaOrigin, setMediaOrigin] = useState(template?.mediaOrigin ?? "");
   const textarea = useRef<HTMLTextAreaElement>(null);
   function insert(variable: string) {
     const field = textarea.current;
@@ -123,7 +127,16 @@ export function TemplateForm({
         initialMedia={template?.media}
         initialPriceMinor={template?.priceMinor}
         initialPreviewUuid={template?.previewUuid}
+        initialSfwAttested={template?.sfwAttested}
+        allowSfwAttestation
+        onValueChange={(value) => setMediaCount(value.media.length)}
       />
+      {mediaCount > 0 ? <fieldset className="rounded-xl border border-white/8 bg-black/10 p-3">
+        <legend className="px-1 text-xs font-medium text-zinc-300">Origen de las fotos o videos</legend>
+        <p className="mb-3 text-[11px] leading-5 text-zinc-500">Confirma si alguno de los archivos fue generado o alterado de forma importante con IA.</p>
+        <label className="flex items-center gap-2 text-xs text-zinc-300"><input required type="radio" name="mediaOrigin" value="original" checked={mediaOrigin === "original"} onChange={() => setMediaOrigin("original")} />No, son originales</label>
+        <label className="mt-2 flex items-center gap-2 text-xs text-zinc-300"><input required type="radio" name="mediaOrigin" value="ai_generated" checked={mediaOrigin === "ai_generated"} onChange={() => setMediaOrigin("ai_generated")} />Sí, hay archivos generados o alterados con IA</label>
+      </fieldset> : null}
       <TemplateSubmitButton editing={Boolean(template)} />
     </form>
   );

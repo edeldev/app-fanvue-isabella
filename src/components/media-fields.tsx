@@ -41,20 +41,22 @@ export function MediaFields({
   onValueChange,
   priceEnabled = true,
   allowSfwAttestation = false,
+  initialSfwAttested = false,
 }: {
   initialMedia?: AttachedMedia[];
   initialPriceMinor?: number | null;
   initialPreviewUuid?: string | null;
-  onValueChange?: (value: { media: AttachedMedia[]; priceMinor: number | null; previewUuid: string | null }) => void;
+  onValueChange?: (value: { media: AttachedMedia[]; priceMinor: number | null; previewUuid: string | null; sfwAttested: boolean }) => void;
   priceEnabled?: boolean;
   allowSfwAttestation?: boolean;
+  initialSfwAttested?: boolean;
 }) {
   const [media, setMedia] = useState<AttachedMedia[]>(initialMedia);
   const [price, setPrice] = useState(
     initialPriceMinor ? (initialPriceMinor / 100).toFixed(2) : "",
   );
   const [previewUuid, setPreviewUuid] = useState(initialPreviewUuid ?? "");
-  const [sfwAttestation, setSfwAttestation] = useState({ signature: "", attested: false });
+  const [sfwAttestation, setSfwAttestation] = useState({ signature: initialMedia.map((item) => item.uuid).join("|"), attested: initialSfwAttested });
   const [uploading, setUploading] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -86,8 +88,9 @@ export function MediaFields({
       media: media.map(({ uuid, name, mediaType, localUrl, thumbnailUrl }) => ({ uuid, name, mediaType, localUrl, thumbnailUrl })),
       priceMinor: price && Number.isFinite(numericPrice) ? Math.round(numericPrice * 100) : null,
       previewUuid: price && previewUuid ? previewUuid : null,
+      sfwAttested: allowSfwAttestation && !price && media.length > 0 && sfwAttested,
     });
-  }, [media, previewUuid, price]);
+  }, [allowSfwAttestation, media, previewUuid, price, sfwAttested]);
 
   useEffect(() => {
     const unresolved = initialMedia
@@ -304,7 +307,7 @@ export function MediaFields({
           </p>
         </div>
       ) : null}
-      {allowSfwAttestation && media.length > 0 && !price ? <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-400/15 bg-emerald-400/[.035] p-3 text-xs leading-5 text-zinc-300"><input type="checkbox" checked={sfwAttested} onChange={(event) => setSfwAttestation({ signature: mediaSignature, attested: event.target.checked })} className="mt-1 accent-emerald-400" /><span><span className="block font-medium text-emerald-200">Contenido gratuito apto para todo público</span><span className="mt-0.5 block text-zinc-500">Confirmo que todos los archivos de este envío son SFW: sin desnudos, contenido íntimo ni poses sexuales. Una foto de comida, cabello o rostro puede enviarse a seguidores sin consentimiento de contenido íntimo.</span></span></label> : null}
+      {allowSfwAttestation && media.length > 0 && !price ? <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-400/15 bg-emerald-400/[.035] p-3 text-xs leading-5 text-zinc-300"><input type="checkbox" checked={sfwAttested} onChange={(event) => setSfwAttestation({ signature: mediaSignature, attested: event.target.checked })} className="mt-1 accent-emerald-400" /><span><span className="block font-medium text-emerald-200">Contenido gratuito apto para todo público</span><span className="mt-0.5 block text-zinc-500">Confirmo que todos los archivos son SFW: sin desnudos, ropa transparente o interior, actos ni poses sexuales. Puede ser comida, rostro o bikini opaco no explícito. Si hay duda, no marques esta opción.</span></span></label> : null}
       {vaultOpen ? <VaultMediaPicker selectedUuids={media.map((item) => item.uuid)} remaining={10 - media.length} onClose={() => setVaultOpen(false)} onAdd={(incoming) => { setMedia((current) => [...current, ...incoming].slice(0, 10)); setVaultOpen(false); enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo agregado" : "archivos agregados"} desde la bóveda.`, { variant: "success" }); }} /> : null}
       {libraryOpen ? <ContentLibraryPicker selectedUuids={media.map((item) => item.uuid)} remaining={10 - media.length} onClose={() => setLibraryOpen(false)} onAdd={(incoming, suggestedPriceMinor) => { setMedia((current) => [...new Map([...current, ...incoming].map((item) => [item.uuid, item])).values()].slice(0, 10)); if (!price && suggestedPriceMinor) setPrice((suggestedPriceMinor / 100).toFixed(2)); setLibraryOpen(false); enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo agregado" : "archivos agregados"} desde Content Library.`, { variant: "success" }); }} /> : null}
     </div>

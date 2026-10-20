@@ -12,6 +12,7 @@ import { canReceivePaidOrIntimateContent, canReceiveMessageMedia } from "@/domai
 import { isAmbiguousManualSendFailure, sendIntentRedirectStatus } from "@/domain/messages/send-intent";
 import { assertSendRecipient, SendRecipientIneligibleError } from "@/services/messages/assert-send-recipient";
 import { parseManualSendForm } from "@/domain/messages/manual-send-form";
+import { prepareOutboundMediaText } from "@/domain/messages/media-disclosure";
 
 const mediaSchema = z.array(z.object({ uuid: z.string().uuid(), name: z.string(), mediaType: z.enum(["image", "video"]) })).max(10);
 const audience = [{ isFollower: true }, { isSubscriber: true }, { isExpiredSubscriber: true }];
@@ -48,9 +49,27 @@ export async function POST(request: Request) {
   if ((price !== null && !canReceivePaidOrIntimateContent(fan)) || !canReceiveMessageMedia(fan, media.data.length, mediaSafety)) redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&error=${price !== null ? "ppv_requires_subscription_or_consent" : "media_requires_sfw_or_consent"}`);
   const template = parsed.data.templateId ? await prisma.messageTemplate.findFirst({
     where: { id: parsed.data.templateId, creatorId, status: "ACTIVE" },
-    select: { id: true },
+    select: { id: true, metadata: true },
   }) : null;
   if (parsed.data.templateId && !template) redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&error=invalid_template`);
+  const templateMetadata = template?.metadata && typeof template.metadata === "object" && !Array.isArray(template.metadata)
+    ? template.metadata as Record<string, unknown>
+    : null;
+  const templateMedia = Array.isArray(templateMetadata?.media) ? templateMetadata.media : [];
+  const sameMediaAsTemplate = template !== null && templateMedia.length === media.data.length && templateMedia.every((item, index) =>
+    typeof item === "object" && item !== null && !Array.isArray(item) && "uuid" in item && item.uuid === media.data[index]?.uuid,
+  );
+  const declaredOrigin = form.get("mediaOrigin");
+  const originValue = sameMediaAsTemplate ? templateMetadata?.mediaOrigin : declaredOrigin;
+  const mediaOrigin = originValue === "original" || originValue === "ai_generated" ? originValue : null;
+  const settings = await prisma.settings.findUnique({ where: { creatorId }, select: { aiProfileLabelConfirmed: true } });
+  let sendText: string;
+  try {
+    sendText = prepareOutboundMediaText(parsed.data.text, mediaOrigin, media.data.length, settings?.aiProfileLabelConfirmed === true);
+  } catch {
+    redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&error=media_origin_required`);
+  }
+  if (sendText.length > 5000) redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&error=invalid_message`);
   const scheduledAt = parsed.data.scheduledAt ? new Date(parsed.data.scheduledAt) : new Date();
   if (parsed.data.scheduledAt) {
     const now = new Date();
@@ -67,7 +86,7 @@ export async function POST(request: Request) {
         status: parsed.data.scheduledAt ? "PENDING" : "SENDING",
         templateId: template?.id,
         text: parsed.data.text || null,
-        media: media.data.map((item) => ({ ...item, sfwAttested: mediaSafety === "SFW" })),
+        media: media.data.map((item) => ({ ...item, mediaOrigin, sfwAttested: mediaSafety === "SFW" })),
         mediaPreviewUuid: effectivePreviewUuid,
         priceMinor: price,
         scheduledAt,
@@ -90,7 +109,7 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        text: parsed.data.text || null,
+        text: sendText || null,
         mediaUuids: lockedMedia.map(item => item.uuid),
         mediaPreviewUuid: effectivePreviewUuid,
         price,
@@ -104,8 +123,8 @@ export async function POST(request: Request) {
       });
       await transaction.message.upsert({
         where: { creatorId_fanvueMessageId: { creatorId, fanvueMessageId: sent.messageUuid } },
-        update: { text: parsed.data.text, templateId: template?.id, status: "SENT", mediaUuids: media.data.map(item => item.uuid), mediaPreviewUuid: effectivePreviewUuid, priceMinor: price },
-        create: { creatorId, conversationId: conversation.id, fanvueMessageId: sent.messageUuid, templateId: template?.id, direction: "OUTBOUND", status: "SENT", text: parsed.data.text, mediaUuids: media.data.map(item => item.uuid), mediaPreviewUuid: effectivePreviewUuid, priceMinor: price, sentAt: new Date() },
+        update: { text: sendText, templateId: template?.id, status: "SENT", mediaUuids: media.data.map(item => item.uuid), mediaPreviewUuid: effectivePreviewUuid, priceMinor: price },
+        create: { creatorId, conversationId: conversation.id, fanvueMessageId: sent.messageUuid, templateId: template?.id, direction: "OUTBOUND", status: "SENT", text: sendText, mediaUuids: media.data.map(item => item.uuid), mediaPreviewUuid: effectivePreviewUuid, priceMinor: price, sentAt: new Date() },
       });
       await transaction.scheduledMessage.update({ where: { id: sendIntentId }, data: { status: "SENT", sentAt: new Date(), fanvueMessageId: sent.messageUuid, lastError: null } });
     });

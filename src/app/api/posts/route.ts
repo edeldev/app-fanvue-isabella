@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { buildPostMediaPayload } from "@/domain/posts/media-payload";
+import { preparePostText } from "@/domain/posts/ai-media-disclosure";
 import { fanvueRequest } from "@/lib/fanvue/client";
 import { FanvueError } from "@/lib/fanvue/errors";
 import {
@@ -9,6 +10,7 @@ import {
   postAudienceSchema,
 } from "@/lib/fanvue/post-schemas";
 import { mediaBulkSchema } from "@/lib/fanvue/sync-schemas";
+import { prisma } from "@/lib/prisma";
 import {
   CREATOR_SESSION_COOKIE,
   readCreatorSession,
@@ -27,6 +29,7 @@ const createPostSchema = z.object({
   price: z.number().int().min(300).nullable().optional(),
   audience: postAudienceSchema,
   publishAt: z.string().datetime().nullable().optional(),
+  mediaOrigin: z.enum(["original", "ai_generated"]).optional(),
 });
 
 function fanvueErrorResponse(error: unknown) {
@@ -135,7 +138,17 @@ export async function POST(request: Request) {
   if (!input.success) {
     return Response.json({ error: "Revisa el texto, precio, audiencia y archivos." }, { status: 400 });
   }
-  const { text, mediaUuids, mediaPreviewUuid, price, audience, publishAt } = input.data;
+  const { text, mediaUuids, mediaPreviewUuid, price, audience, publishAt, mediaOrigin } = input.data;
+  const disclosureSettings = mediaUuids.length && mediaOrigin === "ai_generated"
+    ? await prisma.settings.findUnique({ where: { creatorId }, select: { aiProfileLabelConfirmed: true } })
+    : null;
+  let publishText: string;
+  try {
+    publishText = preparePostText(text, mediaOrigin, mediaUuids.length > 0, disclosureSettings?.aiProfileLabelConfirmed === true);
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Clasificación de medios inválida." }, { status: 400 });
+  }
+  if (publishText.length > 5_000) return Response.json({ error: "El texto con la divulgación de IA supera los 5000 caracteres." }, { status: 400 });
   if (!text && mediaUuids.length === 0) {
     return Response.json({ error: "Agrega texto o contenido multimedia." }, { status: 400 });
   }
@@ -159,7 +172,7 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        text: text || undefined,
+        text: publishText || undefined,
         mediaUuids: postMedia.mediaUuids.length ? postMedia.mediaUuids : undefined,
         mediaPreviewUuid: postMedia.mediaPreviewUuid,
         price: price || undefined,
