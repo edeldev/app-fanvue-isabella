@@ -1,13 +1,12 @@
 import { cookies } from "next/headers";
-import { z } from "zod";
 import { buildPostMediaPayload } from "@/domain/posts/media-payload";
 import { preparePostText } from "@/domain/posts/ai-media-disclosure";
+import { createPostSchema, postInputError } from "@/domain/posts/post-input";
 import { fanvueRequest } from "@/lib/fanvue/client";
 import { FanvueError } from "@/lib/fanvue/errors";
 import {
   fanvuePostSchema,
   fanvuePostsPageSchema,
-  postAudienceSchema,
 } from "@/lib/fanvue/post-schemas";
 import { mediaBulkSchema } from "@/lib/fanvue/sync-schemas";
 import { prisma } from "@/lib/prisma";
@@ -21,16 +20,6 @@ import {
   rateLimitPolicies,
 } from "@/lib/rate-limit";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
-
-const createPostSchema = z.object({
-  text: z.string().trim().max(5_000).default(""),
-  mediaUuids: z.array(z.string().uuid()).max(10).default([]),
-  mediaPreviewUuid: z.string().uuid().nullable().optional(),
-  price: z.number().int().min(300).nullable().optional(),
-  audience: postAudienceSchema,
-  publishAt: z.string().datetime().nullable().optional(),
-  mediaOrigin: z.enum(["original", "ai_generated"]).optional(),
-});
 
 function fanvueErrorResponse(error: unknown) {
   if (error instanceof FanvueError && error.status === 403) {
@@ -136,7 +125,7 @@ export async function POST(request: Request) {
 
   const input = createPostSchema.safeParse(await request.json().catch(() => null));
   if (!input.success) {
-    return Response.json({ error: "Revisa el texto, precio, audiencia y archivos." }, { status: 400 });
+    return Response.json({ error: postInputError(input.error) }, { status: 400 });
   }
   const { text, mediaUuids, mediaPreviewUuid, price, audience, publishAt, mediaOrigin } = input.data;
   const disclosureSettings = mediaUuids.length

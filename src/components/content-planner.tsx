@@ -200,7 +200,7 @@ export function ContentPlanner({ profileAiLabelConfirmed = false }: { profileAiL
           text: text.trim(),
           mediaUuids: mediaValue.media.map((item) => item.uuid),
           mediaPreviewUuid: mediaValue.previewUuid,
-          mediaOrigin: mediaValue.media.length ? mediaOrigin : undefined,
+          mediaOrigin: mediaValue.media.length && mediaOrigin ? mediaOrigin : undefined,
           price: mediaValue.priceMinor,
           audience,
           publishAt:
