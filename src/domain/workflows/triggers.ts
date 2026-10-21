@@ -1,5 +1,5 @@
 export const workflowTriggers = [
-  "MANUAL", "FOLLOW_CREATED", "SUBSCRIPTION_ACTIVATED", "SUBSCRIPTION_RENEWED",
+  "MANUAL", "FOLLOW_CREATED", "SUBSCRIPTION_ACTIVATED", "SUBSCRIPTION_REACTIVATED", "SUBSCRIPTION_RENEWED",
   "SUBSCRIPTION_DEACTIVATED", "RENEWAL_CHANGED", "MESSAGE_RECEIVED", "PRESENCE_ONLINE",
 ] as const;
 
@@ -9,6 +9,7 @@ export const workflowTriggerLabels: Record<WorkflowTrigger, string> = {
   MANUAL: "Inicio manual",
   FOLLOW_CREATED: "Nuevo seguidor",
   SUBSCRIPTION_ACTIVATED: "Suscripción activada",
+  SUBSCRIPTION_REACTIVATED: "Volvió a suscribirse tras vencer",
   SUBSCRIPTION_RENEWED: "Suscripción renovada",
   SUBSCRIPTION_DEACTIVATED: "Suscripción desactivada",
   RENEWAL_CHANGED: "Renovación automática modificada",

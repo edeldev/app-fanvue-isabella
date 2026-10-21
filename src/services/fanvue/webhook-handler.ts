@@ -11,6 +11,7 @@ import { fetchAllCursorPages } from "@/lib/fanvue/pagination";
 import { creatorListPageSchema } from "@/lib/fanvue/sync-schemas";
 import { completeMatchingWorkflowGoals } from "@/services/workflows/complete-workflow-goals";
 import { recalculateFanLifecycle } from "@/services/lifecycle/recalculate-fan-lifecycle";
+import { subscriptionAutomationTrigger } from "@/domain/workflows/subscription-automation-trigger";
 import { refreshFanMemory } from "@/services/intelligence/refresh-fan-memory";
 
 const personSchema = z.object({
@@ -238,6 +239,11 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
     const data = subscriptionDataSchema.parse(unknownData);
     const fan = await upsertFan(creatorId, data.purchaser);
     const active = data.status === "active";
+    const wasActive = fan.isSubscriber || fan.isFreeTrialSubscriber;
+    const hadExpiredSubscription = !wasActive && Boolean(await prisma.subscription.findFirst({
+      where: { creatorId, fanId: fan.id, OR: [{ status: "EXPIRED" }, { endedAt: { not: null } }] },
+      select: { id: true },
+    }));
     await prisma.fan.update({
       where: { id: fan.id },
       data: {
@@ -259,16 +265,18 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
         create: { creatorId, fanId: fan.id, fanvueSubscriptionId: data.id, status: data.cancel_at_period_end ? "CANCEL_AT_PERIOD_END" : "ACTIVE", autoRenewalEnabled: !data.cancel_at_period_end, startedAt, currentPeriodEndsAt: data.expires_at ? new Date(data.expires_at) : null },
       });
     }
-    const trigger = type === "creator.subscription.activated" ? "SUBSCRIPTION_ACTIVATED"
-      : type === "creator.subscription.renewed" ? "SUBSCRIPTION_RENEWED"
-        : type === "creator.subscription.deactivated" ? "SUBSCRIPTION_DEACTIVATED"
-          : "RENEWAL_CHANGED";
+    const trigger = subscriptionAutomationTrigger({
+      eventType: type,
+      wasActive,
+      isActive: active,
+      hadExpiredSubscription,
+    });
     await refreshSubscriptionSegments(creatorId, fan.id, fan.fanvueUserId, active ? !data.cancel_at_period_end : null, active);
     const refreshedFan = await prisma.fan.findUnique({ where: { id: fan.id }, select: { isSubscriber: true, isFreeTrialSubscriber: true } });
     if (active && refreshedFan?.isSubscriber && !refreshedFan.isFreeTrialSubscriber) {
       await completeMatchingWorkflowGoals(creatorId, fan.id, { kind: "PAID_SUBSCRIPTION" }, { subscriptionId: data.id, occurredAt: data.created_at ?? new Date().toISOString() });
     }
-    await triggerWorkflowForFan(creatorId, fan.id, trigger);
+    if (trigger) await triggerWorkflowForFan(creatorId, fan.id, trigger);
     await recalculateFanLifecycle(creatorId, fan.id, "SUBSCRIPTION_WEBHOOK");
     return;
   }
