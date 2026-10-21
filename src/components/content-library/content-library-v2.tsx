@@ -1120,7 +1120,7 @@ function AssetPreview({
           <SectionTitle>Dónde se utiliza</SectionTitle>
           <Usage asset={asset} />
           <div className="mt-6 grid grid-cols-2 gap-2">
-            {process.env.NEXT_PUBLIC_FANVUE_CREATOR_MEDIA_EXPORT_APPROVED === "true" ? (
+            {process.env.NODE_ENV === "development" ? (
               <a
                 href={`/api/content-library/download?id=${encodeURIComponent(asset.id)}`}
                 className="flex items-center justify-center gap-2 rounded-xl border border-white/10 px-3 py-3 text-xs text-zinc-300 hover:bg-white/5"
@@ -1129,8 +1129,8 @@ function AssetPreview({
                 Descargar
               </a>
             ) : (
-              <span className="flex items-center justify-center rounded-xl border border-white/10 px-3 py-3 text-center text-xs text-zinc-500" title="Pendiente de confirmar con Fanvue">
-                Descarga no disponible
+              <span className="flex items-center justify-center rounded-xl border border-white/10 px-3 py-3 text-center text-xs text-zinc-500" title="Disponible solo en desarrollo local">
+                Solo descarga local
               </span>
             )}
             <button
@@ -1429,7 +1429,7 @@ function SelectionBar({
       </div>
       <Action icon={<PackageOpen />} label="Agregar a Pack" onClick={onPack} />
       <Action icon={<ListFilter />} label="Organizar" onClick={onOrganize} />
-      {process.env.NEXT_PUBLIC_FANVUE_CREATOR_MEDIA_EXPORT_APPROVED === "true" ? <Action
+      {process.env.NODE_ENV === "development" ? <Action
         icon={
           downloadProgress !== undefined ? (
             <LoaderCircle className="animate-spin" />

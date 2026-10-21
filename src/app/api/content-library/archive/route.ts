@@ -7,14 +7,17 @@ import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 import { createZipStream, zipContentLength } from "@/lib/zip-stream";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
+import { localMediaDownloadAllowed } from "@/lib/content-library/local-download";
 
 const inputSchema = z.object({ ids: z.array(z.string()).min(1).max(100), mode: z.enum(["all", "photos", "videos"]).default("all"), filename: z.string().trim().min(1).max(100).default("selected-content") });
 const safe = (name: string) => name.replace(/[^a-zA-Z0-9._ -]/g, "_");
 
 export async function POST(request: Request) {
+  if (!localMediaDownloadAllowed(new URL(request.url).hostname)) {
+    return NextResponse.json({ error: "La descarga ZIP solo está disponible en desarrollo local." }, { status: 403 });
+  }
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
   if (!creatorId) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (process.env.FANVUE_CREATOR_MEDIA_EXPORT_APPROVED !== "true") return NextResponse.json({ error: "Descarga ZIP desactivada hasta confirmar con Fanvue que esta exportación está permitida." }, { status: 403 });
   const parsed = inputSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Selección inválida" }, { status: 400 });
   const records = await prisma.content.findMany({ where: { creatorId, id: { in: parsed.data.ids }, ...(parsed.data.mode === "photos" ? { type: "image" } : parsed.data.mode === "videos" ? { type: "video" } : {}) }, select: { id: true, fanvueContentId: true, name: true, type: true } });
