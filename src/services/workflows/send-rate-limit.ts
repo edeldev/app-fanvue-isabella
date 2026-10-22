@@ -20,7 +20,8 @@ export type SendReservationResult =
 
 export async function reserveWorkflowSend(input: ReservationInput): Promise<SendReservationResult> {
   return prisma.$transaction(async (transaction) => {
-    await transaction.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${input.creatorId}))`;
+    // PostgreSQL returns void for this lock; cast it so Prisma can deserialize the result.
+    await transaction.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${input.creatorId}))::text`;
     const existing = await transaction.workflowSendReservation.findUnique({
       where: { enrollmentId_stepId: { enrollmentId: input.enrollmentId, stepId: input.stepId } },
     });

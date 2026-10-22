@@ -34,7 +34,8 @@ export async function reserveAutomatedSendBudget(input: {
 }): Promise<BudgetResult> {
   const { creatorId, fanId, limits, now } = input;
   return prisma.$transaction(async (transaction) => {
-    await transaction.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${creatorId}))`;
+    // PostgreSQL returns void for this lock; cast it so Prisma can deserialize the result.
+    await transaction.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${creatorId}))::text`;
     const scopes = {
       hour: "automated-send-hour",
       day: "automated-send-day",

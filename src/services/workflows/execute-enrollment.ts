@@ -463,12 +463,18 @@ async function prepareWorkflowSend(enrollment: LoadedEnrollment, step: NonNullab
     if (!reservation.allowed) return deferWorkflowSend(enrollment, step, executionId, reservation.reasonCode, reservation.nextRunAt, now);
     reservationId = reservation.reservationId;
   }
-  const budget = await reserveAutomatedSendBudget({
-    creatorId: enrollment.creatorId,
-    fanId: enrollment.fanId,
-    limits: mandatoryAutomatedSendLimits(enrollment.workflow.creator.settings),
-    now,
-  });
+  let budget: Awaited<ReturnType<typeof reserveAutomatedSendBudget>>;
+  try {
+    budget = await reserveAutomatedSendBudget({
+      creatorId: enrollment.creatorId,
+      fanId: enrollment.fanId,
+      limits: mandatoryAutomatedSendLimits(enrollment.workflow.creator.settings),
+      now,
+    });
+  } catch (error) {
+    if (reservationId) await markWorkflowSendFailed(reservationId);
+    throw error;
+  }
   if (!budget.allowed) {
     if (reservationId) await markWorkflowSendFailed(reservationId);
     return deferWorkflowSend(enrollment, step, executionId, budget.reasonCode, budget.nextRunAt, now);
