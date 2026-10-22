@@ -25,6 +25,7 @@ import { enqueueSnackbar } from "notistack";
 import { VaultMediaPicker as VaultMediaPickerContent } from "@/components/vault-media-picker";
 import { MediaLightbox } from "@/components/media-lightbox";
 import { ContentLibraryPicker as ContentLibraryPickerContent } from "@/components/content-library/content-library-picker";
+import { useMediaRights } from "@/components/media-rights-provider";
 
 export type AttachedMedia = {
   uuid: string;
@@ -51,6 +52,7 @@ export function MediaFields({
   allowSfwAttestation?: boolean;
   initialSfwAttested?: boolean;
 }) {
+  const { requestUpload } = useMediaRights();
   const [media, setMedia] = useState<AttachedMedia[]>(initialMedia);
   const [price, setPrice] = useState(
     initialPriceMinor ? (initialPriceMinor / 100).toFixed(2) : "",
@@ -123,11 +125,11 @@ export function MediaFields({
     return () => controller.abort();
   }, [initialMedia]);
 
-  async function upload(files: FileList | null) {
-    if (!files?.length) return;
+  async function upload(files: File[]) {
+    if (!files.length) return;
     setUploading(true);
     const form = new FormData();
-    Array.from(files)
+    files
       .slice(0, 10 - media.length)
       .forEach((file) => form.append("files", file));
     try {
@@ -210,7 +212,11 @@ export function MediaFields({
             multiple
             className="hidden"
             disabled={uploading || media.length >= 10}
-            onChange={(event) => void upload(event.target.files)}
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+              event.target.value = "";
+              if (files.length) void requestUpload(() => upload(files));
+            }}
           />
         </label>
         <button type="button" disabled={uploading || media.length >= 10} onClick={() => setVaultOpen(true)} className="flex items-center gap-2 rounded-lg border border-violet-400/20 bg-violet-400/[.06] px-3 py-2 text-xs text-violet-300 hover:bg-violet-400/10 disabled:opacity-40"><FolderOpen className="size-4" />Elegir de la bóveda</button>

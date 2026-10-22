@@ -855,6 +855,8 @@ model Settings {
   debugMode                    Boolean        @default(false)
   aiMessagingEnabled           Boolean        @default(true)
   aiProfileLabelConfirmed      Boolean        @default(false)
+  mediaRightsAcceptedAt        DateTime?
+  mediaRightsVersion           String?
   createdAt                    DateTime       @default(now())
   updatedAt                    DateTime       @updatedAt
   creator                      Creator        @relation(fields: [creatorId], references: [id], onDelete: Cascade)

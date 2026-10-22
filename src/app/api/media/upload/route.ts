@@ -7,6 +7,8 @@ import { mediaUploadCompleteSchema, mediaUploadSessionSchema } from "@/lib/fanvu
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
 import { consumeRateLimit, rateLimitedResponse, rateLimitPolicies } from "@/lib/rate-limit";
+import { prisma } from "@/lib/prisma";
+import { hasAcceptedMediaRights } from "@/lib/media-rights";
 
 const allowedTypes = new Map([["image/jpeg", "image"], ["image/png", "image"], ["image/webp", "image"], ["image/gif", "image"], ["video/mp4", "video"], ["video/quicktime", "video"], ["video/webm", "video"]]);
 const MAX_FILE_SIZE = 250 * 1024 * 1024;
@@ -56,6 +58,10 @@ async function uploadFile(file: File, token: string) {
 export async function POST(request: Request) {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
   if (!creatorId) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const settings = await prisma.settings.findUnique({ where: { creatorId }, select: { mediaRightsAcceptedAt: true, mediaRightsVersion: true } });
+  if (!hasAcceptedMediaRights(settings)) {
+    return NextResponse.json({ error: "Confirma los derechos y permisos del contenido antes de subirlo.", code: "MEDIA_RIGHTS_REQUIRED" }, { status: 428 });
+  }
   const rateLimit = await consumeRateLimit(creatorId, rateLimitPolicies.mediaUpload);
   if (!rateLimit.allowed) return rateLimitedResponse(rateLimit);
   const form = await request.formData();

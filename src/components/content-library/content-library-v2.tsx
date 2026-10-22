@@ -37,6 +37,7 @@ import {
 import type { AttachedMedia } from "@/components/media-fields";
 import { VaultMediaPicker } from "@/components/vault-media-picker";
 import { downloadArchive } from "@/lib/client/download-archive";
+import { useMediaRights } from "@/components/media-rights-provider";
 
 type View =
   | "all"
@@ -95,6 +96,7 @@ const views: Array<{ id: View; label: string; icon: typeof Images }> = [
 ];
 
 export function ContentLibraryV2() {
+  const { requestUpload } = useMediaRights();
   const [data, setData] = useState<LibraryData | null>(null);
   const [view, setView] = useState<View>("all");
   const [page, setPage] = useState(1);
@@ -555,7 +557,7 @@ export function ContentLibraryV2() {
               onChange={(event) => {
                 const files = [...(event.target.files ?? [])];
                 event.target.value = "";
-                void uploadFiles(files);
+                if (files.length) void requestUpload(async () => { await uploadFiles(files); });
               }}
             />
             <div className="mt-3 flex gap-2 overflow-x-auto">
@@ -693,7 +695,8 @@ export function ContentLibraryV2() {
             onDrop={(event) => {
               event.preventDefault();
               setDragging(false);
-              void uploadFiles([...event.dataTransfer.files]);
+              const files = [...event.dataTransfer.files];
+              if (files.length) void requestUpload(async () => { await uploadFiles(files); });
             }}
             className={`relative min-h-[520px] p-4 sm:p-5 ${dragging ? "ring-2 ring-inset ring-violet-400" : ""}`}
           >

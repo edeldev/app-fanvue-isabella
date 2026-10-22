@@ -10,6 +10,7 @@ import {
 } from "@/lib/session/creator-session";
 import { NotificationProvider } from "@/components/notifications/notification-provider";
 import { RouteNotifications } from "@/components/notifications/route-notifications";
+import { MediaRightsProvider } from "@/components/media-rights-provider";
 
 export const metadata: Metadata = {
   title: "Fanvue CRM & Automation",
@@ -27,9 +28,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full">
         <a href="#main-content" className="fixed left-4 top-4 z-[200] -translate-y-24 rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white shadow-xl transition focus:translate-y-0">Saltar al contenido principal</a>
         <NotificationProvider>
-          <Suspense fallback={null}><RouteNotifications /></Suspense>
-          {creatorId ? <><WorkflowAutoRunner /><FanvueReconciler /></> : null}
-          {children}
+          <MediaRightsProvider>
+            <Suspense fallback={null}><RouteNotifications /></Suspense>
+            {creatorId ? <><WorkflowAutoRunner /><FanvueReconciler /></> : null}
+            {children}
+          </MediaRightsProvider>
         </NotificationProvider>
       </body>
     </html>

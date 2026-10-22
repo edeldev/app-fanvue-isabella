@@ -19,11 +19,12 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { enqueueSnackbar } from "notistack";
 import { downloadArchive } from "@/lib/client/download-archive";
 import type { AttachedMedia } from "@/components/media-fields";
 import { VaultMediaPicker } from "@/components/vault-media-picker";
+import { useMediaRights } from "@/components/media-rights-provider";
 
 type Asset = { id: string; name: string; type: string; fanvueContentId?: string | null; url?: string; thumbnailUrl?: string; position?: number };
 type Pack = {
@@ -622,6 +623,7 @@ function AssetPicker({
   onImport: (media: AttachedMedia[]) => Promise<void>;
   purpose?: "create" | "add";
 }) {
+  const { requestUpload } = useMediaRights();
   const inputRef = useRef<HTMLInputElement>(null);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -642,9 +644,7 @@ function AssetPicker({
     }
   }
 
-  async function uploadFromMac(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []).slice(0, 10);
-    event.target.value = "";
+  async function uploadFromMac(files: File[]) {
     if (!files.length) return;
     setImporting(true);
     try {
@@ -665,7 +665,7 @@ function AssetPicker({
   return (
     <div className={purpose === "create" ? "mt-5" : ""}>
       <div><div className="flex items-center justify-between gap-2"><h3 className="text-sm font-semibold text-white">{purpose === "add" ? "Agregar archivos" : "Seleccionar archivos"}</h3><span className="rounded-full bg-white/5 px-2.5 py-1 text-[10px] text-zinc-400">{assets.length} disponibles</span></div><p className="mt-1 text-[11px] leading-4 text-zinc-500">{purpose === "add" ? "Elige contenido de la biblioteca o importa más archivos." : `${selected.length} seleccionados para este Pack.`}</p></div>
-      <div className="mt-4 grid grid-cols-2 gap-2"><input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm" multiple className="hidden" onChange={(event) => void uploadFromMac(event)} /><button type="button" disabled={importing} onClick={() => inputRef.current?.click()} className="flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[.025] px-2 text-[11px] font-medium text-zinc-300 transition hover:border-violet-400/30 hover:bg-violet-400/5 disabled:opacity-40">{importing ? <LoaderCircle className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}Desde Mac</button><button type="button" disabled={importing} onClick={() => setVaultOpen(true)} className="flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[.025] px-2 text-[11px] font-medium text-zinc-300 transition hover:border-violet-400/30 hover:bg-violet-400/5 disabled:opacity-40"><Images className="size-3.5" />Desde Fanvue</button></div>
+      <div className="mt-4 grid grid-cols-2 gap-2"><input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm" multiple className="hidden" onChange={(event) => { const files = Array.from(event.target.files ?? []).slice(0, 10); event.target.value = ""; if (files.length) void requestUpload(() => uploadFromMac(files)); }} /><button type="button" disabled={importing} onClick={() => inputRef.current?.click()} className="flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[.025] px-2 text-[11px] font-medium text-zinc-300 transition hover:border-violet-400/30 hover:bg-violet-400/5 disabled:opacity-40">{importing ? <LoaderCircle className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}Desde Mac</button><button type="button" disabled={importing} onClick={() => setVaultOpen(true)} className="flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[.025] px-2 text-[11px] font-medium text-zinc-300 transition hover:border-violet-400/30 hover:bg-violet-400/5 disabled:opacity-40"><Images className="size-3.5" />Desde Fanvue</button></div>
       <label className="mt-4 flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 focus-within:border-violet-400/40"><Search className="size-4 text-zinc-600" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar archivo…" aria-label="Buscar archivo para el Pack" className="min-w-0 flex-1 bg-transparent text-xs text-zinc-200 outline-none placeholder:text-zinc-600" /></label>
       <div className="mt-3 grid max-h-[42dvh] grid-cols-2 gap-2 overflow-y-auto pr-1">
         {visibleAssets.map((asset) => {
