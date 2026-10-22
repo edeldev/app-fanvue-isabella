@@ -24,6 +24,13 @@ describe("workflowRetryDecision", () => {
 });
 
 describe("workflowSendRetryDecision", () => {
+  it.each([
+    ["FANVUE_RECIPIENT_UNAVAILABLE", "FANVUE_RECIPIENT_UNAVAILABLE"],
+    ["FANVUE_INVALID_RECIPIENT_ID", "FANVUE_INVALID_RECIPIENT_ID"],
+    ["FANVUE_MESSAGE_REJECTED", "FANVUE_MESSAGE_REJECTED"],
+  ])("stops known Fanvue 400 errors without retrying", (code, reasonCode) => {
+    expect(workflowSendRetryDecision(new FanvueError("bad request", 400, code), 1)).toEqual({ retryable: false, reasonCode, delaySeconds: null });
+  });
   it("never repeats a message Fanvue already confirmed", () => {
     expect(workflowSendRetryDecision(new ConfirmedSendPersistenceError("message-1"), 1)).toEqual({ retryable: false, reasonCode: "FANVUE_SEND_CONFIRMED_PERSISTENCE_FAILED", delaySeconds: null });
   });

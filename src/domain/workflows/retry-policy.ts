@@ -27,6 +27,15 @@ export function workflowRetryDecision(error: unknown, attempt: number, options: 
   if (error instanceof FanvueError && error.code === "FANVUE_INVALID_RESPONSE") {
     return { retryable: false, reasonCode: "FANVUE_AMBIGUOUS_SEND_RESPONSE", delaySeconds: null };
   }
+  if (error instanceof FanvueError && error.code === "FANVUE_RECIPIENT_UNAVAILABLE") {
+    return { retryable: false, reasonCode: "FANVUE_RECIPIENT_UNAVAILABLE", delaySeconds: null };
+  }
+  if (error instanceof FanvueError && error.code === "FANVUE_INVALID_RECIPIENT_ID") {
+    return { retryable: false, reasonCode: "FANVUE_INVALID_RECIPIENT_ID", delaySeconds: null };
+  }
+  if (error instanceof FanvueError && error.code === "FANVUE_MESSAGE_REJECTED") {
+    return { retryable: false, reasonCode: "FANVUE_MESSAGE_REJECTED", delaySeconds: null };
+  }
   const retryableFanvueStatus = error instanceof FanvueError && ([408, 425, 429].includes(error.status) || error.status >= 500);
   const retryableNetworkError = error instanceof TypeError;
   if (!retryableFanvueStatus && !retryableNetworkError) {
