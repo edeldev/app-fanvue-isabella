@@ -13,8 +13,10 @@ import {
 } from "@/lib/session/creator-session";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
 import { prisma } from "@/lib/prisma";
+import { requestGeminiInteraction } from "@/lib/gemini/request";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const inputSchema = z.object({
   mediaUuid: z.string().uuid(),
@@ -77,7 +79,8 @@ export async function POST(request: Request) {
     if (!item || item.status !== "ready" || item.mediaType !== "image") {
       return Response.json({ error: "Selecciona una imagen lista para analizar." }, { status: 422 });
     }
-    const variant = item.variants.find((value) => value.variantType === "main" && value.url)
+    const variant = item.variants.find((value) => value.variantType === "thumbnail" && value.url)
+      ?? item.variants.find((value) => value.variantType === "main" && value.url)
       ?? item.variants.find((value) => value.url);
     if (!variant?.url) return Response.json({ error: "La imagen no tiene una vista analizable." }, { status: 422 });
 
@@ -89,10 +92,9 @@ export async function POST(request: Request) {
     }
     const mimeType = imageResponse.headers.get("content-type")?.split(";")[0] || "image/jpeg";
     const model = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify({
+    const response = await requestGeminiInteraction({
+      apiKey,
+      body: {
         model,
         store: false,
         system_instruction: `Eres copywriter de una creadora adulta en Fanvue. Analiza únicamente lo visible en la imagen y crea un caption en español listo para revisión humana antes de publicar. Todas las personas representadas deben ser adultas y haber consentido: si existe cualquier duda sobre edad o consentimiento, no sexualices. El nivel solicitado es ${input.data.intensity}. Solo permite sexualidad adulta y consentida. Rechaza o reconduce menores, apariencia juvenil ambigua, coerción, ausencia de consentimiento, incesto, personas dormidas o inconscientes, violencia, asfixia, fluidos corporales, drogas, armas, odio o autolesión. No uses degradación ni presión comercial. Debe sonar personal y seguro. Usa 1 a 3 emojis naturales. No inventes lugares, acciones pasadas ni prendas que no aparezcan. Objetivo: ${input.data.objective === "ppv" ? "despertar curiosidad para desbloquear PPV sin revelar todo" : input.data.objective === "subscription" ? "crear deseo de suscribirse sin presionar" : "provocar respuestas y conversación"}. Devuelve un resumen visual privado y un solo caption.`,
@@ -100,10 +102,11 @@ export async function POST(request: Request) {
           { type: "image", data: Buffer.from(bytes).toString("base64"), mime_type: mimeType },
           { type: "text", text: "Analiza esta imagen y escribe el caption solicitado." },
         ],
-        generation_config: { temperature: 0.95 },
+        generation_config: { temperature: 0.85, max_output_tokens: 650 },
         response_format: { type: "text", mime_type: "application/json", schema: geminiSchema },
-      }),
-      signal: AbortSignal.timeout(25_000),
+      },
+      timeoutMs: 14_000,
+      retryTimeoutMs: 12_000,
     });
     if (!response.ok) {
       const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;

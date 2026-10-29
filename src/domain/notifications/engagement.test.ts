@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { engagementCopy, engagementEventTypes } from "./engagement";
+import { engagementCopy, engagementEventTypes, notificationPreview } from "./engagement";
 
 describe("engagement notifications", () => {
   it("includes received messages in the real-time feed", () => {
@@ -14,5 +14,12 @@ describe("engagement notifications", () => {
       title: "Nuevo mensaje",
       message: "Juan te envió un mensaje.",
     });
+  });
+
+  it("ends long message previews with an ellipsis", () => {
+    const preview = notificationPreview("Mensaje   muy largo ".repeat(20), 60);
+    expect(preview).toHaveLength(60);
+    expect(preview.endsWith("…")).toBe(true);
+    expect(preview).not.toContain("  ");
   });
 });

@@ -4,7 +4,7 @@ import { Bell, BellRing, ExternalLink, Heart, LoaderCircle, MessageCircle, Trash
 import { enqueueSnackbar } from "notistack";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import type { EngagementNotificationView } from "@/domain/notifications/engagement";
+import { notificationPreview, type EngagementNotificationView } from "@/domain/notifications/engagement";
 
 const POLL_INTERVAL_MS = 5_000;
 const READ_KEY = "fanvue-engagement-notifications-read-at";
@@ -75,7 +75,7 @@ export function EngagementNotificationsMenu() {
           const incoming = body.notifications.filter((item) => !known.has(item.id));
           return [...incoming.reverse(), ...current].slice(0, 25);
         });
-        body.notifications.forEach((notification) => enqueueSnackbar(notification.message, { variant: "info", key: notification.id }));
+        body.notifications.forEach((notification) => enqueueSnackbar(notificationPreview(notification.message, 110), { variant: "info", key: notification.id }));
         if (soundEnabled) playSound(audioContext.current);
       } catch {
         // El siguiente ciclo vuelve a intentar sin interrumpir la navegación.

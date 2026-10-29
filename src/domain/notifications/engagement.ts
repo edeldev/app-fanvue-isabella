@@ -21,6 +21,12 @@ export type EngagementNotificationView = {
   createdAt: string;
 };
 
+export function notificationPreview(value: string, maximum = 120) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maximum) return normalized;
+  return `${normalized.slice(0, Math.max(1, maximum - 1)).trimEnd()}…`;
+}
+
 export function engagementCopy(
   type: EngagementEventType,
   actorName: string,
@@ -39,10 +45,10 @@ export function engagementCopy(
   }
   if (type === "MESSAGE_RECEIVED") {
     const text = typeof metadata.text === "string" ? metadata.text.trim() : "";
-    return { title: "Nuevo mensaje", message: text ? `${actorName}: ${text}` : `${actorName} te envió un mensaje.` };
+    return { title: "Nuevo mensaje", message: text ? notificationPreview(`${actorName}: ${text}`) : `${actorName} te envió un mensaje.` };
   }
   return {
     title: "Nuevo comentario",
-    message: comment ? `${actorName}: ${comment}` : `${actorName} comentó tu publicación.`,
+    message: comment ? notificationPreview(`${actorName}: ${comment}`) : `${actorName} comentó tu publicación.`,
   };
 }

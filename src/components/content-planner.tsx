@@ -151,6 +151,7 @@ export function ContentPlanner({ profileAiLabelConfirmed = false }: { profileAiL
           intensity,
           objective: mediaValue.priceMinor ? "ppv" : "engagement",
         }),
+        signal: AbortSignal.timeout(32_000),
       });
       const body = (await response.json()) as {
         suggestion?: { caption: string; visualSummary: string; tone: string };
@@ -166,7 +167,7 @@ export function ContentPlanner({ profileAiLabelConfirmed = false }: { profileAiL
       );
     } catch (error) {
       enqueueSnackbar(
-        error instanceof Error ? error.message : "No se pudo generar el texto.",
+        error instanceof Error && error.name === "TimeoutError" ? "El análisis tardó demasiado. Inténtalo otra vez; no se publicó nada." : error instanceof Error ? error.message : "No se pudo generar el texto.",
         { variant: "error" },
       );
     } finally {

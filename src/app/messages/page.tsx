@@ -329,17 +329,17 @@ export default async function MessagesPage({ searchParams }: Props) {
   const conversationIsOpen = Boolean(selected);
 
   return (
-    <div className="flex min-h-screen bg-[#101218] text-zinc-100 md:h-dvh md:overflow-hidden">
+    <div className="flex h-dvh overflow-hidden bg-[#101218] text-zinc-100">
       <LiveRefresh />
       <FanPresenceReconciler />
       {selected && selected.unreadMessagesCount > 0 ? (
         <MarkConversationRead fanUuid={selected.fan.fanvueUserId} />
       ) : null}
       <Sidebar />
-      <div className="min-w-0 flex-1 md:flex md:h-dvh md:flex-col md:overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar />
-        <main id="main-content" tabIndex={-1} className="mx-auto flex w-full max-w-[1500px] flex-1 flex-col px-3 py-4 sm:px-5 sm:py-5 md:min-h-0 md:px-8">
-          <div className="mb-4 shrink-0">
+        <main id="main-content" tabIndex={-1} className="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-col px-3 py-3 sm:px-5 sm:py-5 md:px-8">
+          <div className={`${conversationIsOpen ? "hidden md:block" : "block"} mb-4 shrink-0`}>
             <p className="mb-1 text-xs font-medium uppercase tracking-[.18em] text-violet-400">
               Bandeja de entrada
             </p>
@@ -350,7 +350,7 @@ export default async function MessagesPage({ searchParams }: Props) {
               Conversaciones con fans y suscriptores sincronizadas con Fanvue.
             </p>
           </div>
-          <div className="grid min-h-[620px] flex-1 overflow-hidden rounded-2xl border border-white/8 bg-white/[.025] md:min-h-0 md:grid-cols-[340px_minmax(0,1fr)]">
+          <div className="grid min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/8 bg-white/[.025] md:grid-cols-[340px_minmax(0,1fr)]">
             <section className={`${conversationIsOpen ? "hidden md:flex" : "flex"} min-h-0 flex-col border-b border-white/8 md:border-b-0 md:border-r`}>
               <div className="shrink-0 border-b border-white/8 p-4">
                 <form className="flex items-center gap-2 rounded-xl border border-white/8 bg-black/20 px-3 py-2.5">
@@ -438,7 +438,7 @@ export default async function MessagesPage({ searchParams }: Props) {
             <section className={`${conversationIsOpen ? "flex" : "hidden md:flex"} min-h-0 min-w-0 flex-col`}>
               {selected ? (
                 <>
-                  <header className="flex shrink-0 items-center gap-3 border-b border-white/8 px-4 py-3 md:px-5">
+                  <header className="sticky top-0 z-10 flex shrink-0 items-center gap-3 border-b border-white/8 bg-[#161820] px-4 py-3 md:px-5">
                     <Link href={inboxHref} aria-label="Volver a conversaciones" className="grid size-9 shrink-0 place-items-center rounded-lg border border-white/8 text-zinc-400 hover:bg-white/5 hover:text-white md:hidden"><ArrowLeft className="size-4" /></Link>
                     <div className="min-w-0"><p className="truncate font-medium text-zinc-200">
                       {selected.fan.displayName ||
@@ -449,7 +449,7 @@ export default async function MessagesPage({ searchParams }: Props) {
                       @{selected.fan.username || "sin-usuario"}
                     </p></div>
                   </header>
-                  <MessageHistory conversationKey={selected.id}>
+                  <MessageHistory conversationKey={selected.id} latestMessageId={messages.at(-1)?.uuid ?? null}>
                     {historyError ? (
                       <p className="m-auto text-center text-sm text-red-300">
                         No se pudo cargar el historial desde Fanvue.

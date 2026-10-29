@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bot, CalendarClock, Check, Copy, FileText, Languages, LoaderCircle, Plus, RefreshCw, Send, Sparkles, WandSparkles, X } from "lucide-react";
+import { Bot, Braces, CalendarClock, Check, Copy, FileText, Languages, LoaderCircle, Plus, RefreshCw, Send, Sparkles, WandSparkles, X } from "lucide-react";
 import { MediaFields, type AttachedMedia } from "@/components/media-fields";
 import { enqueueSnackbar } from "notistack";
 
@@ -50,6 +50,7 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
   const [aiError, setAiError] = useState("");
   const [aiMode, setAiMode] = useState<AiMode>("reply");
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const variablesMenu = useRef<HTMLDetailsElement>(null);
   const sendIntentInput = useRef<HTMLInputElement>(null);
   const selected = useMemo(() => templates.find(template => template.id === templateId), [templateId, templates]);
   const matches = useMemo(() => {
@@ -57,6 +58,25 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
     const query = command.query.toLocaleLowerCase("es");
     return templates.filter(template => template.name.toLocaleLowerCase("es").includes(query) || (categoryLabels[template.category] ?? template.category).toLocaleLowerCase("es").includes(query)).slice(0, 7);
   }, [command, templates]);
+
+  useLayoutEffect(() => {
+    const field = textarea.current;
+    if (!field) return;
+    field.style.height = "auto";
+    field.style.height = `${Math.min(field.scrollHeight, 208)}px`;
+  }, [text]);
+
+  useEffect(() => {
+    if (!mediaOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") setMediaOpen(false); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [mediaOpen]);
 
   function updateCommand(value: string, cursor: number) {
     const beforeCursor = value.slice(0, cursor);
@@ -84,6 +104,7 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
     const end = field?.selectionEnd ?? start;
     const rendered = variable === "{{nombre}}" ? fanName : username ? `@${username}` : fanName;
     setText(text.slice(0, start) + rendered + text.slice(end));
+    if (variablesMenu.current) variablesMenu.current.open = false;
     requestAnimationFrame(() => { field?.focus(); field?.setSelectionRange(start + rendered.length, start + rendered.length); });
   }
 
@@ -144,18 +165,20 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
     setAiOpen(true);
     setAiLoading(true);
     setAiError("");
+    setAiSuggestion(null);
     try {
       const response = await fetch("/api/messages/generate-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fanUuid, currentDraft: text.trim() || undefined, mode }),
+        signal: AbortSignal.timeout(42_000),
       });
       const body = await response.json().catch(() => null) as { error?: string; suggestion?: AiSuggestion; contextMessages?: number } | null;
       if (!response.ok || !body?.suggestion) throw new Error(body?.error || "No se pudo generar una respuesta.");
       setAiSuggestion(body.suggestion);
       setAiContextMessages(body.contextMessages ?? 0);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "No se pudo generar una respuesta.";
+      const message = error instanceof Error && error.name === "TimeoutError" ? "La IA tardó demasiado. Inténtalo otra vez; tu borrador sigue intacto." : error instanceof Error ? error.message : "No se pudo generar una respuesta.";
       setAiError(message);
       enqueueSnackbar(message, { variant: "error" });
     } finally {
@@ -187,7 +210,7 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
 
   const scheduledAt = scheduledLocal ? new Date(scheduledLocal).toISOString() : "";
 
-  return <form action="/api/messages/send" method="post" onSubmit={() => { if (sendIntentInput.current && !sendIntentInput.current.value) sendIntentInput.current.value = globalThis.crypto?.randomUUID?.() ?? ""; }} className="relative shrink-0 border-t border-white/8 bg-[#12141a] p-3">
+  return <form action="/api/messages/send" method="post" onSubmit={() => { if (sendIntentInput.current && !sendIntentInput.current.value) sendIntentInput.current.value = globalThis.crypto?.randomUUID?.() ?? ""; }} className="relative shrink-0 border-t border-white/8 bg-[#12141a] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
     <input type="hidden" name="fanUuid" value={fanUuid} /><input type="hidden" name="templateId" value={templateId} /><input type="hidden" name="mediaOrigin" value={mediaOrigin} /><input type="hidden" name="scheduledAt" value={scheduledAt} /><input type="hidden" name="sendIntentId" key={`${fanUuid}:${navigationKey}`} ref={sendIntentInput} defaultValue="" />
     {doNotMessage ? <div className="mb-3 rounded-xl border border-rose-400/20 bg-rose-400/8 px-4 py-3"><p className="text-xs font-semibold text-rose-200">Fan marcado como “No contactar”</p><p className="mt-1 text-[11px] text-rose-200/60">Los mensajes manuales, programados y automáticos están bloqueados hasta retirar la preferencia.</p></div> : null}
     {deliveryReviews.length ? <div role="alert" className="mb-3 rounded-xl border border-amber-400/20 bg-amber-400/[.05] px-4 py-3 text-xs text-amber-100/80">
@@ -206,7 +229,6 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
         </div> : null}
       </div>)}</div>
     </div> : null}
-    {mediaOpen ? <p className="mb-3 rounded-xl border border-amber-400/15 bg-amber-400/[.04] px-3 py-2 text-[11px] leading-5 text-amber-200/80">Para seguidores no suscritos, confirma que los archivos gratuitos son SFW. El PPV o contenido íntimo requiere suscripción activa o consentimiento registrado en Fan Lifecycle.</p> : null}
     {scheduledMessages.length ? <div className="mb-3 rounded-xl border border-sky-400/15 bg-sky-400/[.04] p-3"><div className="flex items-center gap-2 text-xs font-medium text-sky-200"><CalendarClock className="size-4" />Próximos mensajes</div><div className="mt-2 space-y-1.5">{scheduledMessages.map((message) => <div key={message.id} className="flex items-center gap-3 rounded-lg bg-black/15 px-3 py-2"><div className="min-w-0 flex-1"><p className="truncate text-[11px] text-zinc-300">{message.text || `${message.mediaCount} archivo${message.mediaCount === 1 ? "" : "s"}${message.priceMinor ? ` · PPV $${(message.priceMinor / 100).toFixed(2)}` : ""}`}</p><time className="text-[10px] text-zinc-600">{new Date(message.scheduledAt).toLocaleString("es-MX")}</time></div><button type="button" disabled={cancelling === message.id} onClick={() => void cancelScheduled(message.id)} aria-label="Cancelar mensaje programado" className="grid size-8 place-items-center rounded-lg text-zinc-600 hover:bg-rose-400/10 hover:text-rose-300 disabled:opacity-40">{cancelling === message.id ? <LoaderCircle className="size-3.5 animate-spin" /> : <X className="size-3.5" />}</button></div>)}</div></div> : null}
     {aiOpen ? <section className="mb-3 overflow-hidden rounded-2xl border border-violet-400/20 bg-gradient-to-br from-violet-500/[.09] via-[#181922] to-fuchsia-500/[.04] shadow-xl shadow-black/15" aria-live="polite">
       <div className="flex items-start justify-between gap-3 border-b border-white/8 px-4 py-3">
@@ -225,13 +247,30 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
       <div className="flex items-center gap-2 border-b border-white/8 px-4 py-3"><Sparkles className="size-4 text-violet-400" /><div><p className="text-xs font-medium text-zinc-200">Plantillas</p><p className="text-[10px] text-zinc-600">{command.query ? `Resultados para “${command.query}”` : "Escribe para buscar · ↑↓ para navegar · Enter para usar"}</p></div></div>
       <div className="max-h-72 overflow-y-auto">{matches.map((template, index) => <button key={template.id} type="button" onMouseDown={event => event.preventDefault()} onClick={() => chooseTemplate(template)} className={`flex w-full items-start gap-3 px-4 py-3 text-left transition ${index === activeCommand ? "bg-violet-500/15" : "hover:bg-white/5"}`}><span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-violet-500/10 text-violet-300"><FileText className="size-4" /></span><span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="truncate text-sm font-medium text-zinc-200">{template.name}</span><span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-zinc-500">{categoryLabels[template.category] ?? template.category}</span></span><span className="mt-1 block truncate text-xs text-zinc-500">{renderTemplate(template.text, fanName, username) || `${template.media.length} archivos`}</span></span></button>)}{matches.length === 0 ? <div className="px-4 py-6 text-center text-xs text-zinc-500">No hay plantillas que coincidan.</div> : null}</div>
     </div> : null}
-    <div className={mediaOpen ? "absolute bottom-[calc(100%-4px)] left-3 right-3 z-20 max-h-[60dvh] overflow-y-auto rounded-2xl border border-white/10 bg-[#1a1c23] p-4 shadow-2xl shadow-black/50" : "hidden"}><div className="mb-3 flex items-center justify-between"><div><p className="text-sm font-medium text-zinc-200">Fotos, videos y PPV</p><p className="mt-0.5 text-[10px] text-zinc-600">Adjunta hasta 10 archivos y configura el precio.</p></div><button type="button" onClick={() => setMediaOpen(false)} className="rounded-lg bg-white/5 px-2.5 py-1.5 text-xs text-zinc-400 hover:text-white">Cerrar</button></div><MediaFields key={templateId || "new"} initialMedia={selected?.media} initialPriceMinor={selected?.priceMinor} initialPreviewUuid={selected?.previewUuid} initialSfwAttested={selected?.sfwAttested} allowSfwAttestation onValueChange={(value) => { setMediaCount(value.media.length); if (selected && (selected.media.length !== value.media.length || selected.media.some((item, index) => item.uuid !== value.media[index]?.uuid))) setMediaOrigin(""); }} />{mediaCount > 0 && !profileAiLabelConfirmed ? <fieldset className="mt-3 rounded-xl border border-white/10 p-3"><legend className="px-1 text-xs text-zinc-300">Origen de los archivos</legend><label className="flex items-center gap-2 text-xs text-zinc-400"><input type="radio" checked={mediaOrigin === "original"} onChange={() => setMediaOrigin("original")} />Originales</label><label className="mt-2 flex items-center gap-2 text-xs text-zinc-400"><input type="radio" checked={mediaOrigin === "ai_generated"} onChange={() => setMediaOrigin("ai_generated")} />Generados o alterados con IA</label></fieldset> : null}</div>
-    <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-black/20 p-2 shadow-inner focus-within:border-violet-500/45">
-      <button type="button" disabled={doNotMessage} aria-label="Agregar fotos y videos" title="Agregar fotos y videos" onClick={() => { setCommand(null); setMediaOpen(open => !open); }} className={`grid size-10 shrink-0 place-items-center rounded-xl transition disabled:cursor-not-allowed disabled:opacity-35 ${mediaOpen ? "rotate-45 bg-violet-500 text-white" : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"}`}><Plus className="size-5" /></button>
-      <div className="min-w-0 flex-1"><textarea ref={textarea} name="text" value={text} disabled={doNotMessage} onChange={event => { setText(event.target.value); updateCommand(event.target.value, event.target.selectionStart); }} onClick={event => updateCommand(text, event.currentTarget.selectionStart)} onKeyDown={handleKeyDown} maxLength={5000} rows={1} placeholder={doNotMessage ? "Mensajería bloqueada para este fan" : "Escribe un mensaje o / para usar una plantilla…"} className="max-h-32 min-h-10 w-full resize-none bg-transparent px-2 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 disabled:cursor-not-allowed disabled:opacity-50" /><div className="flex flex-wrap items-center gap-1 px-2 pb-1">{["{{nombre}}", "{{usuario}}"].map(variable => <button key={variable} type="button" disabled={doNotMessage} onClick={() => insertVariable(variable)} className="rounded px-1.5 py-0.5 font-mono text-[9px] text-zinc-600 hover:bg-violet-500/10 hover:text-violet-300 disabled:cursor-not-allowed disabled:opacity-35">{variable}</button>)}{text.trim() ? <button type="button" disabled={doNotMessage || aiLoading} onClick={() => void generateAiSuggestion("improve")} className="ml-1 inline-flex items-center gap-1 rounded-md bg-violet-500/10 px-2 py-1 text-[10px] font-medium text-violet-300 transition hover:bg-violet-500/20 hover:text-violet-200 disabled:cursor-not-allowed disabled:opacity-35"><Sparkles className="size-3" />Mejorar</button> : null}</div></div>
-      <button type="button" disabled={doNotMessage || aiLoading} onClick={() => void generateAiSuggestion("reply")} aria-label="Generar respuesta con IA" title="Generar respuesta con IA" className={`grid size-10 shrink-0 place-items-center rounded-xl transition disabled:cursor-not-allowed disabled:opacity-35 ${aiOpen && aiMode === "reply" ? "bg-violet-500/20 text-violet-200" : "bg-white/5 text-violet-300 hover:bg-violet-500/15 hover:text-violet-200"}`}>{aiLoading && aiMode === "reply" ? <LoaderCircle className="size-4 animate-spin" /> : <WandSparkles className="size-4" />}</button>
-      <button type="button" disabled={doNotMessage} onClick={() => setScheduleOpen((open) => !open)} aria-label="Programar mensaje" title="Programar mensaje" className={`grid size-10 shrink-0 place-items-center rounded-xl transition disabled:cursor-not-allowed disabled:opacity-35 ${scheduleOpen ? "bg-sky-500 text-white" : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"}`}><CalendarClock className="size-4" /></button>
-      <SendMessageButton scheduled={Boolean(scheduledLocal)} disabled={doNotMessage || (scheduleOpen && !scheduledLocal)} />
+    {mediaOpen ? <div className="fixed inset-0 z-[220] flex items-end justify-center bg-black/75 p-0 backdrop-blur-sm sm:items-center sm:p-5" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setMediaOpen(false); }}><section role="dialog" aria-modal="true" aria-labelledby="chat-media-title" className="flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[#181a21] shadow-2xl shadow-black/70 sm:rounded-3xl"><header className="flex shrink-0 items-start justify-between gap-3 border-b border-white/8 bg-[#181a21] px-5 py-4"><div><h2 id="chat-media-title" className="text-sm font-semibold text-zinc-100">Fotos, videos y PPV</h2><p className="mt-1 text-[11px] text-zinc-500">Adjunta hasta 10 archivos y configura qué verá el fan.</p></div><button type="button" onClick={() => setMediaOpen(false)} aria-label="Cerrar archivos" className="grid size-9 cursor-pointer place-items-center rounded-xl text-zinc-500 hover:bg-white/5 hover:text-white"><X className="size-4" /></button></header><div className="min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5"><p className="mb-4 rounded-xl border border-amber-400/15 bg-amber-400/[.04] px-3 py-2 text-[11px] leading-5 text-amber-200/80">Para seguidores no suscritos, confirma que los archivos gratuitos son SFW. El PPV o contenido íntimo requiere suscripción activa o consentimiento registrado en Fan Lifecycle.</p><MediaFields key={templateId || "new"} initialMedia={selected?.media} initialPriceMinor={selected?.priceMinor} initialPreviewUuid={selected?.previewUuid} initialSfwAttested={selected?.sfwAttested} allowSfwAttestation onValueChange={(value) => { setMediaCount(value.media.length); if (selected && (selected.media.length !== value.media.length || selected.media.some((item, index) => item.uuid !== value.media[index]?.uuid))) setMediaOrigin(""); }} />{mediaCount > 0 && !profileAiLabelConfirmed ? <fieldset className="mt-3 rounded-xl border border-white/10 p-3"><legend className="px-1 text-xs text-zinc-300">Origen de los archivos</legend><label className="flex items-center gap-2 text-xs text-zinc-400"><input type="radio" checked={mediaOrigin === "original"} onChange={() => setMediaOrigin("original")} />Originales</label><label className="mt-2 flex items-center gap-2 text-xs text-zinc-400"><input type="radio" checked={mediaOrigin === "ai_generated"} onChange={() => setMediaOrigin("ai_generated")} />Generados o alterados con IA</label></fieldset> : null}</div><footer className="flex shrink-0 justify-end border-t border-white/8 bg-[#181a21] px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"><button type="button" onClick={() => setMediaOpen(false)} className="cursor-pointer rounded-xl bg-violet-500 px-5 py-2.5 text-xs font-semibold text-white hover:bg-violet-400">Listo</button></footer></section></div> : null}
+    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
+      <span className="text-[11px] font-medium text-zinc-500">Mensaje para <span className="text-zinc-300">{fanName}</span></span>
+      <div className="flex items-center gap-2">
+        <details ref={variablesMenu} className="group relative">
+          <summary className="inline-flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-white/8 px-2.5 text-[11px] font-medium text-zinc-400 transition hover:border-white/15 hover:bg-white/5 hover:text-zinc-200 [&::-webkit-details-marker]:hidden"><Braces className="size-3.5" />Personalizar</summary>
+          <div className="absolute bottom-full right-0 z-30 mb-2 w-52 rounded-xl border border-white/10 bg-[#20222b] p-1.5 shadow-xl shadow-black/40">
+            <p className="px-2 py-1 text-[10px] text-zinc-500">Insertar dato del fan</p>
+            {([ ["{{nombre}}", "Nombre"], ["{{usuario}}", "Usuario"] ] as const).map(([variable, label]) => <button key={variable} type="button" disabled={doNotMessage} onClick={() => insertVariable(variable)} className="flex w-full cursor-pointer items-center justify-between rounded-lg px-2 py-2 text-left text-xs text-zinc-200 hover:bg-violet-500/10 disabled:opacity-40"><span>{label}</span><span className="font-mono text-[10px] text-zinc-500">{variable}</span></button>)}
+          </div>
+        </details>
+        <button type="button" disabled={doNotMessage || aiLoading || !text.trim()} onClick={() => void generateAiSuggestion("improve")} className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-violet-400/15 bg-violet-500/[.08] px-3 text-[11px] font-medium text-violet-200 transition hover:border-violet-400/30 hover:bg-violet-500/15 disabled:cursor-not-allowed disabled:opacity-40"><Sparkles className="size-3.5" />Mejorar borrador</button>
+      </div>
+    </div>
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-2 shadow-inner transition focus-within:border-violet-500/35 focus-within:ring-2 focus-within:ring-violet-500/10">
+      <textarea ref={textarea} name="text" value={text} disabled={doNotMessage} onChange={event => { setText(event.target.value); updateCommand(event.target.value, event.target.selectionStart); }} onClick={event => updateCommand(text, event.currentTarget.selectionStart)} onKeyDown={handleKeyDown} maxLength={5000} rows={3} placeholder={doNotMessage ? "Mensajería bloqueada para este fan" : "Escribe tu mensaje… Usa / para buscar una plantilla."} aria-label="Escribir mensaje" className="max-h-52 min-h-20 w-full resize-none bg-transparent px-2 py-2 text-sm leading-6 text-zinc-200 outline-none placeholder:text-zinc-600 disabled:cursor-not-allowed disabled:opacity-50" />
+      <div className="flex items-center justify-between gap-2 border-t border-white/8 pt-2">
+        <div className="flex items-center gap-1.5">
+          <button type="button" disabled={doNotMessage} aria-label="Agregar fotos y videos" title="Agregar fotos y videos" onClick={() => { setCommand(null); setMediaOpen(open => !open); }} className={`grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg transition disabled:cursor-not-allowed disabled:opacity-35 ${mediaOpen ? "rotate-45 bg-violet-500 text-white" : "text-zinc-400 hover:bg-white/8 hover:text-white"}`}><Plus className="size-5" /></button>
+          <button type="button" disabled={doNotMessage || aiLoading} onClick={() => void generateAiSuggestion("reply")} aria-label="Generar respuesta con IA" title="Generar respuesta con IA" className={`grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg transition disabled:cursor-not-allowed disabled:opacity-35 ${aiOpen && aiMode === "reply" ? "bg-violet-500/20 text-violet-200" : "text-violet-300 hover:bg-violet-500/15 hover:text-violet-200"}`}>{aiLoading && aiMode === "reply" ? <LoaderCircle className="size-4 animate-spin" /> : <WandSparkles className="size-4" />}</button>
+          <button type="button" disabled={doNotMessage} onClick={() => setScheduleOpen((open) => !open)} aria-label="Programar mensaje" title="Programar mensaje" className={`grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg transition disabled:cursor-not-allowed disabled:opacity-35 ${scheduleOpen ? "bg-sky-500 text-white" : "text-zinc-400 hover:bg-white/8 hover:text-white"}`}><CalendarClock className="size-4" /></button>
+        </div>
+        <SendMessageButton scheduled={Boolean(scheduledLocal)} disabled={doNotMessage || (scheduleOpen && !scheduledLocal)} />
+      </div>
     </div>
     {scheduleOpen ? <div className="mt-2 flex flex-col gap-2 rounded-xl border border-sky-400/15 bg-sky-400/[.04] p-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="text-xs font-medium text-sky-100">Programar para después</p><p className="mt-0.5 text-[10px] text-zinc-600">El cron lo enviará aunque cierres la aplicación.</p></div><input type="datetime-local" value={scheduledLocal} onChange={(event) => setScheduledLocal(event.target.value)} className="h-10 rounded-lg border border-white/10 bg-[#171920] px-3 text-xs text-zinc-200 outline-none focus:border-sky-400/40" /><button type="button" onClick={() => { setScheduleOpen(false); setScheduledLocal(""); }} className="rounded-lg px-3 py-2 text-xs text-zinc-500 hover:bg-white/5 hover:text-white">Cancelar</button></div> : null}
   </form>;
