@@ -19,7 +19,11 @@ body {
 }
 
 * { box-sizing: border-box; }
-html { min-width: 320px; }
+html {
+  min-width: 320px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 button, a, summary { outline-offset: 3px; }
 button:not(:disabled),
 [role="button"]:not([aria-disabled="true"]),
@@ -93,5 +97,14 @@ select:disabled { cursor: not-allowed; }
 
   [data-workflow-editor] select {
     text-overflow: ellipsis;
+  }
+}
+
+/* iOS Safari amplía automáticamente cualquier control con texto menor a 16px.
+   Corregir el tamaño del control conserva el viewport sin desactivar el zoom
+   manual del navegador, que debe seguir disponible por accesibilidad. */
+@media (max-width: 767px) and (pointer: coarse) {
+  :where(input, textarea, select) {
+    font-size: 16px !important;
   }
 }
