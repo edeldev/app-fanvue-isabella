@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bot, Braces, CalendarClock, Check, Copy, FileText, Languages, LoaderCircle, Plus, RefreshCw, Send, Sparkles, WandSparkles, X } from "lucide-react";
+import { Bot, Braces, CalendarClock, Check, Copy, FileText, Film, ImageIcon, Languages, LoaderCircle, Plus, RefreshCw, Send, Sparkles, WandSparkles, X } from "lucide-react";
 import { MediaFields, type AttachedMedia } from "@/components/media-fields";
 import { enqueueSnackbar } from "notistack";
 
@@ -26,6 +26,12 @@ type AiSuggestion = {
   contextSummary: string;
 };
 type AiMode = "reply" | "improve";
+type ComposerMediaValue = {
+  media: AttachedMedia[];
+  priceMinor: number | null;
+  previewUuid: string | null;
+  sfwAttested: boolean;
+};
 
 export function MessageComposer({ fanUuid, fanName, username, templates, profileAiLabelConfirmed = false, doNotMessage = false, scheduledMessages = [], deliveryReviews = [] }: { fanUuid: string; fanName: string; username: string; templates: Template[]; profileAiLabelConfirmed?: boolean; doNotMessage?: boolean; scheduledMessages?: ScheduledMessage[]; deliveryReviews?: DeliveryReview[] }) {
   const router = useRouter();
@@ -34,6 +40,12 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
   const [templateId, setTemplateId] = useState("");
   const [mediaOrigin, setMediaOrigin] = useState<"original" | "ai_generated" | "">("");
   const [mediaCount, setMediaCount] = useState(0);
+  const [mediaValue, setMediaValue] = useState<ComposerMediaValue>({
+    media: [],
+    priceMinor: null,
+    previewUuid: null,
+    sfwAttested: false,
+  });
   const [mediaOpen, setMediaOpen] = useState(false);
   const [command, setCommand] = useState<{ query: string; start: number; end: number } | null>(null);
   const [activeCommand, setActiveCommand] = useState(0);
@@ -247,7 +259,8 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
       <div className="flex items-center gap-2 border-b border-white/8 px-4 py-3"><Sparkles className="size-4 text-violet-400" /><div><p className="text-xs font-medium text-zinc-200">Plantillas</p><p className="text-[10px] text-zinc-600">{command.query ? `Resultados para “${command.query}”` : "Escribe para buscar · ↑↓ para navegar · Enter para usar"}</p></div></div>
       <div className="max-h-72 overflow-y-auto">{matches.map((template, index) => <button key={template.id} type="button" onMouseDown={event => event.preventDefault()} onClick={() => chooseTemplate(template)} className={`flex w-full items-start gap-3 px-4 py-3 text-left transition ${index === activeCommand ? "bg-violet-500/15" : "hover:bg-white/5"}`}><span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-violet-500/10 text-violet-300"><FileText className="size-4" /></span><span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="truncate text-sm font-medium text-zinc-200">{template.name}</span><span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-zinc-500">{categoryLabels[template.category] ?? template.category}</span></span><span className="mt-1 block truncate text-xs text-zinc-500">{renderTemplate(template.text, fanName, username) || `${template.media.length} archivos`}</span></span></button>)}{matches.length === 0 ? <div className="px-4 py-6 text-center text-xs text-zinc-500">No hay plantillas que coincidan.</div> : null}</div>
     </div> : null}
-    {mediaOpen ? <div className="fixed inset-0 z-[220] flex items-end justify-center bg-black/75 p-0 backdrop-blur-sm sm:items-center sm:p-5" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setMediaOpen(false); }}><section role="dialog" aria-modal="true" aria-labelledby="chat-media-title" className="flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[#181a21] shadow-2xl shadow-black/70 sm:rounded-3xl"><header className="flex shrink-0 items-start justify-between gap-3 border-b border-white/8 bg-[#181a21] px-5 py-4"><div><h2 id="chat-media-title" className="text-sm font-semibold text-zinc-100">Fotos, videos y PPV</h2><p className="mt-1 text-[11px] text-zinc-500">Adjunta hasta 10 archivos y configura qué verá el fan.</p></div><button type="button" onClick={() => setMediaOpen(false)} aria-label="Cerrar archivos" className="grid size-9 cursor-pointer place-items-center rounded-xl text-zinc-500 hover:bg-white/5 hover:text-white"><X className="size-4" /></button></header><div className="min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5"><p className="mb-4 rounded-xl border border-amber-400/15 bg-amber-400/[.04] px-3 py-2 text-[11px] leading-5 text-amber-200/80">Para seguidores no suscritos, confirma que los archivos gratuitos son SFW. El PPV o contenido íntimo requiere suscripción activa o consentimiento registrado en Fan Lifecycle.</p><MediaFields key={templateId || "new"} initialMedia={selected?.media} initialPriceMinor={selected?.priceMinor} initialPreviewUuid={selected?.previewUuid} initialSfwAttested={selected?.sfwAttested} allowSfwAttestation onValueChange={(value) => { setMediaCount(value.media.length); if (selected && (selected.media.length !== value.media.length || selected.media.some((item, index) => item.uuid !== value.media[index]?.uuid))) setMediaOrigin(""); }} />{mediaCount > 0 && !profileAiLabelConfirmed ? <fieldset className="mt-3 rounded-xl border border-white/10 p-3"><legend className="px-1 text-xs text-zinc-300">Origen de los archivos</legend><label className="flex items-center gap-2 text-xs text-zinc-400"><input type="radio" checked={mediaOrigin === "original"} onChange={() => setMediaOrigin("original")} />Originales</label><label className="mt-2 flex items-center gap-2 text-xs text-zinc-400"><input type="radio" checked={mediaOrigin === "ai_generated"} onChange={() => setMediaOrigin("ai_generated")} />Generados o alterados con IA</label></fieldset> : null}</div><footer className="flex shrink-0 justify-end border-t border-white/8 bg-[#181a21] px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"><button type="button" onClick={() => setMediaOpen(false)} className="cursor-pointer rounded-xl bg-violet-500 px-5 py-2.5 text-xs font-semibold text-white hover:bg-violet-400">Listo</button></footer></section></div> : null}
+    <div className={`${mediaOpen ? "flex" : "hidden"} fixed inset-0 z-[220] items-end justify-center bg-black/75 p-0 backdrop-blur-sm sm:items-center sm:p-5`} role="presentation" aria-hidden={!mediaOpen} onMouseDown={(event) => { if (event.target === event.currentTarget) setMediaOpen(false); }}><section role="dialog" aria-modal="true" aria-labelledby="chat-media-title" className="flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[#181a21] shadow-2xl shadow-black/70 sm:rounded-3xl"><header className="flex shrink-0 items-start justify-between gap-3 border-b border-white/8 bg-[#181a21] px-5 py-4"><div><h2 id="chat-media-title" className="text-sm font-semibold text-zinc-100">Fotos, videos y PPV</h2><p className="mt-1 text-[11px] text-zinc-500">Adjunta hasta 10 archivos y configura qué verá el fan.</p></div><button type="button" onClick={() => setMediaOpen(false)} aria-label="Cerrar archivos" className="grid size-9 cursor-pointer place-items-center rounded-xl text-zinc-500 hover:bg-white/5 hover:text-white"><X className="size-4" /></button></header><div className="min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5"><p className="mb-4 rounded-xl border border-amber-400/15 bg-amber-400/[.04] px-3 py-2 text-[11px] leading-5 text-amber-200/80">Para seguidores no suscritos, confirma que los archivos gratuitos son SFW. El PPV o contenido íntimo requiere suscripción activa o consentimiento registrado en Fan Lifecycle.</p><MediaFields key={templateId || "new"} initialMedia={selected?.media} initialPriceMinor={selected?.priceMinor} initialPreviewUuid={selected?.previewUuid} initialSfwAttested={selected?.sfwAttested} allowSfwAttestation onValueChange={(value) => { setMediaCount(value.media.length); setMediaValue(value); if (selected && (selected.media.length !== value.media.length || selected.media.some((item, index) => item.uuid !== value.media[index]?.uuid))) setMediaOrigin(""); }} />{mediaCount > 0 && !profileAiLabelConfirmed ? <fieldset className="mt-3 rounded-xl border border-white/10 p-3"><legend className="px-1 text-xs text-zinc-300">Origen de los archivos</legend><label className="flex items-center gap-2 text-xs text-zinc-400"><input type="radio" checked={mediaOrigin === "original"} onChange={() => setMediaOrigin("original")} />Originales</label><label className="mt-2 flex items-center gap-2 text-xs text-zinc-400"><input type="radio" checked={mediaOrigin === "ai_generated"} onChange={() => setMediaOrigin("ai_generated")} />Generados o alterados con IA</label></fieldset> : null}</div><footer className="flex shrink-0 justify-end border-t border-white/8 bg-[#181a21] px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"><button type="button" onClick={() => setMediaOpen(false)} className="cursor-pointer rounded-xl bg-violet-500 px-5 py-2.5 text-xs font-semibold text-white hover:bg-violet-400">Listo</button></footer></section></div>
+    {mediaValue.media.length > 0 && !mediaOpen ? <ComposerMediaSummary value={mediaValue} onEdit={() => setMediaOpen(true)} /> : null}
     <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
       <span className="text-[11px] font-medium text-zinc-500">Mensaje para <span className="text-zinc-300">{fanName}</span></span>
       <div className="flex items-center gap-2">
@@ -274,6 +287,33 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
     </div>
     {scheduleOpen ? <div className="mt-2 flex flex-col gap-2 rounded-xl border border-sky-400/15 bg-sky-400/[.04] p-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="text-xs font-medium text-sky-100">Programar para después</p><p className="mt-0.5 text-[10px] text-zinc-600">El cron lo enviará aunque cierres la aplicación.</p></div><input type="datetime-local" value={scheduledLocal} onChange={(event) => setScheduledLocal(event.target.value)} className="h-10 rounded-lg border border-white/10 bg-[#171920] px-3 text-xs text-zinc-200 outline-none focus:border-sky-400/40" /><button type="button" onClick={() => { setScheduleOpen(false); setScheduledLocal(""); }} className="rounded-lg px-3 py-2 text-xs text-zinc-500 hover:bg-white/5 hover:text-white">Cancelar</button></div> : null}
   </form>;
+}
+
+function ComposerMediaSummary({ value, onEdit }: { value: ComposerMediaValue; onEdit: () => void }) {
+  const visible = value.media.slice(0, 4);
+  const remaining = value.media.length - visible.length;
+  const detail = value.priceMinor !== null
+    ? `PPV · $${(value.priceMinor / 100).toFixed(2)} USD · ${value.previewUuid ? "con vista gratuita" : "todo bloqueado"}`
+    : "Contenido gratuito";
+
+  return <button type="button" onClick={onEdit} className="group mb-2 flex w-full cursor-pointer items-center gap-3 overflow-hidden rounded-2xl border border-white/8 bg-gradient-to-r from-white/[.035] to-transparent p-2.5 text-left transition hover:border-violet-400/25 hover:from-violet-400/[.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30">
+    <span className={`grid h-14 w-[4.75rem] shrink-0 gap-1 overflow-hidden rounded-xl bg-black/25 p-1 ${visible.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+      {visible.map((media, index) => {
+        const source = media.thumbnailUrl ?? media.localUrl;
+        const isVideo = media.mediaType === "video";
+        return <span key={media.uuid} className={`relative min-h-0 overflow-hidden rounded-lg bg-white/[.04] ${visible.length === 3 && index === 0 ? "row-span-2" : ""}`}>
+          {source ? <span aria-hidden="true" className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${JSON.stringify(source)})` }} /> : <span className="absolute inset-0 grid place-items-center text-zinc-600">{isVideo ? <Film className="size-3.5" /> : <ImageIcon className="size-3.5" />}</span>}
+          {isVideo ? <span className="absolute bottom-1 right-1 grid size-4 place-items-center rounded-full bg-black/75 text-white"><Film className="size-2.5" /></span> : null}
+          {remaining > 0 && index === visible.length - 1 ? <span className="absolute inset-0 grid place-items-center bg-black/70 text-[11px] font-semibold text-white backdrop-blur-[1px]">+{remaining}</span> : null}
+        </span>;
+      })}
+    </span>
+    <span className="min-w-0 flex-1">
+      <span className="block truncate text-xs font-semibold text-zinc-200">{value.media.length} {value.media.length === 1 ? "archivo listo" : "archivos listos"}</span>
+      <span className="mt-1 block truncate text-[10px] text-zinc-500">{detail}</span>
+    </span>
+    <span className="shrink-0 rounded-lg border border-violet-400/15 bg-violet-400/[.06] px-2.5 py-1.5 text-[10px] font-medium text-violet-300 transition group-hover:border-violet-400/30 group-hover:bg-violet-400/10">Editar</span>
+  </button>;
 }
 
 function SendMessageButton({ scheduled, disabled }: { scheduled: boolean; disabled: boolean }) {

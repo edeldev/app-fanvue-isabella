@@ -42,7 +42,7 @@ export function MediaLightbox({
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
-      className="fixed inset-0 z-[400] grid place-items-center bg-black/95 p-4 backdrop-blur-md"
+      className="fixed inset-0 z-[700] grid place-items-center bg-black/95 p-4 backdrop-blur-md"
     >
       <button
         ref={closeButton}
@@ -117,7 +117,7 @@ export function MediaGalleryLightbox({
 
   if (!item) return null;
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={`Galería de ${item.name}`} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }} className="fixed inset-0 z-[400] grid place-items-center bg-black/95 p-4 backdrop-blur-md">
+    <div role="dialog" aria-modal="true" aria-label={`Galería de ${item.name}`} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }} className="fixed inset-0 z-[700] grid place-items-center bg-black/95 p-4 backdrop-blur-md">
       <button ref={closeButton} type="button" onClick={onClose} aria-label="Cerrar galería" className="absolute right-4 top-4 z-20 grid size-11 place-items-center rounded-full border border-white/10 bg-black/70 text-white shadow-xl hover:bg-white/15"><X className="size-5" /></button>
       {items.length > 1 ? <span className="absolute left-1/2 top-5 z-20 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1.5 text-xs font-medium text-white">{index + 1} / {items.length}</span> : null}
       {item.type === "video" ? <video key={item.id} src={item.src} poster={item.poster} controls autoPlay playsInline onMouseDown={(event) => event.stopPropagation()} className="max-h-[88dvh] max-w-[90vw] rounded-xl bg-black object-contain shadow-2xl" /> : <img key={item.id} src={item.src} alt={item.name} onMouseDown={(event) => event.stopPropagation()} className="max-h-[88dvh] max-w-[90vw] rounded-xl object-contain shadow-2xl" />}

@@ -11,6 +11,7 @@ import { MessageComposer } from "@/components/message-composer";
 import { MessageTranslation } from "@/components/message-translation";
 import { ExpandableImage } from "@/components/expandable-image";
 import { ChatMediaCarousel } from "@/components/chat-media-carousel";
+import { resolveMessagePreviewUuid } from "@/domain/messages/ppv-preview";
 import { fanvueRequest } from "@/lib/fanvue/client";
 import {
   chatMediaPageSchema,
@@ -246,7 +247,11 @@ export default async function MessagesPage({ searchParams }: Props) {
                     ? savedMediaUuids
                     : message.mediaUuids,
                 mediaPreviewUuid:
-                  saved?.mediaPreviewUuid ?? message.mediaPreviewUuid,
+                  saved ? saved.mediaPreviewUuid : message.mediaPreviewUuid,
+                previewMediaUuid:
+                  saved ? null : message.previewMediaUuid,
+                media_preview_uuid:
+                  saved ? null : message.media_preview_uuid,
                 pricing:
                   saved?.priceMinor != null
                     ? { USD: { price: saved.priceMinor } }
@@ -476,17 +481,12 @@ export default async function MessagesPage({ searchParams }: Props) {
                           message.mediaPreviewUuid ??
                           message.previewMediaUuid ??
                           message.media_preview_uuid;
-                        const unattachedMedia = media.filter(
-                          (item) => !message.mediaUuids.includes(item.uuid),
-                        );
-                        const inferredPreviewUuid =
-                          !previewUuid &&
-                          unattachedMedia.length === 1 &&
-                          media.length === message.mediaUuids.length + 1
-                            ? unattachedMedia[0].uuid
-                            : null;
-                        const effectivePreviewUuid =
-                          previewUuid ?? inferredPreviewUuid;
+                        const effectivePreviewUuid = resolveMessagePreviewUuid({
+                          explicitPreviewUuid: previewUuid ?? null,
+                          messageMediaUuids: message.mediaUuids,
+                          resolvedMediaUuids: media.map((item) => item.uuid),
+                          priceMinor: ppvPrice,
+                        });
                         return (
                           <div
                             key={`${message.uuid}-${messageIndex}`}
