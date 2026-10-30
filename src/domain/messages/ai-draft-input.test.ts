@@ -15,8 +15,22 @@ describe("buildAiDraftInput", () => {
   });
 
   it("keeps the current fan turn for generating a new reply", () => {
-    const input = buildAiDraftInput({ mode: "reply", fanName: "Fan", currentFanTurn: [context[2]], context });
+    const input = buildAiDraftInput({ mode: "reply", fanName: "Fan", previousSuggestions: ["Jajaja pillín, dime más", "Jajaja pillín, dime más"], responseVariation: 2, currentFanTurn: [context[2]], context });
     expect(input.task).toBe("reply_to_fan");
     expect(JSON.stringify(input)).toContain("¿Qué haces ahora?");
+    expect(input.avoidRecentOpenings).toEqual(["Me gusta hablar contigo 💜"]);
+    expect(input.avoidPreviousSuggestions).toEqual(["Jajaja pillín, dime más"]);
+    expect(input.responseVariation).toBe(2);
+  });
+
+  it("deduplicates recent creator openings", () => {
+    const repeated = [
+      ...context,
+      { id: "creator-2", role: "creator" as const, text: "Jajaja pillín, cuéntame más", sentAt: new Date("2026-10-28T12:03:00Z") },
+      { id: "creator-3", role: "creator" as const, text: "Jajaja pillín, cuéntame más", sentAt: new Date("2026-10-28T12:04:00Z") },
+    ];
+    const input = buildAiDraftInput({ mode: "reply", fanName: "Fan", currentFanTurn: [context[2]], context: repeated });
+    if (input.task !== "reply_to_fan") throw new Error("Expected reply input");
+    expect(input.avoidRecentOpenings.filter((opening) => opening === "Jajaja pillín, cuéntame más")).toHaveLength(1);
   });
 });

@@ -61,6 +61,8 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
   const [aiContextMessages, setAiContextMessages] = useState(0);
   const [aiError, setAiError] = useState("");
   const [aiMode, setAiMode] = useState<AiMode>("reply");
+  const [aiSuggestionHistory, setAiSuggestionHistory] = useState<string[]>([]);
+  const [aiVariation, setAiVariation] = useState(-1);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const variablesMenu = useRef<HTMLDetailsElement>(null);
   const sendIntentInput = useRef<HTMLInputElement>(null);
@@ -173,6 +175,11 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
 
   async function generateAiSuggestion(mode: AiMode = "reply") {
     if (mode === "improve" && !text.trim()) return;
+    const sameMode = mode === aiMode;
+    const previousSuggestions = sameMode
+      ? [...aiSuggestionHistory, aiSuggestion?.reply ?? ""].filter(Boolean).slice(-4)
+      : [];
+    const responseVariation = sameMode ? (aiVariation + 1) % 5 : 0;
     setAiMode(mode);
     setAiOpen(true);
     setAiLoading(true);
@@ -182,12 +189,14 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
       const response = await fetch("/api/messages/generate-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fanUuid, currentDraft: text.trim() || undefined, mode }),
+        body: JSON.stringify({ fanUuid, currentDraft: text.trim() || undefined, previousSuggestions, responseVariation, mode }),
         signal: AbortSignal.timeout(42_000),
       });
       const body = await response.json().catch(() => null) as { error?: string; suggestion?: AiSuggestion; contextMessages?: number } | null;
       if (!response.ok || !body?.suggestion) throw new Error(body?.error || "No se pudo generar una respuesta.");
       setAiSuggestion(body.suggestion);
+      setAiSuggestionHistory(previousSuggestions);
+      setAiVariation(responseVariation);
       setAiContextMessages(body.contextMessages ?? 0);
     } catch (error) {
       const message = error instanceof Error && error.name === "TimeoutError" ? "La IA tardó demasiado. Inténtalo otra vez; tu borrador sigue intacto." : error instanceof Error ? error.message : "No se pudo generar una respuesta.";
