@@ -260,6 +260,8 @@ async function executeCondition(enrollment: LoadedEnrollment, step: NonNullable<
     isTopSpender: enrollment.fan.isTopSpender,
     totalSpentMinor: enrollment.fan.totalSpentMinor,
     paidPurchasesCount: enrollment.fan._count.purchases,
+    intimateContentOptIn: enrollment.fan.intimateContentOptIn,
+    intimateContentOptInSource: enrollment.fan.intimateContentOptInSource,
   };
   const matched = evaluateWorkflowConditionGroup(operator, rules, fanFacts);
   const targetKey = String(matched ? config.trueTargetKey : config.falseTargetKey);

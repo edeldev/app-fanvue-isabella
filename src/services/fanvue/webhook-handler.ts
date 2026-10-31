@@ -13,6 +13,7 @@ import { completeMatchingWorkflowGoals } from "@/services/workflows/complete-wor
 import { recalculateFanLifecycle } from "@/services/lifecycle/recalculate-fan-lifecycle";
 import { subscriptionAutomationTrigger } from "@/domain/workflows/subscription-automation-trigger";
 import { refreshFanMemory } from "@/services/intelligence/refresh-fan-memory";
+import { detectAndRecordIntimateConsent } from "@/services/lifecycle/detect-intimate-consent";
 
 const personSchema = z.object({
   uuid: z.string(),
@@ -198,13 +199,14 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
       update: { lastMessageAt: data.created_at ? new Date(data.created_at) : undefined, isMuted: data.is_muted, unreadMessagesCount: data.unread_messages_count },
       create: { creatorId, fanId: fan.id, lastMessageAt: data.created_at ? new Date(data.created_at) : null, isMuted: data.is_muted ?? false, unreadMessagesCount: data.unread_messages_count ?? 0 },
     });
-    await prisma.message.upsert({
+    const storedMessage = await prisma.message.upsert({
       where: { creatorId_fanvueMessageId: { creatorId, fanvueMessageId: data.uuid } },
       update: { text: data.text, deletedAt: data.deleted_at ? new Date(data.deleted_at) : null, status: data.deleted_at ? "DELETED" : undefined },
       create: { creatorId, conversationId: conversation.id, fanvueMessageId: data.uuid, direction: data.sender === "fan" ? "INBOUND" : "OUTBOUND", status: data.deleted_at ? "DELETED" : "DELIVERED", text: data.text, sentAt: data.created_at ? new Date(data.created_at) : new Date(), deletedAt: data.deleted_at ? new Date(data.deleted_at) : null },
     });
     if (type === "creator.message.received" && data.sender === "fan") {
       const repliedAt = data.created_at ? new Date(data.created_at) : new Date();
+      await detectAndRecordIntimateConsent(creatorId, fan.id, conversation.id, storedMessage.id);
       await recordEngagementEvent({
         creatorId,
         fanId: fan.id,

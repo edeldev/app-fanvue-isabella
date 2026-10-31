@@ -6,6 +6,7 @@ const fan = {
   isAutoRenewingSubscriber: false, isNonRenewingSubscriber: false,
   isExpiredSubscriber: false, isCreatorAccount: false, isMuted: false,
   isOnline: true, isTopSpender: true, totalSpentMinor: 5_001, paidPurchasesCount: 2,
+  intimateContentOptIn: false, intimateContentOptInSource: null,
 };
 
 describe("evaluateWorkflowCondition", () => {
@@ -24,6 +25,9 @@ describe("evaluateWorkflowCondition", () => {
     expect(evaluateWorkflowCondition("IS_MUTED", { ...fan, isMuted: true })).toBe(true);
     expect(evaluateWorkflowCondition("IS_CREATOR_ACCOUNT", { ...fan, isCreatorAccount: true })).toBe(true);
     expect(evaluateWorkflowCondition("SPENT_MORE_THAN_50", fan)).toBe(true);
+    expect(evaluateWorkflowCondition("HAS_NO_INTIMATE_CONTENT_CONSENT", fan)).toBe(true);
+    expect(evaluateWorkflowCondition("HAS_INTIMATE_CONTENT_CONSENT", { ...fan, intimateContentOptIn: true, intimateContentOptInSource: "fanvue-message:msg-1" })).toBe(true);
+    expect(evaluateWorkflowCondition("HAS_INTIMATE_CONTENT_CONSENT", { ...fan, intimateContentOptIn: true, intimateContentOptInSource: "manual" })).toBe(false);
   });
 
   it("combines conditions with Y and O", () => {

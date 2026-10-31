@@ -4,6 +4,7 @@ export const workflowConditions = [
   "IS_EXPIRED_SUBSCRIBER", "IS_ONLINE", "IS_MUTED", "IS_CREATOR_ACCOUNT",
   "HAS_PURCHASED", "HAS_NOT_PURCHASED", "SPENT_MORE_THAN_50", "SPENT_LESS_THAN",
   "HAS_SPENT_ZERO", "IS_NOT_SUBSCRIBER", "IS_NOT_FREE_TRIAL_SUBSCRIBER", "IS_TOP_SPENDER",
+  "HAS_INTIMATE_CONTENT_CONSENT", "HAS_NO_INTIMATE_CONTENT_CONSENT",
 ] as const;
 export type WorkflowCondition = (typeof workflowConditions)[number];
 export type WorkflowConditionOperator = "ALL" | "ANY";
@@ -29,6 +30,8 @@ export const workflowConditionLabels: Record<WorkflowCondition, string> = {
   IS_NOT_SUBSCRIBER: "No tiene ninguna suscripción activa",
   IS_NOT_FREE_TRIAL_SUBSCRIBER: "No tiene una prueba gratuita activa",
   IS_TOP_SPENDER: "Es VIP",
+  HAS_INTIMATE_CONTENT_CONSENT: "Dio consentimiento explícito para contenido adulto",
+  HAS_NO_INTIMATE_CONTENT_CONSENT: "No dio consentimiento explícito para contenido adulto",
 };
 
 export interface ConditionFan {
@@ -44,6 +47,14 @@ export interface ConditionFan {
   isTopSpender: boolean;
   totalSpentMinor: number;
   paidPurchasesCount: number;
+  intimateContentOptIn: boolean;
+  intimateContentOptInSource?: string | null;
+}
+
+function hasVerifiedIntimateContentConsent(fan: ConditionFan) {
+  return Boolean(fan.intimateContentOptIn
+    && fan.intimateContentOptInSource?.startsWith("fanvue-message:")
+    && fan.intimateContentOptInSource.length > "fanvue-message:".length);
 }
 
 export function evaluateWorkflowCondition(condition: WorkflowCondition, fan: ConditionFan, amountMinor = 5_000) {
@@ -65,7 +76,9 @@ export function evaluateWorkflowCondition(condition: WorkflowCondition, fan: Con
   if (condition === "HAS_SPENT_ZERO") return fan.totalSpentMinor === 0;
   if (condition === "IS_NOT_SUBSCRIBER") return !fan.isSubscriber && !fan.isFreeTrialSubscriber;
   if (condition === "IS_NOT_FREE_TRIAL_SUBSCRIBER") return !fan.isFreeTrialSubscriber;
-  return fan.isTopSpender;
+  if (condition === "IS_TOP_SPENDER") return fan.isTopSpender;
+  if (condition === "HAS_INTIMATE_CONTENT_CONSENT") return hasVerifiedIntimateContentConsent(fan);
+  return !hasVerifiedIntimateContentConsent(fan);
 }
 
 export function evaluateWorkflowConditionGroup(operator: WorkflowConditionOperator, rules: WorkflowConditionRule[], fan: ConditionFan) {

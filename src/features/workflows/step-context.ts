@@ -23,6 +23,8 @@ const conditionLabels: Record<string, string> = {
   IS_NOT_SUBSCRIBER: "No tiene ninguna suscripción activa",
   IS_NOT_FREE_TRIAL_SUBSCRIBER: "No tiene una prueba gratuita activa",
   IS_TOP_SPENDER: "Está clasificado como VIP",
+  HAS_INTIMATE_CONTENT_CONSENT: "Dio consentimiento explícito para contenido adulto",
+  HAS_NO_INTIMATE_CONTENT_CONSENT: "No dio consentimiento explícito para contenido adulto",
 };
 
 export function workflowStepContext(
