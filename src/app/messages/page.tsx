@@ -11,6 +11,8 @@ import { MessageComposer } from "@/components/message-composer";
 import { MessageTranslation } from "@/components/message-translation";
 import { ExpandableImage } from "@/components/expandable-image";
 import { ChatMediaCarousel } from "@/components/chat-media-carousel";
+import { MessageReceipt } from "@/components/message-receipt";
+import { resolveMessageDeliveryState } from "@/domain/messages/delivery-status";
 import { resolveMessagePreviewUuid } from "@/domain/messages/ppv-preview";
 import { fanvueRequest } from "@/lib/fanvue/client";
 import {
@@ -20,6 +22,7 @@ import {
 import { FanvueError } from "@/lib/fanvue/errors";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { formatAppDateTime } from "@/lib/date-time";
 import {
   CREATOR_SESSION_COOKIE,
   readCreatorSession,
@@ -194,6 +197,7 @@ export default async function MessagesPage({ searchParams }: Props) {
     sender: { uuid: string; handle: string };
     type: string;
     isRead: boolean;
+    status: string | null;
     hasMedia: boolean | null;
     mediaType: "image" | "video" | "audio" | "document" | null;
     mediaUuids: string[];
@@ -224,6 +228,7 @@ export default async function MessagesPage({ searchParams }: Props) {
           mediaUuids: true,
           mediaPreviewUuid: true,
           priceMinor: true,
+          status: true,
         },
       });
       const localPpvByMessage = new Map(
@@ -256,6 +261,11 @@ export default async function MessagesPage({ searchParams }: Props) {
                   saved?.priceMinor != null
                     ? { USD: { price: saved.priceMinor } }
                     : message.pricing,
+                status: resolveMessageDeliveryState({
+                  isRead: message.isRead,
+                  providerStatus: message.status,
+                  storedStatus: saved?.status,
+                }),
               },
             ];
           }),
@@ -417,10 +427,10 @@ export default async function MessagesPage({ searchParams }: Props) {
                           {isFanOnlineNow(item.fan.isOnline, item.fan.presenceChangedAt) ? <span className="rounded-full bg-emerald-400/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-300">En línea</span> : null}
                           {item.fan.isSubscriber || item.fan.isFreeTrialSubscriber ? <span className="rounded-full bg-violet-400/10 px-1.5 py-0.5 text-[9px] font-medium text-violet-300">{item.fan.isFreeTrialSubscriber ? "Prueba" : "Suscriptor"}</span> : item.fan.isFollower ? <span className="rounded-full bg-sky-400/10 px-1.5 py-0.5 text-[9px] font-medium text-sky-300">Seguidor</span> : null}
                         </div>
-                        <p className="mt-1 text-[10px] text-zinc-700">
-                          {item.lastMessageAt?.toLocaleString("es-MX") ??
-                            "Sin fecha"}
-                        </p>
+                        <div className="mt-1 flex items-center gap-1 text-[10px] text-zinc-700">
+                          {last?.direction === "OUTBOUND" ? <MessageReceipt state={resolveMessageDeliveryState({ storedStatus: last.status })} compact /> : null}
+                          <span>{item.lastMessageAt ? formatAppDateTime(item.lastMessageAt) : "Sin fecha"}</span>
+                        </div>
                       </div>
                     </Link>
                   );
@@ -524,20 +534,10 @@ export default async function MessagesPage({ searchParams }: Props) {
                               ) : null}
                             </div>
                             {inbound && message.text && shouldOfferSpanishTranslation(message.text, fanConversationIsMostlySpanish) ? <MessageTranslation text={message.text} /> : null}
-                            <p
-                              className={`mt-1 px-1 text-[10px] text-zinc-700 ${inbound ? "text-left" : "text-right"}`}
-                            >
-                              {message.sentAt
-                                ? new Date(message.sentAt).toLocaleString(
-                                    "es-MX",
-                                  )
-                                : "Sin fecha"}
-                              {!inbound
-                                ? message.isRead
-                                  ? " · Leído"
-                                  : " · Enviado"
-                                : ""}
-                            </p>
+                            <div className={`mt-1 flex items-center gap-1 px-1 text-[10px] text-zinc-700 ${inbound ? "justify-start" : "justify-end"}`}>
+                              <span>{message.sentAt ? formatAppDateTime(message.sentAt) : "Sin fecha"}</span>
+                              {!inbound ? <MessageReceipt state={resolveMessageDeliveryState({ isRead: message.isRead, providerStatus: message.status })} /> : null}
+                            </div>
                           </div>
                         );
                       })

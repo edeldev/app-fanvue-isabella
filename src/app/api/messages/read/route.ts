@@ -5,6 +5,7 @@ import { fanvueRequest } from "@/lib/fanvue/client";
 import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
+import { logger } from "@/lib/logger";
 
 const bodySchema = z.object({ fanUuid: z.string().uuid() });
 const audience = [{ isFollower: true }, { isSubscriber: true }, { isExpiredSubscriber: true }];
@@ -18,12 +19,20 @@ export async function POST(request: Request) {
     where: { creatorId, fan: { fanvueUserId: body.data.fanUuid, isCreatorAccount: false, OR: audience } },
   });
   if (!conversation) return NextResponse.json({ error: "Conversación no encontrada" }, { status: 404 });
-  const token = await getValidFanvueAccessToken(creatorId);
-  await fanvueRequest(`/v1/chats/${body.data.fanUuid}`, token, z.unknown(), {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ isRead: true }),
-  });
   await prisma.conversation.update({ where: { id: conversation.id }, data: { unreadMessagesCount: 0 } });
-  return NextResponse.json({ ok: true });
+  try {
+    const token = await getValidFanvueAccessToken(creatorId);
+    await fanvueRequest(`/v1/chats/${body.data.fanUuid}`, token, z.unknown(), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isRead: true }),
+    });
+    return NextResponse.json({ ok: true, synced: true });
+  } catch (error) {
+    logger.info("Fanvue read receipt deferred", {
+      creatorId,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
+    return NextResponse.json({ ok: true, synced: false });
+  }
 }

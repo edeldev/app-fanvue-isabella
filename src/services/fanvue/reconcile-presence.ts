@@ -19,7 +19,7 @@ export async function reconcileFanvuePresence(creatorId: string) {
   const onlineIds = actualFans.filter(isFreshOnline).map((chat) => chat.user.uuid);
   const offlineIds = actualFans.filter((chat) => chat.online === false || (chat.online === true && !isFreshOnline(chat))).map((chat) => chat.user.uuid);
 
-  const [markedOffline, refreshedOnline] = await prisma.$transaction([
+  const [markedOffline, markedOnline, refreshedOnline] = await prisma.$transaction([
     prisma.fan.updateMany({
       where: {
         creatorId,
@@ -35,9 +35,19 @@ export async function reconcileFanvuePresence(creatorId: string) {
         creatorId,
         isCreatorAccount: false,
         fanvueUserId: { in: onlineIds },
-        OR: [{ presenceChangedAt: null }, { presenceChangedAt: { lte: observedAt } }],
+        isOnline: false,
       },
       data: { isOnline: true, presenceChangedAt: observedAt },
+    }),
+    prisma.fan.updateMany({
+      where: {
+        creatorId,
+        isCreatorAccount: false,
+        fanvueUserId: { in: onlineIds },
+        isOnline: true,
+        OR: [{ presenceChangedAt: null }, { presenceChangedAt: { lt: observedAt } }],
+      },
+      data: { presenceChangedAt: observedAt },
     }),
   ]);
 
@@ -45,6 +55,8 @@ export async function reconcileFanvuePresence(creatorId: string) {
     checkedFans: actualFans.length,
     onlineFans: onlineIds.length,
     correctedOffline: markedOffline.count,
+    correctedOnline: markedOnline.count,
     refreshedOnline: refreshedOnline.count,
+    changed: markedOffline.count > 0 || markedOnline.count > 0,
   };
 }

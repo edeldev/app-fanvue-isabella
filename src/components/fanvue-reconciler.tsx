@@ -2,8 +2,9 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { requestAutomaticRouteRefresh } from "@/lib/client/route-refresh";
 
-export function FanvueReconciler({ intervalMs = 5 * 60_000 }: { intervalMs?: number }) {
+export function FanvueReconciler({ intervalMs = 15 * 60_000 }: { intervalMs?: number }) {
   const router = useRouter();
   useEffect(() => {
     let running = false;
@@ -19,7 +20,7 @@ export function FanvueReconciler({ intervalMs = 5 * 60_000 }: { intervalMs?: num
         }
         if (!response.ok) return;
         const result = await response.json() as { reconciled?: boolean };
-        if (result.reconciled) router.refresh();
+        if (result.reconciled) requestAutomaticRouteRefresh(router.refresh, 8_000);
       } catch {
         // A temporary network failure should not interrupt the page.
       } finally {

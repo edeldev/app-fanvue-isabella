@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { enqueueSnackbar } from "notistack";
+import { formatAppDateTime } from "@/lib/date-time";
 import { MediaFields, type AttachedMedia } from "@/components/media-fields";
 import {
   MediaGalleryLightbox,
@@ -639,10 +640,7 @@ function PostRow({ post }: { post: Post }) {
         ) : null}
         <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/6 pt-3">
           <p className="text-[9px] text-zinc-600">
-            {new Intl.DateTimeFormat("es-MX", {
-              dateStyle: "medium",
-              timeStyle: "short",
-            }).format(new Date(date))}
+            {formatAppDateTime(date)}
           </p>
           <div className="flex items-center gap-3 text-[9px] text-zinc-600">
             <span className="inline-flex items-center gap-1">

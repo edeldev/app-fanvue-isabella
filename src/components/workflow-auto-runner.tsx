@@ -2,8 +2,9 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { requestAutomaticRouteRefresh } from "@/lib/client/route-refresh";
 
-export function WorkflowAutoRunner({ intervalMs = 10_000 }: { intervalMs?: number }) {
+export function WorkflowAutoRunner({ intervalMs = 30_000 }: { intervalMs?: number }) {
   const router = useRouter();
   useEffect(() => {
     let running = false;
@@ -19,7 +20,7 @@ export function WorkflowAutoRunner({ intervalMs = 10_000 }: { intervalMs?: numbe
         }
         if (!response.ok) return;
         const result = await response.json() as { claimed?: number };
-        if (result.claimed) router.refresh();
+        if (result.claimed) requestAutomaticRouteRefresh(router.refresh, 8_000);
       } catch {
         // A temporary network failure should not interrupt the page.
       } finally {

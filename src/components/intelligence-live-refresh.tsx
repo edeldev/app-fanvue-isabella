@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { requestAutomaticRouteRefresh } from "@/lib/client/route-refresh";
 
 export function IntelligenceLiveRefresh({ intervalMs = 8_000 }: { intervalMs?: number }) {
   const router = useRouter();
@@ -23,7 +24,7 @@ export function IntelligenceLiveRefresh({ intervalMs = 8_000 }: { intervalMs?: n
         }
         if (body.revision !== revision.current) {
           revision.current = body.revision;
-          router.refresh();
+          requestAutomaticRouteRefresh(router.refresh, 8_000);
         }
       } catch {
         // El siguiente ciclo vuelve a intentarlo sin interrumpir al usuario.

@@ -78,6 +78,10 @@ export const messagesPageSchema = z.object({
     media_preview_uuid: z.string().nullable().optional().default(null),
     type: z.string().optional().default("SINGLE_RECIPIENT"),
     isRead: z.boolean().optional().default(false),
+    // Fanvue has returned this value with different casing and has introduced
+    // additional transient states. Keep the raw string and normalize only the
+    // three delivery states the UI understands.
+    status: z.unknown().optional().transform((value) => typeof value === "string" ? value : null),
     pricing: z.object({ USD: z.object({ price: z.number() }) }).nullable().optional().default(null),
     purchasedAt: z.string().nullable().optional().default(null),
     gif: z.object({

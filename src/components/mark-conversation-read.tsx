@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { requestAutomaticRouteRefresh } from "@/lib/client/route-refresh";
 
 export function MarkConversationRead({ fanUuid }: { fanUuid: string }) {
   const router = useRouter();
@@ -14,7 +15,7 @@ export function MarkConversationRead({ fanUuid }: { fanUuid: string }) {
       signal: controller.signal,
     })
       .then((response) => {
-        if (response.ok) router.refresh();
+        if (response.ok) requestAutomaticRouteRefresh(router.refresh, 8_000);
       })
       .catch(() => undefined);
     return () => controller.abort();

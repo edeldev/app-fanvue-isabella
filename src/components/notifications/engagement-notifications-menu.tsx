@@ -4,6 +4,7 @@ import { Bell, BellRing, ExternalLink, Heart, LoaderCircle, MessageCircle, Trash
 import { enqueueSnackbar } from "notistack";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { formatAppDateTime } from "@/lib/date-time";
 import { notificationPreview, type EngagementNotificationView } from "@/domain/notifications/engagement";
 
 const POLL_INTERVAL_MS = 5_000;
@@ -55,8 +56,11 @@ export function EngagementNotificationsMenu() {
 
   useEffect(() => {
     let cancelled = false;
+    let running = false;
 
     async function poll() {
+      if (running || cancelled || document.visibilityState !== "visible" || !navigator.onLine) return;
+      running = true;
       try {
         const query = new URLSearchParams({ limit: "25" });
         if (cursor.current) query.set("after", cursor.current);
@@ -79,6 +83,8 @@ export function EngagementNotificationsMenu() {
         if (soundEnabled) playSound(audioContext.current);
       } catch {
         // El siguiente ciclo vuelve a intentar sin interrumpir la navegación.
+      } finally {
+        running = false;
       }
     }
 
@@ -154,7 +160,7 @@ function NotificationRow({ notification }: { notification: EngagementNotificatio
   const tone = notification.type === "FOLLOW_CREATED" ? "bg-violet-400/10 text-violet-300" : notification.type === "POST_LIKED" ? "bg-pink-400/10 text-pink-300" : notification.type === "MESSAGE_RECEIVED" ? "bg-emerald-400/10 text-emerald-300" : "bg-sky-400/10 text-sky-300";
   const postHref = notification.postUuid && notification.type !== "FOLLOW_CREATED" ? `https://www.fanvue.com/post/${encodeURIComponent(notification.postUuid)}` : null;
   const chatHref = notification.type === "MESSAGE_RECEIVED" && notification.fanUuid ? `/messages?fan=${encodeURIComponent(notification.fanUuid)}` : null;
-  const content = <div className="flex min-w-0 items-start gap-3"><span className={`grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl ${tone}`}>{notification.avatarUrl ? <span className="size-full bg-cover bg-center" style={{ backgroundImage: `url(${JSON.stringify(notification.avatarUrl).slice(1, -1)})` }} /> : <Icon className="size-4" />}</span><div className="min-w-0 flex-1"><div className="flex min-w-0 items-center justify-between gap-2"><p className="min-w-0 truncate text-xs font-medium text-zinc-200">{notification.title}</p>{postHref ? <ExternalLink className="size-3 shrink-0 text-zinc-600" /> : null}</div><p className="mt-1 line-clamp-2 break-words text-xs leading-5 text-zinc-400">{notification.message}</p><div className="mt-2 flex min-w-0 flex-col items-start gap-0.5 min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between min-[380px]:gap-2"><span className="max-w-full truncate text-[10px] text-zinc-600">{notification.actorUsername ? `@${notification.actorUsername}` : notification.actorName}</span><time dateTime={notification.occurredAt} className="shrink-0 text-[9px] text-zinc-700 min-[380px]:text-[10px]">{new Date(notification.occurredAt).toLocaleString("es-MX")}</time></div></div></div>;
+  const content = <div className="flex min-w-0 items-start gap-3"><span className={`grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl ${tone}`}>{notification.avatarUrl ? <span className="size-full bg-cover bg-center" style={{ backgroundImage: `url(${JSON.stringify(notification.avatarUrl).slice(1, -1)})` }} /> : <Icon className="size-4" />}</span><div className="min-w-0 flex-1"><div className="flex min-w-0 items-center justify-between gap-2"><p className="min-w-0 truncate text-xs font-medium text-zinc-200">{notification.title}</p>{postHref ? <ExternalLink className="size-3 shrink-0 text-zinc-600" /> : null}</div><p className="mt-1 line-clamp-2 break-words text-xs leading-5 text-zinc-400">{notification.message}</p><div className="mt-2 flex min-w-0 flex-col items-start gap-0.5 min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between min-[380px]:gap-2"><span className="max-w-full truncate text-[10px] text-zinc-600">{notification.actorUsername ? `@${notification.actorUsername}` : notification.actorName}</span><time dateTime={notification.occurredAt} className="shrink-0 text-[9px] text-zinc-700 min-[380px]:text-[10px]">{formatAppDateTime(notification.occurredAt)}</time></div></div></div>;
   if (postHref) return <a href={postHref} target="_blank" rel="noreferrer" aria-label={`${notification.title}: abrir publicación en Fanvue`} className="block cursor-pointer border-b border-white/6 p-3 transition hover:bg-white/[.035] last:border-0 sm:p-4">{content}</a>;
   if (chatHref) return <Link href={chatHref} aria-label={`${notification.title}: abrir conversación`} className="block cursor-pointer border-b border-white/6 p-3 transition hover:bg-white/[.035] last:border-0 sm:p-4">{content}</Link>;
   return <div className="border-b border-white/6 p-3 last:border-0 sm:p-4">{content}</div>;

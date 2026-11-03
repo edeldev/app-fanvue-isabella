@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { requestAutomaticRouteRefresh } from "@/lib/client/route-refresh";
 
 export function FanPresenceReconciler({ intervalMs = 2 * 60_000 }: { intervalMs?: number }) {
   const router = useRouter();
@@ -14,7 +15,9 @@ export function FanPresenceReconciler({ intervalMs = 2 * 60_000 }: { intervalMs?
       running = true;
       try {
         const response = await fetch("/api/sync/fanvue/presence", { method: "POST" });
-        if (response.ok && !stopped) router.refresh();
+        if (!response.ok || stopped) return;
+        const result = await response.json() as { changed?: boolean };
+        if (result.changed) requestAutomaticRouteRefresh(router.refresh, 8_000);
       } catch {
         // Webhooks continue working if this fallback request temporarily fails.
       } finally {
