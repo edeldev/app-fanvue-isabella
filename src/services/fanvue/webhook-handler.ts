@@ -14,6 +14,8 @@ import { recalculateFanLifecycle } from "@/services/lifecycle/recalculate-fan-li
 import { subscriptionAutomationTrigger } from "@/domain/workflows/subscription-automation-trigger";
 import { refreshFanMemory } from "@/services/intelligence/refresh-fan-memory";
 import { detectAndRecordIntimateConsent } from "@/services/lifecycle/detect-intimate-consent";
+import { refreshCreatorEarnings } from "@/services/fanvue/refresh-creator-earnings";
+import { logger } from "@/lib/logger";
 
 const personSchema = z.object({
   uuid: z.string(),
@@ -299,6 +301,14 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
       const isPpv = !isTip && Boolean(data.message_uuid || data.post_uuid);
       await completeMatchingWorkflowGoals(creatorId, fan.id, { kind: "PAYMENT", amountMinor: data.gross, totalSpentMinor, paidPurchasesCount, isTip, isPpv }, { paymentId: data.id, source: data.source, amountMinor: data.gross, totalSpentMinor });
     }
+    try {
+      await refreshCreatorEarnings(creatorId);
+    } catch (error) {
+      logger.info("Fanvue earnings refresh deferred after payment", {
+        creatorId,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+    }
     await recalculateFanLifecycle(creatorId, fan.id, "PAYMENT_WEBHOOK");
     return;
   }
@@ -316,6 +326,14 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
     });
     await prisma.purchase.updateMany({ where: { creatorId, fanvuePaymentId: paymentId }, data: { reversedAt: new Date(data.created_at ?? Date.now()) } });
     await refreshFanSpending(creatorId, fan.id, fan.fanvueUserId);
+    try {
+      await refreshCreatorEarnings(creatorId);
+    } catch (error) {
+      logger.info("Fanvue earnings refresh deferred after reversal", {
+        creatorId,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+    }
     await recalculateFanLifecycle(creatorId, fan.id, "REVERSAL_WEBHOOK");
   }
 }

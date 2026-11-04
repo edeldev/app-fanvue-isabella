@@ -10,9 +10,8 @@ export function requestAutomaticRouteRefresh(
   if (document.visibilityState !== "visible" || !navigator.onLine) return false;
   if (document.querySelector('[role="dialog"]')) return false;
   const active = document.activeElement;
-  if (active instanceof HTMLInputElement
-    || active instanceof HTMLTextAreaElement
-    || active instanceof HTMLSelectElement) return false;
+  if ((active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)
+    && active.value.trim().length > 0) return false;
 
   const now = Date.now();
   if (now < nextAutomaticRefreshAt) return false;

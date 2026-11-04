@@ -209,6 +209,7 @@ export default async function MessagesPage({ searchParams }: Props) {
     gif: { title: string | null; url: string | null } | null;
   }> = [];
   const mediaByMessage = new Map<string, ResolvedMedia[]>();
+  const liveDeliveryByMessage = new Map<string, "SENT" | "DELIVERED" | "READ">();
   let historyError = false;
   if (creatorId && selected) {
     try {
@@ -243,6 +244,14 @@ export default async function MessagesPage({ searchParams }: Props) {
                   (uuid): uuid is string => typeof uuid === "string",
                 )
               : [];
+            const deliveryState = resolveMessageDeliveryState({
+              isRead: message.isRead,
+              providerStatus: message.status,
+              storedStatus: saved?.status,
+            });
+            if (deliveryState && message.sender.uuid !== selected.fan.fanvueUserId) {
+              liveDeliveryByMessage.set(message.uuid, deliveryState);
+            }
             return [
               message.uuid,
               {
@@ -261,16 +270,29 @@ export default async function MessagesPage({ searchParams }: Props) {
                   saved?.priceMinor != null
                     ? { USD: { price: saved.priceMinor } }
                     : message.pricing,
-                status: resolveMessageDeliveryState({
-                  isRead: message.isRead,
-                  providerStatus: message.status,
-                  storedStatus: saved?.status,
-                }),
+                status: deliveryState,
               },
             ];
           }),
         ).values(),
       ].reverse();
+      const deliveryIds = { SENT: [] as string[], DELIVERED: [] as string[], READ: [] as string[] };
+      liveDeliveryByMessage.forEach((state, messageUuid) => deliveryIds[state].push(messageUuid));
+      try {
+        await Promise.all((Object.entries(deliveryIds) as Array<["SENT" | "DELIVERED" | "READ", string[]]>).map(([status, messageUuids]) =>
+          messageUuids.length
+            ? prisma.message.updateMany({
+                where: { creatorId, direction: "OUTBOUND", fanvueMessageId: { in: messageUuids }, status: { not: status } },
+                data: { status, ...(status === "READ" ? { readAt: new Date() } : {}) },
+              })
+            : Promise.resolve(),
+        ));
+      } catch (caught) {
+        logger.info("Message delivery status persistence deferred", {
+          creatorId,
+          errorName: caught instanceof Error ? caught.name : "UnknownError",
+        });
+      }
       try {
         const mediaPage = await fanvueRequest(
           `/v1/chats/${selected.fan.fanvueUserId}/media?limit=50`,
@@ -428,7 +450,7 @@ export default async function MessagesPage({ searchParams }: Props) {
                           {item.fan.isSubscriber || item.fan.isFreeTrialSubscriber ? <span className="rounded-full bg-violet-400/10 px-1.5 py-0.5 text-[9px] font-medium text-violet-300">{item.fan.isFreeTrialSubscriber ? "Prueba" : "Suscriptor"}</span> : item.fan.isFollower ? <span className="rounded-full bg-sky-400/10 px-1.5 py-0.5 text-[9px] font-medium text-sky-300">Seguidor</span> : null}
                         </div>
                         <div className="mt-1 flex items-center gap-1 text-[10px] text-zinc-700">
-                          {last?.direction === "OUTBOUND" ? <MessageReceipt state={resolveMessageDeliveryState({ storedStatus: last.status })} compact /> : null}
+                          {last?.direction === "OUTBOUND" ? <MessageReceipt state={liveDeliveryByMessage.get(last.fanvueMessageId) ?? resolveMessageDeliveryState({ storedStatus: last.status })} compact /> : null}
                           <span>{item.lastMessageAt ? formatAppDateTime(item.lastMessageAt) : "Sin fecha"}</span>
                         </div>
                       </div>
