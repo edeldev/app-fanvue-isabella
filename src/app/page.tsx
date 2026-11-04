@@ -46,9 +46,6 @@ async function dashboardData(creatorId: string | null) {
         availableEarningsMinor: true,
         pendingEarningsMinor: true,
         lastPayoutAt: true,
-        fanvueFollowersCount: true,
-        fanvueSubscribersCount: true,
-        fanvueContactsCount: true,
         settings: { select: { timezone: true } },
       },
     }),
@@ -189,9 +186,11 @@ async function dashboardData(creatorId: string | null) {
     .slice(0, 10);
   return {
     creator,
-    fans: creator?.fanvueContactsCount ?? fans,
-    followers: creator?.fanvueFollowersCount ?? followers,
-    subscribers: creator?.fanvueSubscribersCount ?? subscribers,
+    // These counts are updated by Fanvue webhooks even when no browser is
+    // open. Cached account snapshots can remain stale until reconciliation.
+    fans,
+    followers,
+    subscribers,
     additionalExpiredSubscribers,
     workflows,
     pendingMessages: pendingMessages._sum.unreadMessagesCount ?? 0,
