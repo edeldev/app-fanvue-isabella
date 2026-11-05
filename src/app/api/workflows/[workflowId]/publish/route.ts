@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { publishedTemplateSfwMedia } from "@/domain/workflows/media-safety";
+import { templateContentRating } from "@/domain/workflows/media-safety";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 import { consumeRateLimit, rateLimitedResponse, rateLimitPolicies } from "@/lib/rate-limit";
 
@@ -28,11 +28,21 @@ export async function POST(_request: Request, { params }: { params: Promise<{ wo
   const profileAiLabelConfirmed = (await prisma.settings.findUnique({ where: { creatorId }, select: { aiProfileLabelConfirmed: true } }))?.aiProfileLabelConfirmed === true;
   const metadataById = new Map(templates.map((template) => [template.id, template.metadata]));
   for (const step of workflow.steps) {
-    if (!step.messageTemplateId) continue;
+    const config = typeof step.config === "object" && step.config !== null && !Array.isArray(step.config) ? step.config as Record<string, unknown> : {};
+    if (!step.messageTemplateId) {
+      const manualMedia = Array.isArray(config.manualMedia) ? config.manualMedia : [];
+      if (manualMedia.length > 0 && config.manualContentRating !== "SFW" && config.manualContentRating !== "NSFW") {
+        return Response.json({ error: `Clasifica los archivos del paso “${step.name}” como SFW o 18+ / NSFW antes de publicar.` }, { status: 400 });
+      }
+      continue;
+    }
     const rawMetadata = metadataById.get(step.messageTemplateId);
     const metadata = rawMetadata && typeof rawMetadata === "object" && !Array.isArray(rawMetadata) ? rawMetadata as Record<string, unknown> : {};
     if (!profileAiLabelConfirmed && Array.isArray(metadata.media) && metadata.media.length > 0 && metadata.mediaOrigin !== "original" && metadata.mediaOrigin !== "ai_generated") {
       return Response.json({ error: `La plantilla del paso “${step.name}” tiene archivos sin clasificar. Edítala antes de publicar.` }, { status: 400 });
+    }
+    if (Array.isArray(metadata.media) && metadata.media.length > 0 && templateContentRating(metadata) === "UNREVIEWED") {
+      return Response.json({ error: `La plantilla del paso “${step.name}” no tiene clasificación SFW o 18+ / NSFW.` }, { status: 400 });
     }
   }
   const published = await prisma.$transaction(async (transaction) => {
@@ -41,18 +51,19 @@ export async function POST(_request: Request, { params }: { params: Promise<{ wo
       const config = typeof step.config === "object" && step.config !== null && !Array.isArray(step.config) ? step.config as Record<string, unknown> : {};
       const rest = { ...config };
       delete rest.publishedSfwMediaUuids;
+      delete rest.publishedContentRating;
       delete rest.publishedMediaOrigin;
       delete rest.publishedMediaUuids;
-      const sfwMedia = step.type === "SEND_MESSAGE" ? publishedTemplateSfwMedia(metadataById.get(step.messageTemplateId)) : null;
       const metadata = metadataById.get(step.messageTemplateId);
       const media = metadata && typeof metadata === "object" && !Array.isArray(metadata) && "media" in metadata && Array.isArray(metadata.media) ? metadata.media : [];
       const mediaUuids = media.flatMap((item) => typeof item === "object" && item !== null && !Array.isArray(item) && "uuid" in item && typeof item.uuid === "string" ? [item.uuid] : []);
       const mediaOrigin = metadata && typeof metadata === "object" && !Array.isArray(metadata) && "mediaOrigin" in metadata
         ? metadata.mediaOrigin
         : null;
+      const contentRating = templateContentRating(metadata);
       await transaction.workflowStep.update({
         where: { id: step.id },
-        data: { config: { ...rest, publishedMediaUuids: mediaUuids, ...(sfwMedia ? { publishedSfwMediaUuids: sfwMedia } : {}), ...(mediaOrigin === "original" || mediaOrigin === "ai_generated" ? { publishedMediaOrigin: mediaOrigin } : {}) } as Prisma.InputJsonValue },
+        data: { config: { ...rest, publishedMediaUuids: mediaUuids, ...(contentRating !== "UNREVIEWED" ? { publishedContentRating: contentRating } : {}), ...(mediaOrigin === "original" || mediaOrigin === "ai_generated" ? { publishedMediaOrigin: mediaOrigin } : {}) } as Prisma.InputJsonValue },
       });
     }
     return transaction.workflow.update({

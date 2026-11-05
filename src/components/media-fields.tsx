@@ -35,6 +35,8 @@ export type AttachedMedia = {
   thumbnailUrl?: string;
 };
 
+export type ContentRating = "SFW" | "NSFW";
+
 export function MediaFields({
   initialMedia = [],
   initialPriceMinor = null,
@@ -43,14 +45,16 @@ export function MediaFields({
   priceEnabled = true,
   allowSfwAttestation = false,
   initialSfwAttested = false,
+  initialContentRating = null,
 }: {
   initialMedia?: AttachedMedia[];
   initialPriceMinor?: number | null;
   initialPreviewUuid?: string | null;
-  onValueChange?: (value: { media: AttachedMedia[]; priceMinor: number | null; previewUuid: string | null; sfwAttested: boolean }) => void;
+  onValueChange?: (value: { media: AttachedMedia[]; priceMinor: number | null; previewUuid: string | null; sfwAttested: boolean; contentRating: ContentRating | null }) => void;
   priceEnabled?: boolean;
   allowSfwAttestation?: boolean;
   initialSfwAttested?: boolean;
+  initialContentRating?: ContentRating | null;
 }) {
   const { requestUpload } = useMediaRights();
   const [media, setMedia] = useState<AttachedMedia[]>(initialMedia);
@@ -58,7 +62,10 @@ export function MediaFields({
     initialPriceMinor ? (initialPriceMinor / 100).toFixed(2) : "",
   );
   const [previewUuid, setPreviewUuid] = useState(initialPreviewUuid ?? "");
-  const [sfwAttestation, setSfwAttestation] = useState({ signature: initialMedia.map((item) => item.uuid).join("|"), attested: initialSfwAttested });
+  const [classification, setClassification] = useState<{ signature: string; rating: ContentRating | null }>({
+    signature: initialMedia.map((item) => item.uuid).join("|"),
+    rating: initialContentRating ?? (initialSfwAttested ? "SFW" : null),
+  });
   const [uploading, setUploading] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -73,7 +80,8 @@ export function MediaFields({
     price && previewUuid && media.every((item) => item.uuid === previewUuid),
   );
   const mediaSignature = media.map((item) => item.uuid).join("|");
-  const sfwAttested = sfwAttestation.signature === mediaSignature && sfwAttestation.attested;
+  const contentRating = classification.signature === mediaSignature ? classification.rating : null;
+  const sfwAttested = contentRating === "SFW";
 
   useEffect(() => {
     const urls = objectUrls.current;
@@ -90,9 +98,10 @@ export function MediaFields({
       media: media.map(({ uuid, name, mediaType, localUrl, thumbnailUrl }) => ({ uuid, name, mediaType, localUrl, thumbnailUrl })),
       priceMinor: price && Number.isFinite(numericPrice) ? Math.round(numericPrice * 100) : null,
       previewUuid: price && previewUuid ? previewUuid : null,
-      sfwAttested: allowSfwAttestation && !price && media.length > 0 && sfwAttested,
+      sfwAttested: allowSfwAttestation && media.length > 0 && sfwAttested,
+      contentRating: allowSfwAttestation && media.length > 0 ? contentRating : null,
     });
-  }, [allowSfwAttestation, media, previewUuid, price, sfwAttested]);
+  }, [allowSfwAttestation, contentRating, media, previewUuid, price, sfwAttested]);
 
   useEffect(() => {
     const unresolved = initialMedia
@@ -201,7 +210,7 @@ export function MediaFields({
         )}
       />
       <input type="hidden" name="previewUuid" value={previewUuid} />
-      {allowSfwAttestation ? <input type="hidden" name="sfwAttested" value={!price && sfwAttested ? "yes" : ""} /> : null}
+      {allowSfwAttestation ? <><input type="hidden" name="sfwAttested" value={sfwAttested ? "yes" : ""} /><input type="hidden" name="contentRating" value={contentRating ?? ""} /></> : null}
       <div><p className="text-xs font-medium text-zinc-400">Contenido multimedia <span className="font-normal text-zinc-700">(opcional)</span></p><p className="mt-1 text-[10px] leading-4 text-zinc-600">Sube archivos nuevos o reutiliza fotos y videos que ya existen en Fanvue.</p></div><div className="flex flex-wrap items-center gap-2">
         <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-zinc-300 hover:bg-white/10">
           <ImagePlus className="size-4" />
@@ -313,7 +322,7 @@ export function MediaFields({
           </p>
         </div>
       ) : null}
-      {allowSfwAttestation && media.length > 0 && !price ? <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-400/15 bg-emerald-400/[.035] p-3 text-xs leading-5 text-zinc-300"><input type="checkbox" checked={sfwAttested} onChange={(event) => setSfwAttestation({ signature: mediaSignature, attested: event.target.checked })} className="mt-1 accent-emerald-400" /><span><span className="block font-medium text-emerald-200">Contenido gratuito apto para todo público</span><span className="mt-0.5 block text-zinc-500">Confirmo que todos los archivos son SFW: sin desnudos, ropa transparente o interior, actos ni poses sexuales. Puede ser comida, rostro o bikini opaco no explícito. Si hay duda, no marques esta opción.</span></span></label> : null}
+      {allowSfwAttestation && media.length > 0 ? <fieldset className="rounded-xl border border-white/10 bg-white/[.02] p-3"><legend className="px-1 text-xs font-medium text-zinc-300">Clasificación obligatoria</legend><div className="grid gap-2 sm:grid-cols-2"><label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-xs leading-5 transition ${contentRating === "SFW" ? "border-emerald-400/35 bg-emerald-400/[.06]" : "border-white/8 bg-black/10 hover:border-white/15"}`}><input type="radio" name="content-rating-choice" checked={contentRating === "SFW"} onChange={() => setClassification({ signature: mediaSignature, rating: "SFW" })} className="mt-1 accent-emerald-400" /><span><span className="block font-medium text-emerald-200">SFW · apto para todo público</span><span className="mt-0.5 block text-zinc-500">Sin desnudos, ropa interior o transparente, actos ni poses sexuales.</span></span></label><label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-xs leading-5 transition ${contentRating === "NSFW" ? "border-rose-400/35 bg-rose-400/[.06]" : "border-white/8 bg-black/10 hover:border-white/15"}`}><input type="radio" name="content-rating-choice" checked={contentRating === "NSFW"} onChange={() => setClassification({ signature: mediaSignature, rating: "NSFW" })} className="mt-1 accent-rose-400" /><span><span className="block font-medium text-rose-200">18+ · NSFW / íntimo</span><span className="mt-0.5 block text-zinc-500">Incluye desnudez parcial o completa, lencería, transparencias o contenido sexual. Exigirá consentimiento verificable y etiqueta NSFW de Fanvue.</span></span></label></div>{contentRating === null ? <p className="mt-2 text-[11px] font-medium text-amber-300">Selecciona una clasificación antes de guardar o enviar.</p> : null}</fieldset> : null}
       {vaultOpen ? <VaultMediaPicker selectedUuids={media.map((item) => item.uuid)} remaining={10 - media.length} onClose={() => setVaultOpen(false)} onAdd={(incoming) => { setMedia((current) => [...current, ...incoming].slice(0, 10)); setVaultOpen(false); enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo agregado" : "archivos agregados"} desde la bóveda.`, { variant: "success" }); }} /> : null}
       {libraryOpen ? <ContentLibraryPicker selectedUuids={media.map((item) => item.uuid)} remaining={10 - media.length} onClose={() => setLibraryOpen(false)} onAdd={(incoming, suggestedPriceMinor) => { setMedia((current) => [...new Map([...current, ...incoming].map((item) => [item.uuid, item])).values()].slice(0, 10)); if (!price && suggestedPriceMinor) setPrice((suggestedPriceMinor / 100).toFixed(2)); setLibraryOpen(false); enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo agregado" : "archivos agregados"} desde Content Library.`, { variant: "success" }); }} /> : null}
     </div>

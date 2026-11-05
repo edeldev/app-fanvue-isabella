@@ -31,6 +31,7 @@ export function TemplateForm({
     priceMinor: number | null;
     previewUuid: string | null;
     sfwAttested: boolean;
+    contentRating: "SFW" | "NSFW" | null;
     mediaOrigin?: "original" | "ai_generated" | null;
   };
 }) {
@@ -130,6 +131,7 @@ export function TemplateForm({
         initialPriceMinor={template?.priceMinor}
         initialPreviewUuid={template?.previewUuid}
         initialSfwAttested={template?.sfwAttested}
+        initialContentRating={template?.contentRating}
         allowSfwAttestation
         onValueChange={(value) => setMediaCount(value.media.length)}
       />

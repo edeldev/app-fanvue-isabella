@@ -41,6 +41,7 @@ export interface TemplateOption {
   previewUuid: string | null;
   mediaCount: number;
   sfwAttested: boolean;
+  contentRating: "SFW" | "NSFW" | null;
 }
 
 export interface FanOption {

@@ -8,11 +8,12 @@ import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
 import { consumeRateLimit, rateLimitPolicies } from "@/lib/rate-limit";
-import { canReceivePaidOrIntimateContent, canReceiveMessageMedia } from "@/domain/fans/content-consent";
+import type { MediaSafety } from "@/domain/fans/content-consent";
 import { isAmbiguousManualSendFailure, sendIntentRedirectStatus } from "@/domain/messages/send-intent";
 import { assertSendRecipient, SendRecipientIneligibleError } from "@/services/messages/assert-send-recipient";
 import { parseManualSendForm } from "@/domain/messages/manual-send-form";
 import { prepareOutboundMediaText } from "@/domain/messages/media-disclosure";
+import { MediaClassificationError } from "@/services/messages/assert-media-classification";
 
 const mediaSchema = z.array(z.object({ uuid: z.string().uuid(), name: z.string(), mediaType: z.enum(["image", "video"]) })).max(10);
 const audience = [{ isFollower: true }, { isSubscriber: true }, { isExpiredSubscriber: true }];
@@ -32,7 +33,9 @@ export async function POST(request: Request) {
   if (!parsed.data.text && media.data.length === 0) redirect(`/messages?fan=${encodeURIComponent(parsed.data.fanUuid)}&error=empty_message`);
   const price = parsed.data.price ? Math.round(Number(parsed.data.price) * 100) : null;
   if (price !== null && (!Number.isInteger(price) || price < 300 || media.data.length === 0)) redirect("/messages?error=invalid_price");
-  const mediaSafety = price === null && form.get("sfwAttested") === "yes" ? "SFW" : "UNREVIEWED";
+  const rating = form.get("contentRating");
+  const mediaSafety: MediaSafety = rating === "SFW" || rating === "NSFW" ? rating : "UNREVIEWED";
+  if (media.data.length > 0 && mediaSafety === "UNREVIEWED") redirect(`/messages?fan=${encodeURIComponent(parsed.data.fanUuid)}&error=content_classification_required`);
   const previewUuid = parsed.data.previewUuid && media.data.some(item => item.uuid === parsed.data.previewUuid) ? parsed.data.previewUuid : null;
   const effectivePreviewUuid = price ? previewUuid : null;
   const lockedMedia = effectivePreviewUuid
@@ -46,7 +49,6 @@ export async function POST(request: Request) {
   });
   if (!fan) redirect("/messages?error=invalid_recipient");
   if (fan.doNotMessage) redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&error=do_not_message`);
-  if ((price !== null && !canReceivePaidOrIntimateContent(fan)) || !canReceiveMessageMedia(fan, media.data.length, mediaSafety)) redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&error=${price !== null ? "ppv_requires_subscription_or_consent" : "media_requires_sfw_or_consent"}`);
   const template = parsed.data.templateId ? await prisma.messageTemplate.findFirst({
     where: { id: parsed.data.templateId, creatorId, status: "ACTIVE" },
     select: { id: true, metadata: true },
@@ -86,7 +88,7 @@ export async function POST(request: Request) {
         status: parsed.data.scheduledAt ? "PENDING" : "SENDING",
         templateId: template?.id,
         text: parsed.data.text || null,
-        media: media.data.map((item) => ({ ...item, mediaOrigin, sfwAttested: mediaSafety === "SFW" })),
+        media: media.data.map((item) => ({ ...item, mediaOrigin, sfwAttested: mediaSafety === "SFW", contentRating: mediaSafety })),
         mediaPreviewUuid: effectivePreviewUuid,
         priceMinor: price,
         scheduledAt,
@@ -104,7 +106,7 @@ export async function POST(request: Request) {
   }
   try {
     const token = await getValidFanvueAccessToken(creatorId);
-    await assertSendRecipient(creatorId, fan.id, media.data.length, price !== null, mediaSafety);
+    await assertSendRecipient(creatorId, fan.id, media.data.map((item) => item.uuid), price !== null, mediaSafety, token);
     const sent = await fanvueRequest(`/v1/chats/${fan.fanvueUserId}/message`, token, sentMessageSchema, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -129,13 +131,18 @@ export async function POST(request: Request) {
       await transaction.scheduledMessage.update({ where: { id: sendIntentId }, data: { status: "SENT", sentAt: new Date(), fanvueMessageId: sent.messageUuid, lastError: null } });
     });
   } catch (error) {
-    const ambiguous = !(error instanceof SendRecipientIneligibleError) && isAmbiguousManualSendFailure(error);
+    const policyError = error instanceof SendRecipientIneligibleError || error instanceof MediaClassificationError;
+    const ambiguous = !policyError && isAmbiguousManualSendFailure(error);
     await prisma.scheduledMessage.updateMany({
       where: { id: sendIntentId, creatorId, status: "SENDING" },
-      data: { status: ambiguous ? "NEEDS_REVIEW" : error instanceof SendRecipientIneligibleError ? "BLOCKED" : "FAILED", lastError: ambiguous ? "DELIVERY_STATUS_UNKNOWN_CHECK_FANVUE" : error instanceof SendRecipientIneligibleError ? error.code : "FANVUE_REJECTED_SEND" },
+      data: { status: ambiguous ? "NEEDS_REVIEW" : policyError ? "BLOCKED" : "FAILED", lastError: ambiguous ? "DELIVERY_STATUS_UNKNOWN_CHECK_FANVUE" : policyError ? error.code : "FANVUE_REJECTED_SEND" },
     });
     if (error instanceof SendRecipientIneligibleError) {
-      const notice = error.code === "FAN_DO_NOT_MESSAGE" ? "do_not_message" : error.code === "EXPLICIT_CONTENT_OPT_IN_REQUIRED" ? price !== null ? "ppv_requires_subscription_or_consent" : "media_requires_sfw_or_consent" : "invalid_recipient";
+      const notice = error.code === "FAN_DO_NOT_MESSAGE" ? "do_not_message" : error.code === "EXPLICIT_CONTENT_OPT_IN_REQUIRED" ? "intimate_consent_required" : error.code === "CONTENT_CLASSIFICATION_REQUIRED" ? "content_classification_required" : "invalid_recipient";
+      redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&error=${notice}`);
+    }
+    if (error instanceof MediaClassificationError) {
+      const notice = error.code === "FANVUE_NSFW_LABEL_REQUIRED" ? "fanvue_nsfw_label_required" : error.code === "CONTENT_CLASSIFICATION_MISMATCH" ? "content_classification_mismatch" : "content_classification_required";
       redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&error=${notice}`);
     }
     if (error instanceof FanvueError && error.status === 429) {

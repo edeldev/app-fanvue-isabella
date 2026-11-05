@@ -7,7 +7,7 @@ import { TemplateForm } from "@/components/template-form";
 import { matchesTemplateKind, type TemplateKindFilter } from "@/domain/templates/filters";
 import { formatAppDate } from "@/lib/date-time";
 
-export type TemplateLibraryItem = { id: string; name: string; text: string; type: string; category: string; status: string; updatedAt: string; media: AttachedMedia[]; priceMinor: number | null; previewUuid: string | null; sfwAttested: boolean; mediaOrigin: "original" | "ai_generated" | null };
+export type TemplateLibraryItem = { id: string; name: string; text: string; type: string; category: string; status: string; updatedAt: string; media: AttachedMedia[]; priceMinor: number | null; previewUuid: string | null; sfwAttested: boolean; contentRating: "SFW" | "NSFW" | null; mediaOrigin: "original" | "ai_generated" | null };
 const PAGE_SIZE = 8;
 const categories: Record<string, string> = { WELCOME: "Bienvenida", FOLLOW_UP: "Seguimiento", RENEWAL: "Renovación", SALES: "Venta", VIP: "VIP", REACTIVATION: "Reactivación", GENERAL: "General" };
 const kindFilters: ReadonlyArray<[TemplateKindFilter, string]> = [["ALL", "Todas"], ["TEXT", "Solo texto"], ["MEDIA", "Multimedia gratis"], ["IMAGE", "Fotos gratis"], ["VIDEO", "Videos gratis"], ["MEDIA_ONLY", "Solo archivos gratis"], ["PPV", "PPV"]];

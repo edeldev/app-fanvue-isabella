@@ -224,6 +224,7 @@ model Fan {
   doNotMessageAt             DateTime?
   intimateContentOptIn       Boolean               @default(false)
   intimateContentOptInAt     DateTime?
+  intimateContentOptOutAt    DateTime?
   intimateContentOptInSource String?
   followedAt                 DateTime?
   acquisitionSource          String?

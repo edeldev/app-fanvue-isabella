@@ -100,7 +100,7 @@ describe("runDueScheduledMessages", () => {
     mocks.findUnique.mockResolvedValue({ ...item, media: [{ uuid: "media-1", name: "Comida", mediaType: "image", sfwAttested: true, mediaOrigin: "original" }] });
     mocks.fanvueRequest.mockRejectedValue(new Error("network disconnected"));
     await runDueScheduledMessages(now);
-    expect(mocks.assertSendRecipient).toHaveBeenCalledWith(item.creatorId, item.fanId, 1, false, "SFW");
+    expect(mocks.assertSendRecipient).toHaveBeenCalledWith(item.creatorId, item.fanId, ["media-1"], false, "SFW", "token");
   });
 
   it("blocks scheduled media without a declared origin when the AI profile label is not confirmed", async () => {

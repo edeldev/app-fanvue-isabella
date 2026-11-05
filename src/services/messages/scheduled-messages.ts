@@ -4,14 +4,15 @@ import { sentMessageSchema } from "@/lib/fanvue/sync-schemas";
 import { prisma } from "@/lib/prisma";
 import { sanitizeErrorMessage } from "@/lib/logger";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
-import { canReceivePaidOrIntimateContent, canReceiveMessageMedia } from "@/domain/fans/content-consent";
+import type { MediaSafety } from "@/domain/fans/content-consent";
 import { FanvueError } from "@/lib/fanvue/errors";
 import { reserveAutomatedSendBudget } from "@/services/messages/automated-send-budget";
 import { mandatoryAutomatedSendLimits } from "@/domain/messages/mandatory-send-limits";
 import { assertSendRecipient, SendRecipientIneligibleError } from "@/services/messages/assert-send-recipient";
 import { prepareOutboundMediaText } from "@/domain/messages/media-disclosure";
+import { MediaClassificationError } from "@/services/messages/assert-media-classification";
 
-type ScheduledMedia = { uuid: string; name: string; mediaType: "image" | "video"; sfwAttested: boolean; mediaOrigin: "original" | "ai_generated" | null };
+type ScheduledMedia = { uuid: string; name: string; mediaType: "image" | "video"; contentRating: MediaSafety; mediaOrigin: "original" | "ai_generated" | null };
 
 function readMedia(value: Prisma.JsonValue | null): ScheduledMedia[] {
   if (!Array.isArray(value)) return [];
@@ -19,7 +20,7 @@ function readMedia(value: Prisma.JsonValue | null): ScheduledMedia[] {
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
     const record = item as Record<string, unknown>;
     return typeof record.uuid === "string" && typeof record.name === "string" && (record.mediaType === "image" || record.mediaType === "video")
-      ? [{ uuid: record.uuid, name: record.name, mediaType: record.mediaType, sfwAttested: record.sfwAttested === true, mediaOrigin: record.mediaOrigin === "original" || record.mediaOrigin === "ai_generated" ? record.mediaOrigin : null }]
+      ? [{ uuid: record.uuid, name: record.name, mediaType: record.mediaType, contentRating: record.contentRating === "SFW" || record.contentRating === "NSFW" ? record.contentRating : record.sfwAttested === true ? "SFW" : "UNREVIEWED", mediaOrigin: record.mediaOrigin === "original" || record.mediaOrigin === "ai_generated" ? record.mediaOrigin : null }]
       : [];
   });
 }
@@ -69,12 +70,8 @@ export async function runDueScheduledMessages(now = new Date()) {
       result.blocked += 1;
       continue;
     }
-    const mediaSafety = item.priceMinor === null && scheduledMedia.length > 0 && scheduledMedia.every((entry) => entry.sfwAttested) ? "SFW" : "UNREVIEWED";
-    if ((item.priceMinor !== null && !canReceivePaidOrIntimateContent(item.fan)) || !canReceiveMessageMedia(item.fan, scheduledMedia.length, mediaSafety)) {
-      await prisma.scheduledMessage.update({ where: { id: item.id }, data: { status: "BLOCKED", lastError: "EXPLICIT_CONTENT_OPT_IN_REQUIRED" } });
-      result.blocked += 1;
-      continue;
-    }
+    const ratings = new Set(scheduledMedia.map((entry) => entry.contentRating));
+    const mediaSafety: MediaSafety = ratings.size === 1 ? scheduledMedia[0]?.contentRating ?? "UNREVIEWED" : "UNREVIEWED";
     const budget = await reserveAutomatedSendBudget({ creatorId: item.creatorId, fanId: item.fanId, limits: mandatoryAutomatedSendLimits(item.creator.settings), now });
     if (!budget.allowed) {
       await prisma.scheduledMessage.update({ where: { id: item.id }, data: { status: "PENDING", scheduledAt: budget.nextRunAt, lastError: budget.reasonCode } });
@@ -85,7 +82,7 @@ export async function runDueScheduledMessages(now = new Date()) {
       const media = scheduledMedia;
       const lockedMedia = item.mediaPreviewUuid ? media.filter((entry) => entry.uuid !== item.mediaPreviewUuid) : media;
       const token = await getValidFanvueAccessToken(item.creatorId);
-      await assertSendRecipient(item.creatorId, item.fanId, media.length, item.priceMinor !== null, mediaSafety);
+      await assertSendRecipient(item.creatorId, item.fanId, media.map((entry) => entry.uuid), item.priceMinor !== null, mediaSafety, token);
       const sent = await fanvueRequest(`/v1/chats/${item.fan.fanvueUserId}/message`, token, sentMessageSchema, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -106,7 +103,7 @@ export async function runDueScheduledMessages(now = new Date()) {
       ]);
       result.sent += 1;
     } catch (error) {
-      if (error instanceof SendRecipientIneligibleError) {
+      if (error instanceof SendRecipientIneligibleError || error instanceof MediaClassificationError) {
         await prisma.scheduledMessage.update({ where: { id: item.id }, data: { status: "BLOCKED", lastError: error.code } });
         result.blocked += 1;
         continue;

@@ -189,7 +189,8 @@ export default async function WorkflowsPage({ searchParams }: { searchParams: Pr
   }));
   const templateOptions = templates.map((template) => {
     const metadata = typeof template.metadata === "object" && template.metadata && !Array.isArray(template.metadata) ? template.metadata as Record<string, unknown> : {};
-    return { id: template.id, name: template.name, type: template.type, priceMinor: typeof metadata.priceMinor === "number" ? metadata.priceMinor : null, previewUuid: typeof metadata.previewUuid === "string" ? metadata.previewUuid : null, mediaCount: Array.isArray(metadata.media) ? metadata.media.length : 0, sfwAttested: metadata.sfwAttested === true };
+    const contentRating: "SFW" | "NSFW" | null = metadata.contentRating === "SFW" || metadata.contentRating === "NSFW" ? metadata.contentRating : metadata.sfwAttested === true ? "SFW" : null;
+    return { id: template.id, name: template.name, type: template.type, priceMinor: typeof metadata.priceMinor === "number" ? metadata.priceMinor : null, previewUuid: typeof metadata.previewUuid === "string" ? metadata.previewUuid : null, mediaCount: Array.isArray(metadata.media) ? metadata.media.length : 0, sfwAttested: contentRating === "SFW", contentRating };
   });
   const timeToMinute = (value: string) => { const [hour, minute] = value.split(":").map(Number); return hour * 60 + minute; };
   const workflowDefaults = {

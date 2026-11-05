@@ -42,8 +42,10 @@ export async function POST(request: Request) {
     const previewValue = String(form.get("previewUuid") || "");
     const previewUuid = previewValue && media.data.some(item => item.uuid === previewValue) ? previewValue : null;
     if (priceMinor !== null && !hasLockedPpvMedia(media.data, previewUuid)) redirect("/templates?error=ppv_requires_locked_media");
-    const sfwAttested = priceMinor === null && media.data.length > 0 && form.get("sfwAttested") === "yes";
-    const metadata = { media: media.data, priceMinor, previewUuid, sfwAttested, mediaOrigin: media.data.length && mediaOrigin.success ? mediaOrigin.data : null };
+    const contentRating = z.enum(["SFW", "NSFW"]).safeParse(form.get("contentRating"));
+    if (media.data.length > 0 && !contentRating.success) redirect("/templates?error=classification_required");
+    const sfwAttested = media.data.length > 0 && contentRating.success && contentRating.data === "SFW";
+    const metadata = { media: media.data, priceMinor, previewUuid, sfwAttested, contentRating: media.data.length && contentRating.success ? contentRating.data : null, mediaOrigin: media.data.length && mediaOrigin.success ? mediaOrigin.data : null };
     if (action === "create") {
       const template = await prisma.messageTemplate.create({ data: { creatorId, ...data.data, type: media.data.length ? "MEDIA" : "TEXT", status: "ACTIVE", metadata } });
       await syncContentLibraryUsage(creatorId, template.id, media.data);

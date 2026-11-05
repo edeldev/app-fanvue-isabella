@@ -18,6 +18,12 @@ export class ConfirmedSendPersistenceError extends Error {
 export function workflowRetryDecision(error: unknown, attempt: number, options: { maximumAttempts?: number; minimumDelaySeconds?: number } = {}): WorkflowRetryDecision {
   const maximumAttempts = options.maximumAttempts ?? maximumWorkflowAttempts;
   const minimumDelaySeconds = options.minimumDelaySeconds ?? 60;
+  const policyCode = typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
+    ? error.code
+    : null;
+  if (["EXPLICIT_CONTENT_OPT_IN_REQUIRED", "CONTENT_CLASSIFICATION_REQUIRED", "FANVUE_NSFW_LABEL_REQUIRED", "CONTENT_CLASSIFICATION_MISMATCH", "FAN_DO_NOT_MESSAGE", "INVALID_RECIPIENT"].includes(policyCode ?? "")) {
+    return { retryable: false, reasonCode: policyCode!, delaySeconds: null };
+  }
   if (error instanceof Error && error.message === "MEDIA_ORIGIN_REQUIRED") {
     return { retryable: false, reasonCode: "MEDIA_ORIGIN_REQUIRED", delaySeconds: null };
   }

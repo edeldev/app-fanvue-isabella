@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { detectIntimateContentConsent } from "@/domain/fans/intimate-consent-detection";
 import { prisma } from "@/lib/prisma";
+import { scheduledMediaIsNsfw } from "@/domain/messages/scheduled-content-rating";
 
 export async function detectAndRecordIntimateConsent(
   creatorId: string,
@@ -33,7 +34,6 @@ export async function detectAndRecordIntimateConsent(
   const granted = detection.decision === "GRANTED";
   const source = granted ? `fanvue-message:${incomingMessageId}` : null;
   if (fan.intimateContentOptIn === granted && fan.intimateContentOptInSource === source) return detection;
-  if (!granted && !fan.intimateContentOptIn && !fan.intimateContentOptInSource) return detection;
 
   const occurredAt = messages.find((message) => message.id === incomingMessageId)?.sentAt ?? new Date();
   const payload: Prisma.InputJsonObject = {
@@ -41,12 +41,17 @@ export async function detectAndRecordIntimateConsent(
     evidenceMessageId: incomingMessageId,
     reason: detection.reason,
   };
+  const pendingNsfwIds = granted ? [] : (await prisma.scheduledMessage.findMany({
+    where: { creatorId, fanId, status: "PENDING" },
+    select: { id: true, media: true },
+  })).filter((message) => scheduledMediaIsNsfw(message.media)).map((message) => message.id);
   await prisma.$transaction([
     prisma.fan.update({
       where: { id: fanId },
       data: {
         intimateContentOptIn: granted,
         intimateContentOptInAt: granted ? occurredAt : null,
+        intimateContentOptOutAt: granted ? null : occurredAt,
         intimateContentOptInSource: source,
       },
     }),
@@ -62,6 +67,7 @@ export async function detectAndRecordIntimateConsent(
         payload,
       },
     }),
+    ...(pendingNsfwIds.length ? [prisma.scheduledMessage.updateMany({ where: { id: { in: pendingNsfwIds }, status: "PENDING" }, data: { status: "BLOCKED", lastError: "INTIMATE_CONTENT_CONSENT_REVOKED" } })] : []),
   ]);
   return detection;
 }

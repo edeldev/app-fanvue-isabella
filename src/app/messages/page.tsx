@@ -630,7 +630,8 @@ function readTemplateMetadata(value: unknown) {
   return {
     media,
     mediaOrigin: metadata.mediaOrigin === "original" ? "original" as const : metadata.mediaOrigin === "ai_generated" ? "ai_generated" as const : null,
-    sfwAttested: metadata.sfwAttested === true,
+    sfwAttested: metadata.contentRating === "SFW" || metadata.sfwAttested === true,
+    contentRating: metadata.contentRating === "SFW" || metadata.contentRating === "NSFW" ? metadata.contentRating as "SFW" | "NSFW" : metadata.sfwAttested === true ? "SFW" as const : null,
     priceMinor:
       typeof metadata.priceMinor === "number" ? metadata.priceMinor : null,
     previewUuid:

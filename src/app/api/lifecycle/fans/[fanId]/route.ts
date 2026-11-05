@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { scheduledMediaIsNsfw } from "@/domain/messages/scheduled-content-rating";
 import { z } from "zod";
 import { lifecycleStages } from "@/domain/lifecycle/presentation";
 import { prisma } from "@/lib/prisma";
@@ -91,9 +92,11 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Elige un mensaje recibido del fan y confirma que expresa consentimiento explícito." }, { status: 400 });
     }
     const evidenceSource = evidence ? `fanvue-message:${evidence.id}` : null;
+    const pendingNsfwIds = data.consented ? [] : (await prisma.scheduledMessage.findMany({ where: { creatorId, fanId, status: "PENDING" }, select: { id: true, media: true } })).filter((message) => scheduledMediaIsNsfw(message.media)).map((message) => message.id);
     await prisma.$transaction([
-      prisma.fan.update({ where: { id: fanId }, data: { intimateContentOptIn: data.consented, intimateContentOptInAt: data.consented ? now : null, intimateContentOptInSource: evidenceSource } }),
+      prisma.fan.update({ where: { id: fanId }, data: { intimateContentOptIn: data.consented, intimateContentOptInAt: data.consented ? now : null, intimateContentOptOutAt: data.consented ? null : now, intimateContentOptInSource: evidenceSource } }),
       prisma.fanEvent.create({ data: { creatorId, fanId, type: data.consented ? "INTIMATE_CONTENT_OPT_IN" : "INTIMATE_CONTENT_OPT_OUT", occurredAt: now, payload: { evidenceMessageId: evidence?.id ?? null, fanvueMessageId: evidence?.fanvueMessageId ?? null, attested: data.consented ? true : null } } }),
+      ...(pendingNsfwIds.length ? [prisma.scheduledMessage.updateMany({ where: { id: { in: pendingNsfwIds }, status: "PENDING" }, data: { status: "BLOCKED", lastError: "INTIMATE_CONTENT_CONSENT_REVOKED" } })] : []),
     ]);
   } else if (data.action === "SET_DO_NOT_MESSAGE") {
     const now = new Date();

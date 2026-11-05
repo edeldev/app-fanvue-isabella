@@ -4,7 +4,6 @@ import { evaluateWorkflowConditionGroup, workflowConditionLabels, workflowCondit
 import { fanvueRequest } from "@/lib/fanvue/client";
 import { sentMessageSchema } from "@/lib/fanvue/sync-schemas";
 import { prisma } from "@/lib/prisma";
-import { canReceivePaidOrIntimateContent, canReceiveMessageMedia } from "@/domain/fans/content-consent";
 import { workflowMessageMediaSafety } from "@/domain/workflows/media-safety";
 import { mandatoryAutomatedSendLimits } from "@/domain/messages/mandatory-send-limits";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
@@ -204,7 +203,7 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
     await prisma.$transaction([
       prisma.automationExecution.update({ where: { id: execution.id }, data: { status: "FAILED", decision: "CANCEL", reasonCode: decision.reasonCode, reason: errorMessage, evidence: error instanceof ConfirmedSendPersistenceError ? { fanvueMessageId: error.fanvueMessageId } : undefined, finishedAt: new Date(), nextRetryAt: null } }),
       prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { status: "FAILED", nextRunAt: null, lastResult: { reasonCode: decision.reasonCode, attempt: execution.attempt, error: errorMessage } } }),
-        prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, executionId: execution.id, eventType: "WORKFLOW_STEP_FAILED", level: "ERROR", reasonCode: decision.reasonCode, explanation: decision.reasonCode === "MAXIMUM_RETRIES_REACHED" ? `${step.name} agotó ${maximumWorkflowAttempts} intentos; el workflow fue detenido.` : decision.reasonCode === "MEDIA_ORIGIN_REQUIRED" ? `${step.name} se detuvo porque los archivos no están clasificados como originales o generados con IA.` : decision.reasonCode === "FANVUE_RECIPIENT_UNAVAILABLE" ? `${step.name}: Fanvue indicó que no se puede contactar a este fan. Se detuvo el flujo sin reintentar.` : decision.reasonCode === "FANVUE_INVALID_RECIPIENT_ID" ? `${step.name}: Fanvue rechazó el identificador del destinatario. Se detuvo el flujo sin reintentar.` : decision.reasonCode === "FANVUE_MESSAGE_REJECTED" ? `${step.name}: Fanvue rechazó el contenido o los datos del mensaje. Revisa este paso antes de volver a enviarlo.` : `${step.name} encontró un error que no es seguro reintentar; el workflow fue detenido.`, metadata: { error: errorMessage, attempt: execution.attempt } } }),
+        prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, executionId: execution.id, eventType: "WORKFLOW_STEP_FAILED", level: "ERROR", reasonCode: decision.reasonCode, explanation: decision.reasonCode === "MAXIMUM_RETRIES_REACHED" ? `${step.name} agotó ${maximumWorkflowAttempts} intentos; el workflow fue detenido.` : decision.reasonCode === "EXPLICIT_CONTENT_OPT_IN_REQUIRED" ? `${step.name} se bloqueó: el fan no tiene consentimiento explícito verificable para contenido 18+ / NSFW.` : decision.reasonCode === "CONTENT_CLASSIFICATION_REQUIRED" ? `${step.name} se bloqueó porque los archivos no tienen clasificación SFW o 18+ / NSFW.` : decision.reasonCode === "FANVUE_NSFW_LABEL_REQUIRED" ? `${step.name} se bloqueó porque Fanvue aún no confirma la etiqueta oficial NSFW.` : decision.reasonCode === "CONTENT_CLASSIFICATION_MISMATCH" ? `${step.name} se bloqueó porque la clasificación local no coincide con Fanvue.` : decision.reasonCode === "MEDIA_ORIGIN_REQUIRED" ? `${step.name} se detuvo porque los archivos no están clasificados como originales o generados con IA.` : decision.reasonCode === "FANVUE_RECIPIENT_UNAVAILABLE" ? `${step.name}: Fanvue indicó que no se puede contactar a este fan. Se detuvo el flujo sin reintentar.` : decision.reasonCode === "FANVUE_INVALID_RECIPIENT_ID" ? `${step.name}: Fanvue rechazó el identificador del destinatario. Se detuvo el flujo sin reintentar.` : decision.reasonCode === "FANVUE_MESSAGE_REJECTED" ? `${step.name}: Fanvue rechazó el contenido o los datos del mensaje. Revisa este paso antes de volver a enviarlo.` : `${step.name} encontró un error que no es seguro reintentar; el workflow fue detenido.`, metadata: { error: errorMessage, attempt: execution.attempt } } }),
     ]);
     throw error;
   }
@@ -291,7 +290,6 @@ async function executeMessage(enrollment: NonNullable<Awaited<ReturnType<typeof 
   }
   if (metadata.priceMinor) throw new Error("WORKFLOW_TEMPLATE_REQUIRES_PPV_STEP");
   const mediaSafety = workflowMessageMediaSafety({ stepType: step.type, config: step.config, templateMetadata: step.messageTemplate?.metadata, mediaUuids: metadata.mediaUuids });
-  if (!canReceiveMessageMedia(enrollment.fan, metadata.mediaUuids.length, mediaSafety)) throw new Error("EXPLICIT_CONTENT_OPT_IN_REQUIRED");
   const text = prepareOutboundMediaText(renderTemplateVariables(step.messageTemplate?.text ?? metadata.text, enrollment.fan), metadata.mediaOrigin, metadata.mediaUuids.length, enrollment.workflow.creator.settings?.aiProfileLabelConfirmed === true);
   if (text.length > 5000) throw new Error("WORKFLOW_MESSAGE_TOO_LONG");
   if (!text && metadata.mediaUuids.length === 0) throw new Error("WORKFLOW_TEMPLATE_EMPTY");
@@ -302,7 +300,7 @@ async function executeMessage(enrollment: NonNullable<Awaited<ReturnType<typeof 
   const token = await getValidFanvueAccessToken(enrollment.creatorId);
   let sent;
   try {
-    await assertSendRecipient(enrollment.creatorId, enrollment.fanId, metadata.mediaUuids.length, false, mediaSafety);
+    await assertSendRecipient(enrollment.creatorId, enrollment.fanId, metadata.mediaUuids, false, mediaSafety, token);
     sent = await fanvueRequest(`/v1/chats/${enrollment.fan.fanvueUserId}/message`, token, sentMessageSchema, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -339,7 +337,6 @@ async function executeMessage(enrollment: NonNullable<Awaited<ReturnType<typeof 
 }
 
 async function executePpv(enrollment: LoadedEnrollment, step: NonNullable<StepRecord>, executionId: string, now: Date) {
-  if (!canReceivePaidOrIntimateContent(enrollment.fan)) throw new Error("EXPLICIT_CONTENT_OPT_IN_REQUIRED");
   if (step.messageTemplateId && (!step.messageTemplate || step.messageTemplate.status !== "ACTIVE")) throw new Error("WORKFLOW_TEMPLATE_UNAVAILABLE");
   const metadata = step.messageTemplate ? readTemplateMetadata(step.messageTemplate.metadata) : readManualStepMetadata(step.config);
   if (step.messageTemplate) {
@@ -356,9 +353,10 @@ async function executePpv(enrollment: LoadedEnrollment, step: NonNullable<StepRe
   const reservation = await prepareWorkflowSend(enrollment, step, executionId, now);
   if (!reservation.allowed) return reservation.result;
   const token = await getValidFanvueAccessToken(enrollment.creatorId);
+  const mediaSafety = workflowMessageMediaSafety({ stepType: step.type, config: step.config, templateMetadata: step.messageTemplate?.metadata, mediaUuids: metadata.mediaUuids });
   let sent;
   try {
-    await assertSendRecipient(enrollment.creatorId, enrollment.fanId, metadata.mediaUuids.length, true);
+    await assertSendRecipient(enrollment.creatorId, enrollment.fanId, metadata.mediaUuids, true, mediaSafety, token);
     sent = await fanvueRequest(`/v1/chats/${enrollment.fan.fanvueUserId}/message`, token, sentMessageSchema, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

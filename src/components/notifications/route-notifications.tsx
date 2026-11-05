@@ -61,9 +61,11 @@ const messageErrors: Record<string, string> = {
   send_review: "No se pudo confirmar si Fanvue recibió el mensaje. Revisa la conversación antes de intentar enviarlo otra vez.",
   send_pending: "Este envío ya está en proceso. Espera a que termine antes de intentarlo de nuevo.",
   do_not_message: "Este fan está marcado como ‘No contactar’. Retira la preferencia desde Fan Lifecycle para enviarle mensajes.",
-  explicit_opt_in_required: "Este contenido requiere suscripción activa o consentimiento registrado. Revisa el fan en Fan Lifecycle.",
-  ppv_requires_subscription_or_consent: "PPV no enviado: este fan no tiene suscripción activa ni consentimiento para recibir contenido íntimo. No se realizó ningún cobro.",
-  media_requires_sfw_or_consent: "Archivos no enviados: confirma que son SFW o registra consentimiento para contenido íntimo en Fan Lifecycle.",
+  explicit_opt_in_required: "El contenido 18+ requiere consentimiento explícito verificable en Fan Lifecycle.",
+  intimate_consent_required: "Envío bloqueado: el fan no ha dado consentimiento explícito verificable para contenido 18+ / NSFW.",
+  content_classification_required: "Clasifica todos los archivos como SFW o 18+ / NSFW antes de enviarlos.",
+  fanvue_nsfw_label_required: "Envío bloqueado: Fanvue todavía no confirma la etiqueta oficial NSFW de estos archivos.",
+  content_classification_mismatch: "Envío bloqueado: Fanvue clasificó como NSFW un archivo declarado SFW. Corrige la clasificación.",
   invalid_schedule: "Elige una fecha futura válida para programar el mensaje.",
 };
 const templateErrors: Record<string, string> = {
@@ -71,6 +73,7 @@ const templateErrors: Record<string, string> = {
   in_use: "No puedes eliminarla porque un workflow está usando esta plantilla.",
   not_found: "La plantilla ya no existe.",
   invalid: "Revisa los datos de la plantilla.",
+  classification_required: "Clasifica los archivos como SFW o 18+ / NSFW antes de guardar la plantilla.",
   unknown: "No se pudo completar la operación con la plantilla.",
 };
 

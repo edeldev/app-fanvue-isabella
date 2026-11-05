@@ -15,13 +15,18 @@ describe("workflowMessageMediaSafety", () => {
     expect(workflowMessageMediaSafety({ stepType: "SEND_MESSAGE", config, templateMetadata: { ...template, sfwAttested: false }, mediaUuids: ["photo-a", "photo-b"] })).toBe("UNREVIEWED");
   });
 
+  it("lets a legacy published version adopt its first rating without changing frozen media", () => {
+    expect(workflowMessageMediaSafety({ stepType: "SEND_PPV", config: { publishedMediaUuids: ["photo-a", "photo-b"] }, templateMetadata: { ...template, contentRating: "NSFW" }, mediaUuids: ["photo-a", "photo-b"] })).toBe("NSFW");
+    expect(workflowMessageMediaSafety({ stepType: "SEND_PPV", config: { publishedMediaUuids: ["photo-a", "photo-b"] }, templateMetadata: { ...template, contentRating: "NSFW", media: [{ uuid: "changed" }] }, mediaUuids: ["changed"] })).toBe("UNREVIEWED");
+  });
+
   it("allows manual SFW messages but never PPV", () => {
     expect(workflowMessageMediaSafety({ stepType: "SEND_MESSAGE", config: { manualSfwAttested: true }, mediaUuids: ["photo-a"] })).toBe("SFW");
     expect(workflowMessageMediaSafety({ stepType: "SEND_PPV", config: { manualSfwAttested: true }, mediaUuids: ["photo-a"] })).toBe("UNREVIEWED");
   });
 
-  it("does not mark paid templates or empty media as SFW", () => {
-    expect(publishedTemplateSfwMedia({ ...template, priceMinor: 500 })).toBeNull();
+  it("classifies SFW independently from price and rejects empty media", () => {
+    expect(publishedTemplateSfwMedia({ ...template, priceMinor: 500 })).toEqual(["photo-a", "photo-b"]);
     expect(workflowMessageMediaSafety({ stepType: "SEND_MESSAGE", config: { manualSfwAttested: true }, mediaUuids: [] })).toBe("UNREVIEWED");
   });
 });

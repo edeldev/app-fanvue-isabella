@@ -158,6 +158,10 @@ export const mediaBulkSchema = z.object({
     status: z.enum(["created", "processing", "ready", "error"]),
     mediaType: z.enum(["image", "video", "audio", "document"]).optional(),
     name: z.string().nullable().optional(),
+    tags: z.object({
+      isNsfw: z.boolean(),
+      nsfwCategory: z.array(z.string()).optional().default([]),
+    }).passthrough().nullable().optional().default(null),
     variants: z.array(z.object({
       variantType: z.string(),
       url: z.string().optional(),
