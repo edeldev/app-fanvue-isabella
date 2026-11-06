@@ -13,7 +13,8 @@ export async function Sidebar() {
   );
 
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-white/8 bg-[#0b0d12] px-4 py-5 lg:sticky lg:top-0 lg:flex lg:h-dvh lg:self-start lg:flex-col lg:overflow-y-auto">
+    <>
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col overflow-y-auto overscroll-contain border-r border-white/8 bg-[#0b0d12] px-4 py-5 lg:flex">
       <div className="mb-8 flex items-center gap-3 px-2">
         <div className="grid size-9 place-items-center rounded-xl bg-violet-500 text-white">
           <Gauge className="size-5" />
@@ -44,5 +45,7 @@ export async function Sidebar() {
         </div>
       ) : null}
     </aside>
+    <div aria-hidden="true" className="hidden w-64 shrink-0 lg:block" />
+    </>
   );
 }
