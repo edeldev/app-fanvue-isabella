@@ -2,6 +2,7 @@ import type { EnrollmentStatus, Prisma } from "@prisma/client";
 import { assertEnrollmentTransition } from "@/domain/automation/transitions";
 import { remainingWaitSeconds, resumedRunAt } from "@/domain/workflows/pause-schedule";
 import { prisma } from "@/lib/prisma";
+import { formatAppDateTime } from "@/lib/date-time";
 import { silenceWaitDeadline } from "@/domain/workflows/silence-wait";
 import { reentryBlockedReason } from "@/domain/workflows/reentry-policy";
 import { isReplyWithinAttributionWindow } from "@/domain/workflows/reply-attribution";
@@ -40,7 +41,7 @@ export async function startEnrollment(creatorId: string, fanId: string, workflow
     if (blocked) {
       const explanation = blocked.code === "WORKFLOW_REENTRY_ONCE"
         ? `${workflow.name}: el fan fue omitido porque este workflow solo puede ejecutarse una vez por fan.`
-        : `${workflow.name}: el fan fue omitido; podrá volver a ingresar después del ${blocked.eligibleAt?.toLocaleString("es-MX")}.`;
+        : `${workflow.name}: el fan fue omitido; podrá volver a ingresar después del ${blocked.eligibleAt ? formatAppDateTime(blocked.eligibleAt) : "periodo configurado"}.`;
       await transaction.automationLog.create({
         data: { creatorId, fanId, eventType: "WORKFLOW_REENTRY_SKIPPED", reasonCode: blocked.code, explanation, metadata: { workflowId, reentryPolicy: workflow.reentryPolicy, eligibleAt: blocked.eligibleAt?.toISOString() ?? null } satisfies Prisma.InputJsonValue },
       });

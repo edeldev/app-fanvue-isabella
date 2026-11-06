@@ -5,6 +5,97 @@
   --foreground: #f4f4f5;
 }
 
+/* Workflow operations: shared neon surface for assignments and activity. */
+section:has(> #historial-workflows) {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  border-color: rgb(139 92 246 / 0.18);
+  background:
+    radial-gradient(circle at 90% 0%, rgb(139 92 246 / 0.09), transparent 28rem),
+    linear-gradient(145deg, rgb(17 19 26 / 0.98), rgb(13 15 21 / 0.98));
+  box-shadow: 0 24px 80px rgb(0 0 0 / 0.28), 0 0 42px rgb(139 92 246 / 0.045);
+}
+
+section:has(> #historial-workflows)::before {
+  position: absolute;
+  top: 0;
+  right: 4rem;
+  left: 4rem;
+  height: 1px;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgb(167 139 250 / 0.8), transparent);
+}
+
+section:has(> #historial-workflows) > div:first-child {
+  position: relative;
+  padding: 1rem;
+  border: 1px solid rgb(139 92 246 / 0.12);
+  border-radius: 1rem;
+  background: rgb(0 0 0 / 0.16);
+}
+
+section:has(> #historial-workflows) > #historial-workflows + div {
+  position: relative;
+  padding: 1rem;
+  border: 1px solid rgb(244 114 182 / 0.12);
+  border-radius: 1rem;
+  background: linear-gradient(145deg, rgb(244 114 182 / 0.025), rgb(0 0 0 / 0.16));
+}
+
+section:has(> #historial-workflows) > #historial-workflows + div > div:last-child > div {
+  border: 1px solid rgb(255 255 255 / 0.055);
+  border-radius: 0.875rem;
+  background: rgb(0 0 0 / 0.2);
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+section:has(> #historial-workflows) > #historial-workflows + div > div:last-child > div:hover {
+  border-color: rgb(244 114 182 / 0.18);
+  background: rgb(244 114 182 / 0.025);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 640px) {
+  section:has(> #historial-workflows) {
+    border-radius: 1.25rem;
+    padding: 0.875rem;
+  }
+
+  section:has(> #historial-workflows) > div:first-child,
+  section:has(> #historial-workflows) > #historial-workflows + div {
+    padding: 0.875rem;
+  }
+}
+
+section:has(> #historial-workflows) > div:has(+ #historial-workflows) {
+  gap: 0.75rem;
+}
+
+section:has(> #historial-workflows) > div:has(+ #historial-workflows) > article {
+  position: relative;
+  overflow: hidden;
+  border-color: rgb(139 92 246 / 0.13);
+  border-radius: 1rem;
+  background: linear-gradient(145deg, rgb(139 92 246 / 0.035), rgb(0 0 0 / 0.2));
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.12);
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+section:has(> #historial-workflows) > div:has(+ #historial-workflows) > article::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  content: "";
+  background: linear-gradient(180deg, rgb(167 139 250 / 0.15), rgb(139 92 246 / 0.75), transparent);
+}
+
+section:has(> #historial-workflows) > div:has(+ #historial-workflows) > article:hover {
+  border-color: rgb(139 92 246 / 0.28);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.16), 0 0 24px rgb(139 92 246 / 0.055);
+  transform: translateY(-1px);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

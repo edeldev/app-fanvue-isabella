@@ -327,17 +327,13 @@ export default async function WorkflowsPage({ searchParams }: { searchParams: Pr
       <div className="min-w-0 max-w-full flex-1 overflow-x-hidden">
         <Topbar />
         <main id="main-content" tabIndex={-1} className="mx-auto min-w-0 max-w-375 overflow-x-hidden px-3 py-6 sm:px-5 sm:py-8 md:px-8">
-          <div className="mb-8">
-            <p className="mb-2 text-xs font-medium uppercase tracking-[.18em] text-violet-400">
-              Automatización
-            </p>
-            <h1 className="text-3xl font-semibold tracking-tight text-white">
-              Workflows
-            </h1>
-            <p className="mt-2 text-sm text-zinc-500">
-              Construye estrategias versionadas, explicables y validadas antes
-              de cada acción.
-            </p>
+          <div className="relative mb-7 overflow-hidden rounded-3xl border border-violet-400/15 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,.16),transparent_38%),linear-gradient(135deg,#171923,#111319)] p-5 shadow-[0_0_50px_rgba(124,58,237,.07)] sm:p-7">
+            <div aria-hidden className="absolute inset-x-16 top-0 h-px bg-gradient-to-r from-transparent via-violet-300/80 to-transparent shadow-[0_0_18px_rgba(196,181,253,.65)]" />
+            <div className="relative max-w-3xl">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.22em] text-violet-300">Revenue automation studio</p>
+              <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Estrategias que convierten</h1>
+              <p className="mt-3 text-sm leading-6 text-zinc-400">Diseña el recorrido desde el primer contacto hasta la conversión, con prioridades claras, seguimiento inteligente y protecciones antes de cada envío.</p>
+            </div>
           </div>
           {creatorId ? (
             <>

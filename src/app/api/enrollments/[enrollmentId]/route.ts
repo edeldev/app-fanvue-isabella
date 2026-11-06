@@ -62,6 +62,10 @@ function historyDetail(metadata: unknown) {
   if (typeof value.matched === "boolean") return { detail: `Resultado de la condición: ${value.matched ? "sí cumple" : "no cumple"}.`, detailDate: null };
   if (typeof value.amountMinor === "number") return { detail: `Importe confirmado: $${(value.amountMinor / 100).toFixed(2)} USD.`, detailDate: null };
   if (typeof value.autoResumeAt === "string") return { detail: "Reanudación programada", detailDate: value.autoResumeAt };
+  if (typeof value.timeoutAt === "string") return { detail: "Tiempo límite para responder", detailDate: value.timeoutAt };
+  if (typeof value.resumeAt === "string") return { detail: "Silencio requerido hasta", detailDate: value.resumeAt };
+  if (typeof value.nextRunAt === "string") return { detail: "Continuación programada", detailDate: value.nextRunAt };
+  if (typeof value.retryAt === "string") return { detail: "Próximo reintento", detailDate: value.retryAt };
   return { detail: null, detailDate: null };
 }
 

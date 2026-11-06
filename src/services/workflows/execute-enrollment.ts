@@ -4,6 +4,7 @@ import { evaluateWorkflowConditionGroup, workflowConditionLabels, workflowCondit
 import { fanvueRequest } from "@/lib/fanvue/client";
 import { sentMessageSchema } from "@/lib/fanvue/sync-schemas";
 import { prisma } from "@/lib/prisma";
+import { formatAppDateTime } from "@/lib/date-time";
 import { workflowMessageMediaSafety } from "@/domain/workflows/media-safety";
 import { mandatoryAutomatedSendLimits } from "@/domain/messages/mandatory-send-limits";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
@@ -85,7 +86,7 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
     const schedule = scheduleWait(step, now);
     await prisma.$transaction([
       prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { status: "WAITING", nextRunAt: schedule.nextRunAt } }),
-      prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, eventType: "WORKFLOW_WAIT_STARTED", explanation: `${step.name}: esperando hasta ${schedule.nextRunAt.toLocaleString("es-MX")}.` } }),
+      prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, eventType: "WORKFLOW_WAIT_STARTED", explanation: `${step.name}: esperando hasta ${formatAppDateTime(schedule.nextRunAt)}.`, metadata: { stepId: step.id, startedAt: now.toISOString(), nextRunAt: schedule.nextRunAt.toISOString() } } }),
     ]);
     return { outcome: "WAIT_STARTED", nextStep: step.name, shouldContinue: false };
   }
@@ -95,7 +96,7 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
     const timeoutAt = new Date(now.getTime() + timeoutMinutes * 60_000);
     await prisma.$transaction([
       prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { status: "WAITING", nextRunAt: timeoutAt, lastResult: { reasonCode: "WAITING_FOR_FAN_REPLY", stepId: step.id, startedAt: now.toISOString(), timeoutAt: timeoutAt.toISOString() } } }),
-      prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, eventType: "WORKFLOW_REPLY_WAIT_STARTED", explanation: `${step.name}: esperando una respuesta hasta ${timeoutAt.toLocaleString("es-MX")}.`, metadata: { stepId: step.id, startedAt: now.toISOString(), timeoutAt: timeoutAt.toISOString() } } }),
+      prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, eventType: "WORKFLOW_REPLY_WAIT_STARTED", explanation: `${step.name}: esperando una respuesta hasta ${formatAppDateTime(timeoutAt)}.`, metadata: { stepId: step.id, startedAt: now.toISOString(), timeoutAt: timeoutAt.toISOString() } } }),
     ]);
     return { outcome: "REPLY_WAIT_STARTED", nextStep: step.name, shouldContinue: false };
   }
@@ -196,7 +197,7 @@ async function executeEnrollmentStep(creatorId: string, enrollmentId: string, no
       await prisma.$transaction([
         prisma.automationExecution.update({ where: { id: execution.id }, data: { status: "RETRYING", decision: "RETRY", reasonCode: decision.reasonCode, reason: errorMessage, finishedAt: new Date(), nextRetryAt: retryAt } }),
         prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { status: "WAITING", nextRunAt: retryAt, lastResult: { reasonCode: decision.reasonCode, attempt: execution.attempt, retryAt: retryAt.toISOString() } } }),
-        prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, executionId: execution.id, eventType: "WORKFLOW_RETRY_SCHEDULED", level: "WARN", reasonCode: decision.reasonCode, explanation: `${step.name}: intento ${execution.attempt} falló temporalmente; se reintentará el ${retryAt.toLocaleString("es-MX")}.`, metadata: { error: errorMessage, attempt: execution.attempt, maximumAttempts, retryAt: retryAt.toISOString() } } }),
+        prisma.automationLog.create({ data: { creatorId, fanId: enrollment.fanId, enrollmentId, executionId: execution.id, eventType: "WORKFLOW_RETRY_SCHEDULED", level: "WARN", reasonCode: decision.reasonCode, explanation: `${step.name}: intento ${execution.attempt} falló temporalmente; se reintentará el ${formatAppDateTime(retryAt)}.`, metadata: { error: errorMessage, attempt: execution.attempt, maximumAttempts, retryAt: retryAt.toISOString() } } }),
       ]);
       return { outcome: "RETRY_SCHEDULED", nextStep: step.name, shouldContinue: false };
     }
@@ -487,7 +488,7 @@ async function deferWorkflowSend(enrollment: LoadedEnrollment, step: NonNullable
   await prisma.$transaction([
     prisma.automationExecution.update({ where: { id: executionId }, data: { status: "SKIPPED", decision: "WAIT", reasonCode, reason, finishedAt: now, nextRetryAt: nextRunAt } }),
     prisma.workflowEnrollment.update({ where: { id: enrollment.id }, data: { status: "WAITING", nextRunAt, lastResult: { reasonCode, nextRunAt: nextRunAt.toISOString() } } }),
-    prisma.automationLog.create({ data: { creatorId: enrollment.creatorId, fanId: enrollment.fanId, enrollmentId: enrollment.id, executionId, eventType: "WORKFLOW_SEND_LIMIT_DEFERRED", reasonCode, explanation: `${step.name}: ${reason}; se intentará nuevamente el ${nextRunAt.toLocaleString("es-MX")}.`, metadata: { nextRunAt: nextRunAt.toISOString(), workflowId: enrollment.workflowId } } }),
+    prisma.automationLog.create({ data: { creatorId: enrollment.creatorId, fanId: enrollment.fanId, enrollmentId: enrollment.id, executionId, eventType: "WORKFLOW_SEND_LIMIT_DEFERRED", reasonCode, explanation: `${step.name}: ${reason}; se intentará nuevamente el ${formatAppDateTime(nextRunAt)}.`, metadata: { nextRunAt: nextRunAt.toISOString(), workflowId: enrollment.workflowId } } }),
   ]);
   return { allowed: false as const, result: { outcome: reasonCode, nextStep: step.name, shouldContinue: false } };
 }
