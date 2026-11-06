@@ -12,6 +12,7 @@ import { MessageTranslation } from "@/components/message-translation";
 import { ExpandableImage } from "@/components/expandable-image";
 import { ChatMediaCarousel } from "@/components/chat-media-carousel";
 import { MessageReceipt } from "@/components/message-receipt";
+import { ChatMessageActions } from "@/components/chat-message-actions";
 import { resolveMessageDeliveryState } from "@/domain/messages/delivery-status";
 import { resolveMessagePreviewUuid } from "@/domain/messages/ppv-preview";
 import { fanvueRequest } from "@/lib/fanvue/client";
@@ -76,6 +77,19 @@ const initials = (name: string) =>
     .map((part) => part[0])
     .join("")
     .toUpperCase() || "F";
+
+function compatibleReply(text: string | null) {
+  if (!text) return null;
+  const normalized = text.replace(/\r\n?/g, "\n");
+  const separator = normalized.indexOf("\n\n");
+  if (separator < 0) return null;
+  const header = normalized.slice(0, separator).trim();
+  const body = normalized.slice(separator + 2).trimStart();
+  const match = header.match(/^[↪↩→]\s+([^:\n]{1,80}):\s*([\s\S]{1,240})$/);
+  return match && body
+    ? { sender: match[1].trim(), excerpt: match[2].trim(), body }
+    : null;
+}
 
 export default async function MessagesPage({ searchParams }: Props) {
   const params = await searchParams;
@@ -207,6 +221,12 @@ export default async function MessagesPage({ searchParams }: Props) {
     pricing: { USD: { price: number } } | null;
     purchasedAt: string | null;
     gif: { title: string | null; url: string | null } | null;
+    repliedMessage: {
+      uuid: string;
+      text: string | null;
+      sender: { uuid?: string; handle?: string };
+    } | null;
+    isDeleted?: boolean;
   }> = [];
   const mediaByMessage = new Map<string, ResolvedMedia[]>();
   const liveDeliveryByMessage = new Map<string, "SENT" | "DELIVERED" | "READ">();
@@ -256,6 +276,9 @@ export default async function MessagesPage({ searchParams }: Props) {
               message.uuid,
               {
                 ...message,
+                isDeleted:
+                  String(message.status).toUpperCase() === "UNSENT" ||
+                  saved?.status === "DELETED",
                 mediaUuids:
                   savedMediaUuids.length > 0
                     ? savedMediaUuids
@@ -364,9 +387,10 @@ export default async function MessagesPage({ searchParams }: Props) {
     return next.size ? `/messages?${next}` : "/messages";
   };
   const conversationIsOpen = Boolean(selected);
+  const messageByUuid = new Map(messages.map((message) => [message.uuid, message]));
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-[#101218] text-zinc-100">
+    <div className="fixed inset-0 isolate flex overflow-hidden bg-[#101218] text-zinc-100">
       <LiveRefresh />
       <FanPresenceReconciler />
       {selected && selected.unreadMessagesCount > 0 ? (
@@ -519,23 +543,37 @@ export default async function MessagesPage({ searchParams }: Props) {
                           resolvedMediaUuids: media.map((item) => item.uuid),
                           priceMinor: ppvPrice,
                         });
+                        const senderName = inbound
+                          ? selected.fan.displayName || selected.fan.username || "Fan"
+                          : "Tú";
+                        const quoted = compatibleReply(message.text);
+                        const referencedMessage = message.repliedMessage?.uuid
+                          ? messageByUuid.get(message.repliedMessage.uuid)
+                          : null;
+                        const nativeReplyText = message.repliedMessage?.text || referencedMessage?.text || null;
+                        const nativeReplyMedia = message.repliedMessage
+                          ? mediaByMessage.get(message.repliedMessage.uuid)?.[0]
+                          : null;
                         return (
                           <div
                             key={`${message.uuid}-${messageIndex}`}
-                            className={`max-w-[85%] sm:max-w-[72%] ${inbound ? "self-start" : "self-end"}`}
+                            className={`group relative max-w-[85%] sm:max-w-[72%] ${inbound ? "self-start" : "self-end"}`}
                           >
                             <div
-                              className={`overflow-hidden rounded-2xl text-sm leading-5 ${inbound ? "rounded-bl-md bg-white/8 text-zinc-200" : "rounded-br-md bg-violet-600 text-white"}`}
+                              className={`overflow-hidden rounded-2xl border text-sm leading-5 shadow-sm ${inbound ? "rounded-bl-md border-white/6 bg-[#20232b] text-zinc-200" : "rounded-br-md border-violet-300/15 bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-violet-950/20"}`}
                             >
-                              {message.gif?.url ? (
+                              {message.isDeleted ? <p className="px-4 py-3 italic text-white/55">Mensaje eliminado</p> : null}
+                              {!message.isDeleted && message.repliedMessage ? <div className="mx-2 mt-2 flex min-w-0 overflow-hidden rounded-xl border border-white/8 bg-black/30"><div className="min-w-0 flex-1 border-l-2 border-violet-200/60 px-3 py-2"><p className="truncate text-[10px] font-semibold text-white/80">{message.repliedMessage.sender.uuid === selected.fan.fanvueUserId || referencedMessage?.sender.uuid === selected.fan.fanvueUserId ? selected.fan.displayName || selected.fan.username || "Fan" : "Tú"}</p><p className="mt-0.5 line-clamp-2 break-words text-[11px] leading-4 text-white/55">{nativeReplyText || "Mensaje con contenido"}</p></div>{nativeReplyMedia?.url ? <span className="h-14 w-14 shrink-0 bg-cover bg-center" style={{ backgroundImage: `url(${JSON.stringify(nativeReplyMedia.url)})` }} /> : null}</div> : null}
+                              {!message.isDeleted && !message.repliedMessage && quoted ? <div className="mx-2 mt-2 overflow-hidden rounded-xl border border-white/8 bg-black/30"><div className="border-l-2 border-violet-300/70 px-3 py-2"><p className="truncate text-[10px] font-semibold text-violet-100/90">{quoted.sender}</p><p className="mt-0.5 line-clamp-2 break-words text-[11px] leading-4 text-white/55">{quoted.excerpt}</p></div></div> : null}
+                              {!message.isDeleted && message.gif?.url ? (
                                 <ExpandableImage
                                   src={message.gif.url}
                                   alt={message.gif.title || "GIF"}
                                   className="max-h-80 w-full object-contain"
                                 />
                               ) : null}
-                              {media.length > 0 ? <ChatMediaCarousel media={media} ppvPrice={ppvPrice} previewUuid={effectivePreviewUuid} /> : null}
-                              {ppvPrice !== null ? (
+                              {!message.isDeleted && media.length > 0 ? <ChatMediaCarousel media={media} ppvPrice={ppvPrice} previewUuid={effectivePreviewUuid} /> : null}
+                              {!message.isDeleted && ppvPrice !== null ? (
                                 <div className="flex items-center justify-between gap-4 border-t border-white/10 bg-black/25 px-4 py-2.5">
                                   <span className="text-xs font-semibold">
                                     🔒 PPV · ${(ppvPrice / 100).toFixed(2)} USD
@@ -547,19 +585,20 @@ export default async function MessagesPage({ searchParams }: Props) {
                                   </span>
                                 </div>
                               ) : null}
-                              {message.text ? (
-                                <p className="px-4 py-3">{message.text}</p>
-                              ) : !message.gif?.url && media.length === 0 ? (
+                              {!message.isDeleted && message.text ? (
+                                <p className="whitespace-pre-wrap break-words px-4 py-3">{quoted ? quoted.body : message.text}</p>
+                              ) : !message.isDeleted && !message.gif?.url && media.length === 0 ? (
                                 <p className="px-4 py-3">
                                   [{message.mediaType || message.type}]
                                 </p>
                               ) : null}
                             </div>
-                            {inbound && message.text && shouldOfferSpanishTranslation(message.text, fanConversationIsMostlySpanish) ? <MessageTranslation text={message.text} /> : null}
+                            {!message.isDeleted && inbound && message.text && shouldOfferSpanishTranslation(message.text, fanConversationIsMostlySpanish) ? <MessageTranslation text={message.text} /> : null}
                             <div className={`mt-1 flex items-center gap-1 px-1 text-[10px] text-zinc-700 ${inbound ? "justify-start" : "justify-end"}`}>
                               <span>{message.sentAt ? formatAppDateTime(message.sentAt) : "Sin fecha"}</span>
                               {!inbound ? <MessageReceipt state={resolveMessageDeliveryState({ isRead: message.isRead, providerStatus: message.status })} /> : null}
                             </div>
+                            {!message.isDeleted ? <div className={`absolute top-1/2 z-20 -translate-y-1/2 opacity-70 transition group-hover:opacity-100 group-focus-within:opacity-100 ${inbound ? "-right-9" : "-left-9"}`}><ChatMessageActions messageUuid={message.uuid} fanUuid={selected.fan.fanvueUserId} sender={senderName} text={message.text || "Mensaje con contenido"} canDelete={!inbound} menuSide={inbound ? "left" : "right"} /></div> : null}
                           </div>
                         );
                       })

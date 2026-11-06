@@ -17,6 +17,72 @@ function cursorPage<T extends z.ZodType>(item: T) {
   });
 }
 
+type NormalizedRepliedMessage = {
+  uuid: string;
+  text: string | null;
+  sender: { uuid?: string; handle?: string };
+};
+
+function normalizeRepliedMessage(value: unknown): NormalizedRepliedMessage | null {
+  if (typeof value === "string" && value.trim()) {
+    return { uuid: value.trim(), text: null, sender: {} };
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  for (const nested of [record.message, record.data, record.originalMessage, record.original_message]) {
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      const normalized = normalizeRepliedMessage(nested);
+      if (normalized) return normalized;
+    }
+  }
+  const nestedSender = record.sender && typeof record.sender === "object" && !Array.isArray(record.sender)
+    ? record.sender as Record<string, unknown>
+    : {};
+  const uuid = [record.uuid, record.id, record.messageUuid, record.message_uuid].find((item) => typeof item === "string");
+  const text = typeof record.text === "string"
+    ? record.text
+    : typeof record.message === "string"
+      ? record.message
+      : typeof record.body === "string"
+        ? record.body
+        : typeof record.caption === "string"
+          ? record.caption
+          : null;
+  const senderUuid = [nestedSender.uuid, record.senderUuid, record.sender_uuid].find((item) => typeof item === "string");
+  const senderHandle = [nestedSender.handle, record.senderHandle, record.sender_handle].find((item) => typeof item === "string");
+  if (!uuid && !text && !senderUuid && !senderHandle) return null;
+  return {
+    uuid: typeof uuid === "string" ? uuid : "",
+    text,
+    sender: {
+      ...(typeof senderUuid === "string" ? { uuid: senderUuid } : {}),
+      ...(typeof senderHandle === "string" ? { handle: senderHandle } : {}),
+    },
+  };
+}
+
+function replyCandidate(message: Record<string, unknown>) {
+  const directKeys = [
+    "repliedMessage", "replied_message", "replyToMessage", "reply_to_message",
+    "replyTo", "reply_to", "quotedMessage", "quoted_message", "quote",
+    "repliedMessageUuid", "replied_message_uuid", "replyToMessageUuid",
+    "reply_to_message_uuid", "quotedMessageUuid", "quoted_message_uuid",
+  ];
+  for (const key of directKeys) {
+    if (message[key] !== undefined && message[key] !== null) return message[key];
+  }
+  for (const containerKey of ["metadata", "meta", "context", "reply", "reference"]) {
+    const container = message[containerKey];
+    if (!container || typeof container !== "object" || Array.isArray(container)) continue;
+    const record = container as Record<string, unknown>;
+    for (const key of directKeys) {
+      if (record[key] !== undefined && record[key] !== null) return record[key];
+    }
+    if (/reply|quote|reference/i.test(containerKey)) return record;
+  }
+  return null;
+}
+
 export const followersPageSchema = cursorPage(fanvueFanSchema);
 
 export const subscriberSchema = fanvueFanSchema.extend({
@@ -88,7 +154,29 @@ export const messagesPageSchema = z.object({
       title: z.string().nullable().optional().default(null),
       url: z.string().nullable().optional().default(null),
     }).passthrough().nullable().optional().default(null),
-  }).passthrough()),
+    repliedMessage: z.unknown().optional(),
+    replied_message: z.unknown().optional(),
+    replyToMessage: z.unknown().optional(),
+    reply_to_message: z.unknown().optional(),
+    replyTo: z.unknown().optional(),
+    reply_to: z.unknown().optional(),
+    repliedMessageUuid: z.unknown().optional(),
+    replied_message_uuid: z.unknown().optional(),
+    replyToMessageUuid: z.unknown().optional(),
+    reply_to_message_uuid: z.unknown().optional(),
+    quotedMessage: z.unknown().optional(),
+    quoted_message: z.unknown().optional(),
+    quotedMessageUuid: z.unknown().optional(),
+    quoted_message_uuid: z.unknown().optional(),
+    metadata: z.unknown().optional(),
+    meta: z.unknown().optional(),
+    context: z.unknown().optional(),
+    reply: z.unknown().optional(),
+    reference: z.unknown().optional(),
+  }).passthrough().transform((message) => ({
+    ...message,
+    repliedMessage: normalizeRepliedMessage(replyCandidate(message)),
+  }))),
   pagination: z.object({
     page: z.number(), size: z.number(), hasMore: z.boolean(),
   }).passthrough().optional(),

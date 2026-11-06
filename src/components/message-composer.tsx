@@ -4,9 +4,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEve
 import { useFormStatus } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { formatAppDateTime } from "@/lib/date-time";
-import { Bot, Braces, CalendarClock, Check, Copy, FileText, Film, ImageIcon, Languages, LoaderCircle, Plus, RefreshCw, Send, Sparkles, WandSparkles, X } from "lucide-react";
+import { Bot, Braces, CalendarClock, Check, Copy, FileText, Film, ImageIcon, Languages, LoaderCircle, Plus, RefreshCw, Reply, Send, Sparkles, WandSparkles, X } from "lucide-react";
 import { MediaFields, type AttachedMedia } from "@/components/media-fields";
 import { enqueueSnackbar } from "notistack";
+import { CHAT_REPLY_EVENT, type ChatReplyDetail } from "@/components/chat-message-actions";
 
 type Template = { id: string; name: string; text: string; category: string; media: AttachedMedia[]; priceMinor: number | null; previewUuid: string | null; sfwAttested: boolean; contentRating: "SFW" | "NSFW" | null; mediaOrigin: "original" | "ai_generated" | null };
 const categoryLabels: Record<string, string> = { WELCOME: "Bienvenida", FOLLOW_UP: "Seguimiento", RENEWAL: "Renovación", SALES: "Venta", VIP: "VIP", REACTIVATION: "Reactivación", GENERAL: "General" };
@@ -66,6 +67,7 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
   const [aiMode, setAiMode] = useState<AiMode>("reply");
   const [aiSuggestionHistory, setAiSuggestionHistory] = useState<string[]>([]);
   const [aiVariation, setAiVariation] = useState(-1);
+  const [replyingTo, setReplyingTo] = useState<ChatReplyDetail | null>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const variablesMenu = useRef<HTMLDetailsElement>(null);
   const sendIntentInput = useRef<HTMLInputElement>(null);
@@ -94,6 +96,17 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [mediaOpen]);
+
+  useEffect(() => {
+    const selectReply = (event: Event) => {
+      const detail = (event as CustomEvent<ChatReplyDetail>).detail;
+      if (!detail?.messageUuid) return;
+      setReplyingTo(detail);
+      requestAnimationFrame(() => textarea.current?.focus());
+    };
+    window.addEventListener(CHAT_REPLY_EVENT, selectReply);
+    return () => window.removeEventListener(CHAT_REPLY_EVENT, selectReply);
+  }, []);
 
   function updateCommand(value: string, cursor: number) {
     const beforeCursor = value.slice(0, cursor);
@@ -233,9 +246,12 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
   }
 
   const scheduledAt = scheduledLocal ? new Date(scheduledLocal).toISOString() : "";
+  const replyText = replyingTo?.text.replace(/\s+/g, " ").trim() || "Mensaje con contenido";
+  const replyExcerpt = `${replyText.slice(0, 180)}${replyText.length > 180 ? "…" : ""}`;
+  const outboundText = replyingTo ? `↪ ${replyingTo.sender}: ${replyExcerpt}\n\n${text}` : text;
 
-  return <form action="/api/messages/send" method="post" onSubmit={() => { if (sendIntentInput.current && !sendIntentInput.current.value) sendIntentInput.current.value = globalThis.crypto?.randomUUID?.() ?? ""; }} className="relative shrink-0 border-t border-white/8 bg-[#12141a] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-    <input type="hidden" name="fanUuid" value={fanUuid} /><input type="hidden" name="templateId" value={templateId} /><input type="hidden" name="mediaOrigin" value={mediaOrigin} /><input type="hidden" name="scheduledAt" value={scheduledAt} /><input type="hidden" name="sendIntentId" key={`${fanUuid}:${navigationKey}`} ref={sendIntentInput} defaultValue="" />
+  return <form action="/api/messages/send" method="post" onSubmit={() => { if (sendIntentInput.current && !sendIntentInput.current.value) sendIntentInput.current.value = globalThis.crypto?.randomUUID?.() ?? ""; }} className="relative max-h-[58dvh] shrink-0 overflow-x-hidden overflow-y-auto overscroll-contain border-t border-white/8 bg-[#12141a] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] [scrollbar-gutter:stable]">
+    <input type="hidden" name="fanUuid" value={fanUuid} /><input type="hidden" name="templateId" value={templateId} /><input type="hidden" name="mediaOrigin" value={mediaOrigin} /><input type="hidden" name="scheduledAt" value={scheduledAt} /><input type="hidden" name="text" value={outboundText} /><input type="hidden" name="sendIntentId" key={`${fanUuid}:${navigationKey}`} ref={sendIntentInput} defaultValue="" />
     {doNotMessage ? <div className="mb-3 rounded-xl border border-rose-400/20 bg-rose-400/8 px-4 py-3"><p className="text-xs font-semibold text-rose-200">Fan marcado como “No contactar”</p><p className="mt-1 text-[11px] text-rose-200/60">Los mensajes manuales, programados y automáticos están bloqueados hasta retirar la preferencia.</p></div> : null}
     {deliveryReviews.length ? <div role="alert" className="mb-3 rounded-xl border border-amber-400/20 bg-amber-400/[.05] px-4 py-3 text-xs text-amber-100/80">
       <p className="font-semibold text-amber-200">{deliveryReviews.length} mensaje{deliveryReviews.length === 1 ? " requiere" : "s requieren"} revisión</p>
@@ -286,8 +302,9 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
         <button type="button" disabled={doNotMessage || aiLoading || !text.trim()} onClick={() => void generateAiSuggestion("improve")} className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-violet-400/15 bg-violet-500/[.08] px-3 text-[11px] font-medium text-violet-200 transition hover:border-violet-400/30 hover:bg-violet-500/15 disabled:cursor-not-allowed disabled:opacity-40"><Sparkles className="size-3.5" />Mejorar borrador</button>
       </div>
     </div>
+    {replyingTo ? <div className="mb-2 flex items-start gap-3 rounded-xl border border-violet-400/15 bg-violet-500/[.06] px-3 py-2.5"><Reply className="mt-0.5 size-3.5 shrink-0 text-violet-300" /><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold text-violet-200">Respondiendo a {replyingTo.sender}</p><p className="mt-0.5 truncate text-[11px] text-zinc-500">{replyExcerpt}</p></div><button type="button" onClick={() => setReplyingTo(null)} aria-label="Cancelar respuesta" className="grid size-6 shrink-0 place-items-center rounded-md text-zinc-600 hover:bg-white/5 hover:text-white"><X className="size-3.5" /></button></div> : null}
     <div className="rounded-2xl border border-white/10 bg-black/20 p-2 shadow-inner transition focus-within:border-violet-500/35 focus-within:ring-2 focus-within:ring-violet-500/10">
-      <textarea ref={textarea} name="text" value={text} disabled={doNotMessage} onChange={event => { setText(event.target.value); updateCommand(event.target.value, event.target.selectionStart); }} onClick={event => updateCommand(text, event.currentTarget.selectionStart)} onKeyDown={handleKeyDown} maxLength={5000} rows={3} placeholder={doNotMessage ? "Mensajería bloqueada para este fan" : "Escribe tu mensaje… Usa / para buscar una plantilla."} aria-label="Escribir mensaje" className="max-h-52 min-h-20 w-full resize-none bg-transparent px-2 py-2 text-sm leading-6 text-zinc-200 outline-none placeholder:text-zinc-600 disabled:cursor-not-allowed disabled:opacity-50" />
+      <textarea ref={textarea} value={text} disabled={doNotMessage} onChange={event => { setText(event.target.value); updateCommand(event.target.value, event.target.selectionStart); }} onClick={event => updateCommand(text, event.currentTarget.selectionStart)} onKeyDown={handleKeyDown} maxLength={Math.max(1, 5000 - (outboundText.length - text.length))} rows={3} placeholder={doNotMessage ? "Mensajería bloqueada para este fan" : "Escribe tu mensaje… Usa / para buscar una plantilla."} aria-label="Escribir mensaje" className="max-h-52 min-h-20 w-full resize-none bg-transparent px-2 py-2 text-sm leading-6 text-zinc-200 outline-none placeholder:text-zinc-600 disabled:cursor-not-allowed disabled:opacity-50" />
       <div className="flex items-center justify-between gap-2 border-t border-white/8 pt-2">
         <div className="flex items-center gap-1.5">
           <button type="button" disabled={doNotMessage} aria-label="Agregar fotos y videos" title="Agregar fotos y videos" onClick={() => { setCommand(null); setMediaOpen(open => !open); }} className={`grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg transition disabled:cursor-not-allowed disabled:opacity-35 ${mediaOpen ? "rotate-45 bg-violet-500 text-white" : "text-zinc-400 hover:bg-white/8 hover:text-white"}`}><Plus className="size-5" /></button>

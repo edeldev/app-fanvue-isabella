@@ -100,6 +100,51 @@ select:disabled { cursor: not-allowed; }
   }
 }
 
+/* El historial de workflows contiene textos externos y códigos largos. Ningún
+   dato puede ampliar la página en móvil; el modal conserva su propio scroll. */
+#historial-workflows,
+#historial-workflows * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+#historial-workflows button,
+[aria-labelledby="history-title"] p,
+[aria-labelledby="history-title"] time {
+  overflow-wrap: anywhere;
+}
+
+html:has([aria-labelledby="history-title"]) {
+  overflow: hidden;
+}
+
+@media (max-width: 639px) {
+  [role="dialog"][aria-labelledby="history-title"] {
+    place-items: end stretch;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  [role="dialog"][aria-labelledby="history-title"] > div {
+    width: 100%;
+    max-width: 100%;
+    max-height: 92dvh;
+    min-height: 0;
+    border-radius: 1.5rem 1.5rem 0 0;
+  }
+
+  [role="dialog"][aria-labelledby="history-title"] header,
+  [role="dialog"][aria-labelledby="history-title"] header + div {
+    min-width: 0;
+    padding: 1rem;
+  }
+
+  [role="dialog"][aria-labelledby="history-title"] header + div {
+    overscroll-behavior: contain;
+    overflow-x: hidden;
+  }
+}
+
 /* iOS Safari amplía automáticamente cualquier control con texto menor a 16px.
    Corregir el tamaño del control conserva el viewport sin desactivar el zoom
    manual del navegador, que debe seguir disponible por accesibilidad. */

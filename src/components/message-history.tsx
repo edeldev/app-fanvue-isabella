@@ -18,5 +18,5 @@ export function MessageHistory({ children, conversationKey, latestMessageId }: {
     lastMessage.current = latestMessageId;
   }, [conversationKey, latestMessageId]);
 
-  return <div ref={container} onScroll={(event) => { const element = event.currentTarget; wasNearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120; }} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-4 sm:p-5">{children}</div>;
+  return <div ref={container} onScroll={(event) => { const element = event.currentTarget; wasNearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120; }} className="flex min-h-0 basis-0 flex-1 touch-pan-y flex-col gap-3 overflow-x-hidden overflow-y-auto overscroll-contain p-4 [scrollbar-gutter:stable] sm:p-5">{children}</div>;
 }

@@ -49,7 +49,7 @@ export function WorkflowHistoryBrowser({ workflows }: { workflows: Pick<Workflow
   function reset() { beginLoad(); setSearchInput(""); setSearch(""); setWorkflowId(""); setStatus(""); setPage(1); }
   const filtered = Boolean(search || workflowId || status);
 
-  return <div id="historial-workflows" className="mt-6 scroll-mt-20 border-t border-white/8 pt-5">
+  return <div id="historial-workflows" className="mt-6 min-w-0 max-w-full scroll-mt-20 overflow-x-hidden border-t border-white/8 pt-5">
     <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><History className="size-4 text-violet-400" /><div><h3 className="text-sm font-medium text-white">Historial por fan</h3><p className="mt-0.5 text-[11px] text-zinc-600">Busca todas las ejecuciones y abre su línea de tiempo completa.</p></div></div><span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/15 bg-emerald-400/[.04] px-2.5 py-1 text-[10px] text-emerald-300"><span className="size-1.5 rounded-full bg-emerald-400" />Actualización automática</span></div>
     <form onSubmit={submit} className="mt-4 grid gap-2 lg:grid-cols-[1fr_220px_180px_auto]">
       <label className="relative"><span className="sr-only">Buscar fan</span><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600" /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Nombre o @usuario" className="w-full rounded-xl border border-white/10 bg-[#1b1d25] py-2.5 pr-3 pl-10 text-sm text-zinc-200 outline-none focus:border-violet-400/30" /></label>

@@ -50,6 +50,31 @@ export async function fanvueRequest<TSchema extends z.ZodType>(
   return parsed.data;
 }
 
+export async function fanvueDelete(
+  path: `/v1/${string}`,
+  accessToken: string,
+): Promise<void> {
+  const config = getFanvueConfig();
+  const response = await fetch(new URL(path, config.apiBaseUrl), {
+    method: "DELETE",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${accessToken}`,
+      "X-Fanvue-API-Version": config.apiVersion,
+    },
+  });
+  if (!response.ok) {
+    const retryAfter = response.headers.get("retry-after");
+    throw new FanvueError(
+      `Fanvue request failed with status ${response.status}`,
+      response.status,
+      response.status === 429 ? "FANVUE_RATE_LIMIT" : "FANVUE_API_ERROR",
+      retryAfter ? Number(retryAfter) : undefined,
+    );
+  }
+}
+
 // Fanvue's 400 payloads have several shapes. Only persist a fixed category;
 // provider messages may contain fan identifiers or private message content.
 function classifyFanvueBadRequest(body: unknown): "RECIPIENT_UNAVAILABLE" | "MESSAGE_REJECTED" | "INVALID_RECIPIENT_ID" | null {

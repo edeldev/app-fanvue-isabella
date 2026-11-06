@@ -7,6 +7,7 @@ interface BucketRow { requestCount: number; expiresAt: Date }
 
 export const rateLimitPolicies = {
   messageSend: { scope: "message-send", limit: 30, windowSeconds: 60 },
+  messageDelete: { scope: "message-delete", limit: 10, windowSeconds: 60 },
   mediaUpload: { scope: "media-upload", limit: 20, windowSeconds: 600 },
   fanvueManualSync: { scope: "fanvue-manual-sync", limit: 3, windowSeconds: 900 },
   fanvueReconciliation: { scope: "fanvue-reconciliation", limit: 1, windowSeconds: 900 },

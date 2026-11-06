@@ -3,7 +3,7 @@ import { z } from "zod";
 
 vi.mock("./config", () => ({ getFanvueConfig: () => ({ apiBaseUrl: "https://api.fanvue.test", apiVersion: "2025-06-26" }) }));
 
-import { fanvueRequest } from "./client";
+import { fanvueDelete, fanvueRequest } from "./client";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -46,6 +46,24 @@ describe("fanvueRequest", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ ok: true }) }));
     await expect(fanvueRequest("/v1/chats/fan-1/message", "token", z.object({ messageUuid: z.string() }), { method: "POST" })).rejects.toMatchObject({
       code: "FANVUE_INVALID_RESPONSE",
+    });
+  });
+});
+
+describe("fanvueDelete", () => {
+  it("accepts a successful empty response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204, headers: new Headers() });
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fanvueDelete("/v1/chats/fan/messages/message", "token")).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(expect.any(URL), expect.objectContaining({ method: "DELETE" }));
+  });
+
+  it("preserves rate-limit information without exposing a response body", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 429, headers: new Headers({ "retry-after": "12" }) }));
+    await expect(fanvueDelete("/v1/chats/fan/messages/message", "token")).rejects.toMatchObject({
+      status: 429,
+      code: "FANVUE_RATE_LIMIT",
+      retryAfterSeconds: 12,
     });
   });
 });

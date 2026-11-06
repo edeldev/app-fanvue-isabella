@@ -321,12 +321,12 @@ export default async function WorkflowsPage({ searchParams }: { searchParams: Pr
   };
 
   return (
-    <div className="flex min-h-screen bg-[#101218] text-zinc-100">
+    <div className="flex min-h-screen max-w-full overflow-x-hidden bg-[#101218] text-zinc-100">
       <LiveRefresh />
       <Sidebar />
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 max-w-full flex-1 overflow-x-hidden">
         <Topbar />
-        <main id="main-content" tabIndex={-1} className="mx-auto max-w-375 px-4 py-6 sm:px-5 sm:py-8 md:px-8">
+        <main id="main-content" tabIndex={-1} className="mx-auto min-w-0 max-w-375 overflow-x-hidden px-3 py-6 sm:px-5 sm:py-8 md:px-8">
           <div className="mb-8">
             <p className="mb-2 text-xs font-medium uppercase tracking-[.18em] text-violet-400">
               Automatización
