@@ -51,18 +51,29 @@ describe("workflowDefinitionInputSchema", () => {
     const result = workflowDefinitionInputSchema.safeParse({
       name: "PPV rápido", priority: 1, isPrimary: true,
       steps: [
-        { name: "PPV manual", type: "SEND_PPV", config: { stepKey: "ppv", manualText: "Tengo algo para ti", manualMedia: [{ uuid: "b908a82f-3b73-480b-b5a8-5d8d051c2d6b", name: "Foto", mediaType: "image" }], manualMediaOrigin: "original", manualPriceMinor: 500, manualPreviewUuid: null, replyPauseMode: "DISABLED" } },
+        { name: "PPV manual", type: "SEND_PPV", config: { stepKey: "ppv", manualText: "Tengo algo para ti", manualMedia: [{ uuid: "b908a82f-3b73-480b-b5a8-5d8d051c2d6b", name: "Foto", mediaType: "image" }], manualMediaOrigin: "original", manualContentRating: "NSFW", manualPriceMinor: 500, manualPreviewUuid: null, replyPauseMode: "DISABLED" } },
         { name: "Finalizar", type: "END", config: { stepKey: "end" } },
       ],
     });
     expect(result.success).toBe(true);
   });
 
-  it("allows unclassified manual media at schema level for accounts with a confirmed AI profile label", () => {
+  it("rejects unclassified manual media when saving a draft", () => {
     const result = workflowDefinitionInputSchema.safeParse({
       name: "Contenido sin clasificar", priority: 1, isPrimary: true,
       steps: [
         { name: "Foto manual", type: "SEND_MESSAGE", config: { stepKey: "photo", manualMedia: [{ uuid: "b908a82f-3b73-480b-b5a8-5d8d051c2d6b", name: "Foto", mediaType: "image" }] } },
+        { name: "Finalizar", type: "END", config: { stepKey: "end" } },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it.each(["SFW", "NSFW"])("accepts manual media classified as %s", (manualContentRating) => {
+    const result = workflowDefinitionInputSchema.safeParse({
+      name: "Contenido clasificado", priority: 1, isPrimary: true,
+      steps: [
+        { name: "Foto manual", type: "SEND_MESSAGE", config: { stepKey: "photo", manualText: "Mira esto", manualMedia: [{ uuid: "b908a82f-3b73-480b-b5a8-5d8d051c2d6b", name: "Foto", mediaType: "image" }], manualContentRating } },
         { name: "Finalizar", type: "END", config: { stepKey: "end" } },
       ],
     });

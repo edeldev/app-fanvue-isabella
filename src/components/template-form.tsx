@@ -54,9 +54,21 @@ export function TemplateForm({
   }
   function validatePpv(event: FormEvent<HTMLFormElement>) {
     const form = new FormData(event.currentTarget);
+    let media: Array<{ uuid: string }> = [];
+    try {
+      media = JSON.parse(String(form.get("mediaJson") || "[]")) as Array<{ uuid: string }>;
+    } catch {
+      // The server performs the authoritative validation as well.
+    }
+
+    if (media.length > 0 && !["SFW", "NSFW"].includes(String(form.get("contentRating") || ""))) {
+      event.preventDefault();
+      enqueueSnackbar("Clasifica los archivos como SFW o 18+ / NSFW antes de guardar. Tu borrador se conserva.", { variant: "warning" });
+      return;
+    }
+
     if (!String(form.get("price") || "").trim()) return;
     try {
-      const media = JSON.parse(String(form.get("mediaJson") || "[]")) as Array<{ uuid: string }>;
       const previewUuid = String(form.get("previewUuid") || "") || null;
       if (hasLockedPpvMedia(media, previewUuid)) return;
     } catch {

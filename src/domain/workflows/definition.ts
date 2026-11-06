@@ -33,6 +33,9 @@ export const workflowStepInputSchema = z.object({
     if (!step.messageTemplateId) {
       const text = typeof step.config.manualText === "string" ? step.config.manualText.trim() : "";
       const media = Array.isArray(step.config.manualMedia) ? step.config.manualMedia.filter((item) => typeof item === "object" && item !== null && !Array.isArray(item) && typeof (item as Record<string, unknown>).uuid === "string") : [];
+      if (media.length > 0 && step.config.manualContentRating !== "SFW" && step.config.manualContentRating !== "NSFW") {
+        context.addIssue({ code: "custom", path: ["config", "manualContentRating"], message: "Clasifica los archivos manuales como SFW o 18+ / NSFW antes de guardar el borrador." });
+      }
       if (step.type === "SEND_MESSAGE" && !text && media.length === 0) {
         context.addIssue({ code: "custom", path: ["config", "manualText"], message: "Escribe un mensaje o agrega contenido multimedia." });
       }

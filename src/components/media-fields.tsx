@@ -19,7 +19,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ArrowRight, BookOpen, Expand, Eye, FolderOpen, GripVertical, ImageOff, ImagePlus, LoaderCircle, LockKeyhole, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Check, Expand, Eye, Flame, FolderOpen, GripVertical, ImageOff, ImagePlus, LoaderCircle, LockKeyhole, ShieldCheck, X, Zap } from "lucide-react";
 import { ExpandableImage } from "@/components/expandable-image";
 import { enqueueSnackbar } from "notistack";
 import { VaultMediaPicker as VaultMediaPickerContent } from "@/components/vault-media-picker";
@@ -322,10 +322,98 @@ export function MediaFields({
           </p>
         </div>
       ) : null}
-      {allowSfwAttestation && media.length > 0 ? <fieldset className="rounded-xl border border-white/10 bg-white/[.02] p-3"><legend className="px-1 text-xs font-medium text-zinc-300">Clasificación obligatoria</legend><div className="grid gap-2 sm:grid-cols-2"><label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-xs leading-5 transition ${contentRating === "SFW" ? "border-emerald-400/35 bg-emerald-400/[.06]" : "border-white/8 bg-black/10 hover:border-white/15"}`}><input type="radio" name="content-rating-choice" checked={contentRating === "SFW"} onChange={() => setClassification({ signature: mediaSignature, rating: "SFW" })} className="mt-1 accent-emerald-400" /><span><span className="block font-medium text-emerald-200">SFW · apto para todo público</span><span className="mt-0.5 block text-zinc-500">Sin desnudos, ropa interior o transparente, actos ni poses sexuales.</span></span></label><label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-xs leading-5 transition ${contentRating === "NSFW" ? "border-rose-400/35 bg-rose-400/[.06]" : "border-white/8 bg-black/10 hover:border-white/15"}`}><input type="radio" name="content-rating-choice" checked={contentRating === "NSFW"} onChange={() => setClassification({ signature: mediaSignature, rating: "NSFW" })} className="mt-1 accent-rose-400" /><span><span className="block font-medium text-rose-200">18+ · NSFW / íntimo</span><span className="mt-0.5 block text-zinc-500">Incluye desnudez parcial o completa, lencería, transparencias o contenido sexual. Exigirá consentimiento verificable y etiqueta NSFW de Fanvue.</span></span></label></div>{contentRating === null ? <p className="mt-2 text-[11px] font-medium text-amber-300">Selecciona una clasificación antes de guardar o enviar.</p> : null}</fieldset> : null}
+      {allowSfwAttestation && media.length > 0 ? (
+        <fieldset className={`relative overflow-hidden rounded-2xl border p-4 transition-all ${contentRating ? "border-violet-400/25 bg-violet-500/[.035] shadow-[0_0_28px_rgba(139,92,246,0.08)]" : "border-amber-300/35 bg-amber-300/[.035] shadow-[0_0_28px_rgba(251,191,36,0.08)]"}`}>
+          <legend className="sr-only">Clasificación del contenido</legend>
+          <div aria-hidden className="pointer-events-none absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-violet-300/80 to-transparent shadow-[0_0_14px_rgba(196,181,253,0.8)]" />
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="flex items-center gap-2 text-xs font-semibold text-white">
+                <Zap className="size-3.5 text-violet-300 drop-shadow-[0_0_6px_rgba(196,181,253,0.9)]" />
+                Clasificación del contenido
+              </p>
+              <p className="mt-1 text-[10px] leading-4 text-zinc-500">Obligatoria antes de guardar la plantilla.</p>
+            </div>
+            <span className={`rounded-full border px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[.12em] ${contentRating ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-200" : "border-amber-300/30 bg-amber-300/10 text-amber-200"}`}>
+              {contentRating ? "Clasificado" : "Pendiente"}
+            </span>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <RatingChoice
+              active={contentRating === "SFW"}
+              tone="cyan"
+              icon={<ShieldCheck className="size-4" />}
+              title="SFW · Apto para todos"
+              description="Sin desnudez, ropa transparente, actos ni poses sexuales."
+              onClick={() => setClassification({ signature: mediaSignature, rating: "SFW" })}
+            />
+            <RatingChoice
+              active={contentRating === "NSFW"}
+              tone="fuchsia"
+              icon={<Flame className="size-4" />}
+              title="18+ · NSFW / íntimo"
+              description="Desnudez, lencería, transparencias o contenido sexual."
+              onClick={() => setClassification({ signature: mediaSignature, rating: "NSFW" })}
+            />
+          </div>
+          {contentRating === null ? (
+            <p role="alert" className="mt-3 flex items-center gap-2 text-[10px] font-medium text-amber-200">
+              <span className="size-1.5 rounded-full bg-amber-300 shadow-[0_0_8px_rgba(252,211,77,0.9)]" />
+              Selecciona una opción. Si intentas guardar, tu borrador permanecerá intacto.
+            </p>
+          ) : contentRating === "NSFW" ? (
+            <p className="mt-3 text-[10px] leading-4 text-fuchsia-200/70">Su envío exigirá consentimiento 18+ con evidencia y clasificación oficial de Fanvue.</p>
+          ) : (
+            <p className="mt-3 text-[10px] leading-4 text-cyan-200/70">No exige consentimiento 18+, pero continuará sujeto a las reglas de Fanvue.</p>
+          )}
+        </fieldset>
+      ) : null}
       {vaultOpen ? <VaultMediaPicker selectedUuids={media.map((item) => item.uuid)} remaining={10 - media.length} onClose={() => setVaultOpen(false)} onAdd={(incoming) => { setMedia((current) => [...current, ...incoming].slice(0, 10)); setVaultOpen(false); enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo agregado" : "archivos agregados"} desde la bóveda.`, { variant: "success" }); }} /> : null}
       {libraryOpen ? <ContentLibraryPicker selectedUuids={media.map((item) => item.uuid)} remaining={10 - media.length} onClose={() => setLibraryOpen(false)} onAdd={(incoming, suggestedPriceMinor) => { setMedia((current) => [...new Map([...current, ...incoming].map((item) => [item.uuid, item])).values()].slice(0, 10)); if (!price && suggestedPriceMinor) setPrice((suggestedPriceMinor / 100).toFixed(2)); setLibraryOpen(false); enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo agregado" : "archivos agregados"} desde Content Library.`, { variant: "success" }); }} /> : null}
     </div>
+  );
+}
+
+function RatingChoice({
+  active,
+  tone,
+  icon,
+  title,
+  description,
+  onClick,
+}: {
+  active: boolean;
+  tone: "cyan" | "fuchsia";
+  icon: ReactNode;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  const cyan = tone === "cyan";
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`relative min-h-24 cursor-pointer overflow-hidden rounded-xl border p-3 text-left transition-all ${
+        active
+          ? cyan
+            ? "border-cyan-300/70 bg-cyan-300/[.09] shadow-[0_0_22px_rgba(34,211,238,0.16),inset_0_0_18px_rgba(34,211,238,0.05)]"
+            : "border-fuchsia-300/70 bg-fuchsia-400/[.09] shadow-[0_0_22px_rgba(232,121,249,0.17),inset_0_0_18px_rgba(232,121,249,0.05)]"
+          : cyan
+            ? "border-white/8 bg-black/20 hover:border-cyan-300/30 hover:bg-cyan-300/[.035]"
+            : "border-white/8 bg-black/20 hover:border-fuchsia-300/30 hover:bg-fuchsia-300/[.035]"
+      }`}
+    >
+      <span className="flex items-center justify-between gap-3">
+        <span className={`grid size-9 place-items-center rounded-xl ${active ? cyan ? "bg-cyan-300/15 text-cyan-200 shadow-[0_0_14px_rgba(34,211,238,0.2)]" : "bg-fuchsia-300/15 text-fuchsia-200 shadow-[0_0_14px_rgba(232,121,249,0.22)]" : "bg-white/5 text-zinc-500"}`}>
+          {icon}
+        </span>
+        {active ? <span className={`grid size-5 place-items-center rounded-full ${cyan ? "bg-cyan-300 text-[#071318]" : "bg-fuchsia-300 text-[#19071a]"}`}><Check className="size-3" /></span> : null}
+      </span>
+      <span className="mt-3 block text-xs font-semibold text-zinc-100">{title}</span>
+      <span className="mt-1 block text-[10px] leading-4 text-zinc-500">{description}</span>
+    </button>
   );
 }
 
