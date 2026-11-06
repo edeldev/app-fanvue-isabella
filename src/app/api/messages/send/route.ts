@@ -14,6 +14,7 @@ import { assertSendRecipient, SendRecipientIneligibleError } from "@/services/me
 import { parseManualSendForm } from "@/domain/messages/manual-send-form";
 import { prepareOutboundMediaText } from "@/domain/messages/media-disclosure";
 import { MediaClassificationError } from "@/services/messages/assert-media-classification";
+import { buildLocalReplyText } from "@/domain/messages/reply-context";
 
 const mediaSchema = z.array(z.object({ uuid: z.string().uuid(), name: z.string(), mediaType: z.enum(["image", "video"]) })).max(10);
 const audience = [{ isFollower: true }, { isSubscriber: true }, { isExpiredSubscriber: true }];
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
   }
   if (sendText.length > 5000) redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&error=invalid_message`);
   const localDisplayText = parsed.data.replySender && parsed.data.replyExcerpt
-    ? `↪ ${parsed.data.replySender}: ${parsed.data.replyExcerpt}\n\n${sendText}`
+    ? buildLocalReplyText(parsed.data.replySender, parsed.data.replyExcerpt, sendText)
     : sendText;
   const scheduledAt = parsed.data.scheduledAt ? new Date(parsed.data.scheduledAt) : new Date();
   if (parsed.data.scheduledAt) {

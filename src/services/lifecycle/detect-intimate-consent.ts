@@ -71,3 +71,38 @@ export async function detectAndRecordIntimateConsent(
   ]);
   return detection;
 }
+
+export async function reconcileRecentIntimateConsent(creatorId: string) {
+  const conversations = await prisma.conversation.findMany({
+    where: { creatorId, messages: { some: { direction: "INBOUND", text: { not: null }, deletedAt: null } } },
+    orderBy: { lastMessageAt: "desc" },
+    take: 250,
+    select: {
+      id: true,
+      fanId: true,
+      messages: {
+        where: { deletedAt: null },
+        orderBy: { sentAt: "desc" },
+        take: 20,
+        select: { id: true, direction: true, text: true, sentAt: true },
+      },
+    },
+  });
+  let reconciled = 0;
+  for (const conversation of conversations) {
+    const context = conversation.messages.map((message) => ({
+      id: message.id,
+      role: message.direction === "INBOUND" ? "fan" as const : "creator" as const,
+      text: message.text,
+      sentAt: message.sentAt,
+    }));
+    const newestDecision = conversation.messages
+      .filter((message) => message.direction === "INBOUND")
+      .map((message) => ({ message, detection: detectIntimateContentConsent(context, message.id) }))
+      .find(({ detection }) => detection.decision === "GRANTED" || detection.decision === "REVOKED");
+    if (!newestDecision) continue;
+    await detectAndRecordIntimateConsent(creatorId, conversation.fanId, conversation.id, newestDecision.message.id);
+    reconciled += 1;
+  }
+  return reconciled;
+}

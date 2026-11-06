@@ -15,6 +15,7 @@ import { MessageReceipt } from "@/components/message-receipt";
 import { ChatMessageActions } from "@/components/chat-message-actions";
 import { resolveMessageDeliveryState } from "@/domain/messages/delivery-status";
 import { resolveMessagePreviewUuid } from "@/domain/messages/ppv-preview";
+import { parseLocalReplyContext } from "@/domain/messages/reply-context";
 import { fanvueRequest } from "@/lib/fanvue/client";
 import {
   chatMediaPageSchema,
@@ -77,19 +78,6 @@ const initials = (name: string) =>
     .map((part) => part[0])
     .join("")
     .toUpperCase() || "F";
-
-function compatibleReply(text: string | null) {
-  if (!text) return null;
-  const normalized = text.replace(/\r\n?/g, "\n");
-  const separator = normalized.indexOf("\n\n");
-  if (separator < 0) return null;
-  const header = normalized.slice(0, separator).trim();
-  const body = normalized.slice(separator + 2).trimStart();
-  const match = header.match(/^[↪↩→]\s+([^:\n]{1,80}):\s*([\s\S]{1,240})$/);
-  return match && body
-    ? { sender: match[1].trim(), excerpt: match[2].trim(), body }
-    : null;
-}
 
 export default async function MessagesPage({ searchParams }: Props) {
   const params = await searchParams;
@@ -277,7 +265,7 @@ export default async function MessagesPage({ searchParams }: Props) {
               message.uuid,
               {
                 ...message,
-                text: compatibleReply(saved?.text ?? null)
+                text: parseLocalReplyContext(saved?.text ?? null)
                   ? saved!.text
                   : message.text,
                 isDeleted:
@@ -550,7 +538,7 @@ export default async function MessagesPage({ searchParams }: Props) {
                         const senderName = inbound
                           ? selected.fan.displayName || selected.fan.username || "Fan"
                           : "Tú";
-                        const quoted = compatibleReply(message.text);
+                        const quoted = parseLocalReplyContext(message.text);
                         const referencedMessage = message.repliedMessage?.uuid
                           ? messageByUuid.get(message.repliedMessage.uuid)
                           : null;

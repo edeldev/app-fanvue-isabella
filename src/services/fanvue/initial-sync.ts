@@ -9,6 +9,8 @@ import { isFreshFanvueOnline } from "@/domain/fans/filters";
 import { recalculateFanLifecycle } from "@/services/lifecycle/recalculate-fan-lifecycle";
 import { reconcileRenewalSignals } from "@/domain/lifecycle/renewal-signals";
 import { refreshFanMemory } from "@/services/intelligence/refresh-fan-memory";
+import { reconcileRecentIntimateConsent } from "@/services/lifecycle/detect-intimate-consent";
+import { preserveLocalReplyText } from "@/domain/messages/reply-context";
 
 export interface InitialSyncResult {
   followers: number;
@@ -178,10 +180,17 @@ export async function runInitialFanvueSync(creatorId: string): Promise<InitialSy
       });
       if (chat.lastMessage?.sentAt) {
         const inbound = chat.lastMessage.senderRole === "FAN";
+        const existingMessage = await prisma.message.findUnique({
+          where: { creatorId_fanvueMessageId: { creatorId, fanvueMessageId: chat.lastMessage.uuid } },
+          select: { text: true },
+        });
+        const messageText = inbound
+          ? chat.lastMessage.text
+          : preserveLocalReplyText(existingMessage?.text, chat.lastMessage.text);
         await prisma.message.upsert({
           where: { creatorId_fanvueMessageId: { creatorId, fanvueMessageId: chat.lastMessage.uuid } },
-          update: { text: chat.lastMessage.text, status: inbound ? "DELIVERED" : messageStatus(chat.lastMessage.status) },
-          create: { creatorId, conversationId: conversation.id, fanvueMessageId: chat.lastMessage.uuid, direction: inbound ? "INBOUND" : "OUTBOUND", status: inbound ? "DELIVERED" : messageStatus(chat.lastMessage.status), text: chat.lastMessage.text, sentAt: new Date(chat.lastMessage.sentAt) },
+          update: { text: messageText, status: inbound ? "DELIVERED" : messageStatus(chat.lastMessage.status) },
+          create: { creatorId, conversationId: conversation.id, fanvueMessageId: chat.lastMessage.uuid, direction: inbound ? "INBOUND" : "OUTBOUND", status: inbound ? "DELIVERED" : messageStatus(chat.lastMessage.status), text: messageText, sentAt: new Date(chat.lastMessage.sentAt) },
         });
       }
   });
@@ -236,8 +245,10 @@ export async function runInitialFanvueSync(creatorId: string): Promise<InitialSy
     await Promise.all(batch.map((fan) => recalculateFanLifecycle(creatorId, fan.id, "INITIAL_SYNC")));
   }
 
+  const reconciledConsent = await reconcileRecentIntimateConsent(creatorId);
+
   await prisma.automationLog.create({
-      data: { creatorId, eventType: "INITIAL_SYNC_COMPLETED", explanation: "Sincronización inicial de Fanvue completada.", metadata: { followers: followers.length, subscribers: subscribers.length, chats: chats.length, earnings: earnings.length } satisfies Prisma.InputJsonValue },
+      data: { creatorId, eventType: "INITIAL_SYNC_COMPLETED", explanation: "Sincronización inicial de Fanvue completada.", metadata: { followers: followers.length, subscribers: subscribers.length, chats: chats.length, earnings: earnings.length, reconciledConsent } satisfies Prisma.InputJsonValue },
   });
   return { followers: followers.length, subscribers: subscribers.length, chats: chats.length, earnings: earnings.length };
 }

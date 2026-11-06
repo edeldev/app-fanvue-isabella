@@ -8,7 +8,7 @@ import { triggerWorkflowForFan } from "@/services/workflows/trigger-workflow";
 import { pauseEnrollmentsOnFanReply, recordFanReplyInActiveWorkflows, resetSilenceWaitEnrollments, routeReplyWaitEnrollments } from "@/services/workflows/manage-enrollment";
 import { executeEnrollmentUntilBlocked } from "@/services/workflows/execute-enrollment";
 import { fetchAllCursorPages } from "@/lib/fanvue/pagination";
-import { creatorListPageSchema } from "@/lib/fanvue/sync-schemas";
+import { creatorListPageSchema, normalizeRepliedMessage, replyCandidate } from "@/lib/fanvue/sync-schemas";
 import { completeMatchingWorkflowGoals } from "@/services/workflows/complete-workflow-goals";
 import { recalculateFanLifecycle } from "@/services/lifecycle/recalculate-fan-lifecycle";
 import { subscriptionAutomationTrigger } from "@/domain/workflows/subscription-automation-trigger";
@@ -16,6 +16,7 @@ import { refreshFanMemory } from "@/services/intelligence/refresh-fan-memory";
 import { detectAndRecordIntimateConsent } from "@/services/lifecycle/detect-intimate-consent";
 import { refreshCreatorEarnings } from "@/services/fanvue/refresh-creator-earnings";
 import { logger } from "@/lib/logger";
+import { buildLocalReplyText, preserveLocalReplyText } from "@/domain/messages/reply-context";
 
 const personSchema = z.object({
   uuid: z.string(),
@@ -28,7 +29,10 @@ const messageDataSchema = z.object({
   uuid: z.string(), sender: z.enum(["creator", "fan"]), created_at: z.string().nullable(),
   deleted_at: z.string().nullable(), text: z.string().optional(), unread_messages_count: z.number().int().optional(),
   is_muted: z.boolean().optional(), fan: personSchema,
-});
+}).passthrough().transform((message) => ({
+  ...message,
+  repliedMessage: normalizeRepliedMessage(replyCandidate(message)),
+}));
 const readDataSchema = z.object({ unread_messages_count: z.number().int(), fan: personSchema });
 const fanStatusDataSchema = z.object({
   object: z.literal("fan_status"), change_type: z.enum(["presence", "mute"]),
@@ -201,10 +205,27 @@ export async function handleFanvueWebhook(creatorId: string, type: string, unkno
       update: { lastMessageAt: data.created_at ? new Date(data.created_at) : undefined, isMuted: data.is_muted, unreadMessagesCount: data.unread_messages_count },
       create: { creatorId, fanId: fan.id, lastMessageAt: data.created_at ? new Date(data.created_at) : null, isMuted: data.is_muted ?? false, unreadMessagesCount: data.unread_messages_count ?? 0 },
     });
+    const existingMessage = await prisma.message.findUnique({
+      where: { creatorId_fanvueMessageId: { creatorId, fanvueMessageId: data.uuid } },
+      select: { text: true },
+    });
+    const providerText = data.text ?? null;
+    const nativeReplyText = data.repliedMessage
+      ? buildLocalReplyText(
+          data.repliedMessage.sender.handle || "Mensaje anterior",
+          data.repliedMessage.text || "Mensaje con contenido",
+          providerText || "Mensaje con contenido",
+        )
+      : null;
+    const storedText = nativeReplyText ?? (
+      data.sender === "creator"
+        ? preserveLocalReplyText(existingMessage?.text, providerText)
+        : providerText
+    );
     const storedMessage = await prisma.message.upsert({
       where: { creatorId_fanvueMessageId: { creatorId, fanvueMessageId: data.uuid } },
-      update: { text: data.text, deletedAt: data.deleted_at ? new Date(data.deleted_at) : null, status: data.deleted_at ? "DELETED" : undefined },
-      create: { creatorId, conversationId: conversation.id, fanvueMessageId: data.uuid, direction: data.sender === "fan" ? "INBOUND" : "OUTBOUND", status: data.deleted_at ? "DELETED" : "DELIVERED", text: data.text, sentAt: data.created_at ? new Date(data.created_at) : new Date(), deletedAt: data.deleted_at ? new Date(data.deleted_at) : null },
+      update: { text: storedText, deletedAt: data.deleted_at ? new Date(data.deleted_at) : null, status: data.deleted_at ? "DELETED" : undefined },
+      create: { creatorId, conversationId: conversation.id, fanvueMessageId: data.uuid, direction: data.sender === "fan" ? "INBOUND" : "OUTBOUND", status: data.deleted_at ? "DELETED" : "DELIVERED", text: storedText, sentAt: data.created_at ? new Date(data.created_at) : new Date(), deletedAt: data.deleted_at ? new Date(data.deleted_at) : null },
     });
     if (type === "creator.message.received" && data.sender === "fan") {
       const repliedAt = data.created_at ? new Date(data.created_at) : new Date();

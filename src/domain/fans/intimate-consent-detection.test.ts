@@ -18,6 +18,13 @@ describe("detectIntimateContentConsent", () => {
     expect(result.decision).toBe("GRANTED");
   });
 
+  it("accepts a natural explicit consent statement mentioning adult +18 content", () => {
+    const result = detectIntimateContentConsent([
+      message("a", "fan", "Te deseo, mándame contenido de adultos +18, te doy mi consentimiento", 1),
+    ], "a");
+    expect(result.decision).toBe("GRANTED");
+  });
+
   it("does not infer consent from an isolated yes or generic interest", () => {
     expect(detectIntimateContentConsent([message("a", "fan", "Sí", 1)], "a").decision).toBe("AMBIGUOUS");
     expect(detectIntimateContentConsent([message("a", "fan", "Quiero ver más", 1)], "a").decision).toBe("NONE");

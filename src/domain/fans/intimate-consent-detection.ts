@@ -11,7 +11,7 @@ export type IntimateConsentDetection = {
   reason: string;
 };
 
-const ADULT_SUBJECT = /\b(contenido (?:adulto|intimo|explicito|\+?18)|para adultos|desnud[oa]s?|nudes?|nsfw|sin ropa|fotos? (?:intimas?|explicitas?|desnud[oa]s?)|videos? (?:intimos?|explicitos?|desnud[oa]s?)|nudez|adult content|explicit content|intimate content|conteudo adulto|conteudo intimo|sem roupa)\b/;
+const ADULT_SUBJECT = /(?:\b(?:contenido|material)\s+(?:de\s+)?(?:adultos?|intimo|explicito)|\bpara adultos\b|\bdesnud[oa]s?\b|\bnudes?\b|\bnsfw\b|\bsin ropa\b|\bfotos?\s+(?:intimas?|explicitas?|desnud[oa]s?)\b|\bvideos?\s+(?:intimos?|explicitos?|desnud[oa]s?)\b|\bnudez\b|(?:^|\s)(?:\+18|18\+)(?:\s|$)|\badult content\b|\bexplicit content\b|\bintimate content\b|\bconteudo\s+(?:de\s+)?adulto\b|\bconteudo intimo\b|\bsem roupa\b)/;
 const CONSENT_QUESTION = /\b(quieres|te gustaria|deseas|me (?:das|das tu) (?:permiso|consentimiento)|das tu consentimiento|aceptas|puedo (?:enviarte|mandarte|mostrarte)|want|would you like|may i send|can i send|do you consent|voce quer|quer receber|posso (?:enviar|mandar))\b/;
 const EXPLICIT_GRANT = /\b(si(?:,? (?:quiero|acepto|claro|mandame|enviame|puedes|por supuesto|me gustaria))?|quiero|acepto|doy (?:mi )?(?:permiso|consentimiento)|estoy de acuerdo|adelante|mandame|enviame|muestrame|puedes (?:enviarme|mandarme|mostrarme)|yes|i (?:want|consent|agree)|send me|show me|go ahead|sure|sim|aceito|quero|pode (?:enviar|mandar)|manda pra mim)\b/;
 const SHORT_GRANT = /^(si|si quiero|claro|acepto|adelante|de acuerdo|por supuesto|puedes|yes|yes please|sure|i agree|go ahead|sim|sim quero|claro que sim|aceito|pode)$/;

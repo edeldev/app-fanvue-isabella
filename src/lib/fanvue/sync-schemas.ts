@@ -23,7 +23,7 @@ type NormalizedRepliedMessage = {
   sender: { uuid?: string; handle?: string };
 };
 
-function normalizeRepliedMessage(value: unknown): NormalizedRepliedMessage | null {
+export function normalizeRepliedMessage(value: unknown): NormalizedRepliedMessage | null {
   if (typeof value === "string" && value.trim()) {
     return { uuid: value.trim(), text: null, sender: {} };
   }
@@ -61,7 +61,7 @@ function normalizeRepliedMessage(value: unknown): NormalizedRepliedMessage | nul
   };
 }
 
-function replyCandidate(message: Record<string, unknown>) {
+export function replyCandidate(message: Record<string, unknown>) {
   const directKeys = [
     "repliedMessage", "replied_message", "replyToMessage", "reply_to_message",
     "replyTo", "reply_to", "quotedMessage", "quoted_message", "quote",
