@@ -13,6 +13,7 @@ import { buildPurchaseBreakdown, revenueCategoryLabels, type RevenueCategory } f
 import { lifecyclePresentation } from "@/domain/lifecycle/presentation";
 import { describeSubscriptionPeriod } from "@/domain/lifecycle/subscription-period";
 import { renewalLabel } from "@/domain/lifecycle/renewal-signals";
+import { detectIntimateContentConsent } from "@/domain/fans/intimate-consent-detection";
 import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 
@@ -56,6 +57,28 @@ export default async function FanLifecycleProfile({ params }: { params: Promise<
   const activeEnrollment = fan.enrollments.find((item) => ["ACTIVE", "WAITING", "PAUSED"].includes(item.status));
   const subscription = fan.isSubscriber ? describeSubscriptionPeriod(fan.subscriptions) : null;
   const messages = fan.conversations[0]?.messages ?? [];
+  const verifiedConsentMessageId = fan.intimateContentOptInSource?.startsWith("fanvue-message:")
+    ? fan.intimateContentOptInSource.slice("fanvue-message:".length)
+    : null;
+  const verifiedConsentMessage = verifiedConsentMessageId
+    ? messages.find((message) => message.id === verifiedConsentMessageId) ?? null
+    : null;
+  const priorConsentContext = verifiedConsentMessage
+    ? messages
+        .filter((message) => message.direction === "OUTBOUND" && message.sentAt < verifiedConsentMessage.sentAt)
+        .slice(0, 3)
+    : [];
+  const consentDetection = verifiedConsentMessage
+    ? detectIntimateContentConsent(
+        messages.map((message) => ({ id: message.id, role: message.direction === "INBOUND" ? "fan" as const : "creator" as const, text: message.text, sentAt: message.sentAt })),
+        verifiedConsentMessage.id,
+      )
+    : null;
+  const automaticMessageIds = new Set(fan.automationLogs.flatMap((log) => {
+    if (!log.metadata || typeof log.metadata !== "object" || Array.isArray(log.metadata)) return [];
+    const messageId = (log.metadata as Record<string, unknown>).fanvueMessageId;
+    return typeof messageId === "string" ? [messageId] : [];
+  }));
   const inboundMessages = messages.filter((message) => message.direction === "INBOUND");
   const outboundMessages = messages.filter((message) => message.direction === "OUTBOUND");
   const activeMemories = fan.memories.filter((memory) => memory.status === "ACTIVE");
@@ -101,7 +124,7 @@ export default async function FanLifecycleProfile({ params }: { params: Promise<
         <section className="rounded-2xl border border-white/8 bg-white/[.025] p-5"><div><h2 className="font-semibold text-white">Origen de los ingresos</h2><p className="mt-1 text-xs text-zinc-600">El total se conserva; aquí puedes ver qué compra realmente este fan.</p></div><div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{revenueCategories.map((category) => { const item = revenueBreakdown[category]; return <div key={category} className="rounded-xl border border-white/7 bg-black/10 p-3"><p className="text-[10px] font-medium text-zinc-500">{revenueCategoryLabels[category]}</p><p className="mt-2 text-sm font-semibold text-white">{money.format(item.amountMinor / 100)}</p><p className="mt-1 text-[10px] text-zinc-700">{item.count} {item.count === 1 ? "pago" : "pagos"}</p></div>; })}</div></section>
         <NextBestActionCard fanId={fan.id} action={nextAction}/>
         <section className="rounded-2xl border border-white/8 bg-white/[.025] p-5"><div className="flex items-end justify-between gap-4"><div><h2 className="font-semibold text-white">Timeline unificado</h2><p className="mt-1 text-xs text-zinc-600">Mensajes, compras, suscripciones, etapas y automatizaciones.</p></div><span className="text-xs text-zinc-600">{timeline.length} eventos</span></div><div className="mt-5 max-h-[680px] space-y-0 overflow-y-auto overscroll-contain pr-2">{timeline.map((item) => <article key={item.id} className="relative grid grid-cols-[18px_1fr] gap-3 pb-5 last:pb-0"><div className="relative flex justify-center"><span className={`relative z-10 mt-1.5 size-2 rounded-full ${item.tone}`}/><span className="absolute bottom-0 top-3 w-px bg-white/8 last:hidden"/></div><div><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-medium text-zinc-300">{item.title}</p><time className="text-[10px] text-zinc-700">{item.at.toLocaleString("es-MX")}</time></div><p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-zinc-600">{item.detail}</p></div></article>)}</div></section>
-      </div><div className="space-y-6"><FanMemoryCard fanId={fan.id} memories={effectiveMemories.map((memory) => ({ ...memory, id: "id" in memory ? memory.id : null, observedAt: memory.observedAt.toISOString() }))}/><FanProfileActions fanId={fan.id} stage={fan.lifecycleStage} override={fan.lifecycleOverride} automationPaused={fan.automationPaused} doNotMessage={fan.doNotMessage} doNotMessageReason={fan.doNotMessageReason} intimateContentOptIn={fan.intimateContentOptIn} intimateContentOptInAt={fan.intimateContentOptInAt?.toISOString() ?? null} intimateContentOptInSource={fan.intimateContentOptInSource} consentEvidenceMessages={consentEvidenceMessages.flatMap((message) => message.text?.trim() ? [{ id: message.id, text: message.text, sentAt: message.sentAt.toISOString() }] : [])} hasActiveWorkflow={Boolean(activeEnrollment)} tags={fan.tags.map(({ tag }) => tag)} notes={fan.notes.map((note) => ({ ...note, createdAt: note.createdAt.toISOString() }))}/></div></div>
+      </div><div className="space-y-6"><FanMemoryCard fanId={fan.id} memories={effectiveMemories.map((memory) => ({ ...memory, id: "id" in memory ? memory.id : null, observedAt: memory.observedAt.toISOString() }))}/><FanProfileActions fanId={fan.id} stage={fan.lifecycleStage} override={fan.lifecycleOverride} automationPaused={fan.automationPaused} doNotMessage={fan.doNotMessage} doNotMessageReason={fan.doNotMessageReason} intimateContentOptIn={fan.intimateContentOptIn} intimateContentOptInAt={fan.intimateContentOptInAt?.toISOString() ?? null} intimateContentOptInSource={fan.intimateContentOptInSource} verifiedConsentEvidence={verifiedConsentMessage?.text?.trim() ? { fanMessage: { text: verifiedConsentMessage.text, sentAt: verifiedConsentMessage.sentAt.toISOString() }, reason: consentDetection?.reason ?? "Consentimiento vinculado a este mensaje.", context: priorConsentContext.flatMap((message) => message.text?.trim() ? [{ text: message.text, sentAt: message.sentAt.toISOString(), automatic: automaticMessageIds.has(message.fanvueMessageId) }] : []) } : null} consentEvidenceMessages={consentEvidenceMessages.flatMap((message) => message.text?.trim() ? [{ id: message.id, text: message.text, sentAt: message.sentAt.toISOString() }] : [])} hasActiveWorkflow={Boolean(activeEnrollment)} tags={fan.tags.map(({ tag }) => tag)} notes={fan.notes.map((note) => ({ ...note, createdAt: note.createdAt.toISOString() }))}/></div></div>
     </main>
   </div></div>;
 }
