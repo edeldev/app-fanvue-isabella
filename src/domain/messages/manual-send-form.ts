@@ -8,6 +8,8 @@ const schema = z.object({
   price: z.string(),
   previewUuid: z.string().optional(),
   scheduledAt: z.string().datetime().optional(),
+  replySender: z.string().trim().min(1).max(80).optional(),
+  replyExcerpt: z.string().trim().min(1).max(240).optional(),
 });
 
 export function parseManualSendForm(form: FormData) {
@@ -19,5 +21,7 @@ export function parseManualSendForm(form: FormData) {
     price: String(form.get("price") || ""),
     previewUuid: form.get("previewUuid") || undefined,
     scheduledAt: form.get("scheduledAt") || undefined,
+    replySender: form.get("replySender") || undefined,
+    replyExcerpt: form.get("replyExcerpt") || undefined,
   });
 }

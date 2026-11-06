@@ -246,6 +246,7 @@ export default async function MessagesPage({ searchParams }: Props) {
         },
         select: {
           fanvueMessageId: true,
+          text: true,
           mediaUuids: true,
           mediaPreviewUuid: true,
           priceMinor: true,
@@ -276,6 +277,9 @@ export default async function MessagesPage({ searchParams }: Props) {
               message.uuid,
               {
                 ...message,
+                text: compatibleReply(saved?.text ?? null)
+                  ? saved!.text
+                  : message.text,
                 isDeleted:
                   String(message.status).toUpperCase() === "UNSENT" ||
                   saved?.status === "DELETED",

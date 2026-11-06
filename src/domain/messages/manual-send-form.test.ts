@@ -22,4 +22,19 @@ describe("parseManualSendForm", () => {
     expect(parsed.success).toBe(true);
     if (parsed.success) expect(parsed.data.sendIntentId).toBe("22222222-2222-4222-8222-222222222222");
   });
+
+  it("keeps local reply context separate from the text sent to Fanvue", () => {
+    const form = new FormData();
+    form.set("fanUuid", fanUuid);
+    form.set("text", "Sí");
+    form.set("replySender", "Upset Tortoise");
+    form.set("replyExcerpt", "Hola amor");
+    const parsed = parseManualSendForm(form);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.text).toBe("Sí");
+      expect(parsed.data.replySender).toBe("Upset Tortoise");
+      expect(parsed.data.replyExcerpt).toBe("Hola amor");
+    }
+  });
 });

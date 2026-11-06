@@ -72,6 +72,9 @@ export async function POST(request: Request) {
     redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&error=media_origin_required`);
   }
   if (sendText.length > 5000) redirect(`/messages?fan=${encodeURIComponent(fan.fanvueUserId)}&error=invalid_message`);
+  const localDisplayText = parsed.data.replySender && parsed.data.replyExcerpt
+    ? `↪ ${parsed.data.replySender}: ${parsed.data.replyExcerpt}\n\n${sendText}`
+    : sendText;
   const scheduledAt = parsed.data.scheduledAt ? new Date(parsed.data.scheduledAt) : new Date();
   if (parsed.data.scheduledAt) {
     const now = new Date();
@@ -125,8 +128,8 @@ export async function POST(request: Request) {
       });
       await transaction.message.upsert({
         where: { creatorId_fanvueMessageId: { creatorId, fanvueMessageId: sent.messageUuid } },
-        update: { text: sendText, templateId: template?.id, status: "SENT", mediaUuids: media.data.map(item => item.uuid), mediaPreviewUuid: effectivePreviewUuid, priceMinor: price },
-        create: { creatorId, conversationId: conversation.id, fanvueMessageId: sent.messageUuid, templateId: template?.id, direction: "OUTBOUND", status: "SENT", text: sendText, mediaUuids: media.data.map(item => item.uuid), mediaPreviewUuid: effectivePreviewUuid, priceMinor: price, sentAt: new Date() },
+        update: { text: localDisplayText, templateId: template?.id, status: "SENT", mediaUuids: media.data.map(item => item.uuid), mediaPreviewUuid: effectivePreviewUuid, priceMinor: price },
+        create: { creatorId, conversationId: conversation.id, fanvueMessageId: sent.messageUuid, templateId: template?.id, direction: "OUTBOUND", status: "SENT", text: localDisplayText, mediaUuids: media.data.map(item => item.uuid), mediaPreviewUuid: effectivePreviewUuid, priceMinor: price, sentAt: new Date() },
       });
       await transaction.scheduledMessage.update({ where: { id: sendIntentId }, data: { status: "SENT", sentAt: new Date(), fanvueMessageId: sent.messageUuid, lastError: null } });
     });
