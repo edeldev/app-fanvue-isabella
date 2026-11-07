@@ -15,7 +15,7 @@ function valuesMatch(left: string, right: string): boolean {
 }
 
 function dashboardUrl(_request: NextRequest, status: string): URL {
-  const url = new URL("/", getFanvueConfig().redirectUri);
+  const url = new URL(status === "connected" ? "/dashboard" : "/", getFanvueConfig().redirectUri);
   url.searchParams.set("fanvue", status);
   return url;
 }

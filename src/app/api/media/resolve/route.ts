@@ -5,6 +5,7 @@ import { fanvueRequest } from "@/lib/fanvue/client";
 import { mediaBulkSchema } from "@/lib/fanvue/sync-schemas";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
+import { selectMediaVariants } from "@/lib/fanvue/media-variants";
 
 const idsSchema = z.array(z.string().uuid()).min(1).max(20);
 
@@ -19,10 +20,7 @@ export async function GET(request: Request) {
     const result = await fanvueRequest(`/v1/media/bulk?mediaUuids=${encodeURIComponent(ids.data.join(","))}&variants=main,thumbnail`, token, mediaBulkSchema);
     const media = Object.values(result.results).flatMap(item => {
       if (!item || item.status !== "ready") return [];
-      const main = item.variants.find(value => value.variantType === "main" && value.url)
-        ?? item.variants.find(value => value.url);
-      const thumbnail = item.variants.find(value => value.variantType === "thumbnail" && value.url)
-        ?? item.variants.find(value => value.variantType === "thumbnail_gallery" && value.url);
+      const { main, thumbnail } = selectMediaVariants(item.variants);
       return main?.url || thumbnail?.url ? [{ uuid: item.uuid, url: main?.url ?? thumbnail?.url, thumbnailUrl: thumbnail?.url }] : [];
     });
     return NextResponse.json({ media });

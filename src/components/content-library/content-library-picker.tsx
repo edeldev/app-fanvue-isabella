@@ -29,6 +29,8 @@ type Pack = {
     name: string;
     type: string;
     fanvueContentId: string | null;
+    url?: string;
+    thumbnailUrl?: string;
   }>;
   stats: { total: number; photos: number; videos: number };
 };
@@ -204,6 +206,8 @@ export function ContentLibraryPicker({
                 uuid: asset.fanvueContentId,
                 name: asset.name,
                 mediaType: asset.type,
+                localUrl: asset.url,
+                thumbnailUrl: asset.thumbnailUrl,
               },
             ]
           : [],

@@ -80,6 +80,10 @@ export function MediaFields({
     price && previewUuid && media.every((item) => item.uuid === previewUuid),
   );
   const mediaSignature = media.map((item) => item.uuid).join("|");
+  const unresolvedMediaSignature = media
+    .filter((item) => !item.localUrl)
+    .map((item) => item.uuid)
+    .join(",");
   const contentRating = classification.signature === mediaSignature ? classification.rating : null;
   const sfwAttested = contentRating === "SFW";
 
@@ -104,9 +108,7 @@ export function MediaFields({
   }, [allowSfwAttestation, contentRating, media, previewUuid, price, sfwAttested]);
 
   useEffect(() => {
-    const unresolved = initialMedia
-      .filter((item) => !item.localUrl)
-      .map((item) => item.uuid);
+    const unresolved = unresolvedMediaSignature.split(",").filter(Boolean);
     if (unresolved.length === 0) return;
     const controller = new AbortController();
     void fetch(
@@ -132,7 +134,7 @@ export function MediaFields({
       .catch(() => undefined)
       .finally(() => { if (!controller.signal.aborted) setResolvingMedia(false); });
     return () => controller.abort();
-  }, [initialMedia]);
+  }, [unresolvedMediaSignature]);
 
   async function upload(files: File[]) {
     if (!files.length) return;
@@ -369,7 +371,7 @@ export function MediaFields({
         </fieldset>
       ) : null}
       {vaultOpen ? <VaultMediaPicker selectedUuids={media.map((item) => item.uuid)} remaining={10 - media.length} onClose={() => setVaultOpen(false)} onAdd={(incoming) => { setMedia((current) => [...current, ...incoming].slice(0, 10)); setVaultOpen(false); enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo agregado" : "archivos agregados"} desde la bóveda.`, { variant: "success" }); }} /> : null}
-      {libraryOpen ? <ContentLibraryPicker selectedUuids={media.map((item) => item.uuid)} remaining={10 - media.length} onClose={() => setLibraryOpen(false)} onAdd={(incoming, suggestedPriceMinor) => { setMedia((current) => [...new Map([...current, ...incoming].map((item) => [item.uuid, item])).values()].slice(0, 10)); if (!price && suggestedPriceMinor) setPrice((suggestedPriceMinor / 100).toFixed(2)); setLibraryOpen(false); enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo agregado" : "archivos agregados"} desde Content Library.`, { variant: "success" }); }} /> : null}
+      {libraryOpen ? <ContentLibraryPicker selectedUuids={media.map((item) => item.uuid)} remaining={10 - media.length} onClose={() => setLibraryOpen(false)} onAdd={(incoming, suggestedPriceMinor) => { if (incoming.some((item) => !item.localUrl)) setResolvingMedia(true); setMedia((current) => [...new Map([...current, ...incoming].map((item) => [item.uuid, item])).values()].slice(0, 10)); if (!price && suggestedPriceMinor) setPrice((suggestedPriceMinor / 100).toFixed(2)); setLibraryOpen(false); enqueueSnackbar(`${incoming.length} ${incoming.length === 1 ? "archivo agregado" : "archivos agregados"} desde Content Library.`, { variant: "success" }); }} /> : null}
     </div>
   );
 }

@@ -158,6 +158,50 @@ select:disabled { cursor: not-allowed; }
   animation: message-send-check 260ms cubic-bezier(.2,.9,.3,1.3) both;
 }
 
+/* A travelling highlight gives every toast a clear lifecycle without adding
+   another progress bar or moving the message itself. The mask keeps the
+   animation strictly on the perimeter. */
+@keyframes app-toast-neon-orbit {
+  to { transform: rotate(1turn); }
+}
+
+.app-toast {
+  position: relative;
+  isolation: isolate;
+  --toast-neon: 167 139 250;
+}
+
+.app-toast::before {
+  position: absolute;
+  z-index: 0;
+  inset: -55%;
+  content: "";
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg 275deg,
+    rgb(var(--toast-neon) / 0.08) 300deg,
+    rgb(var(--toast-neon) / 1) 335deg,
+    transparent 360deg
+  );
+  animation: app-toast-neon-orbit 2.25s linear infinite;
+}
+
+.app-toast::after {
+  position: absolute;
+  z-index: 0;
+  inset: 1px;
+  border-radius: calc(1rem - 1px);
+  content: "";
+  background: rgb(23 25 34 / 0.985);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035);
+}
+
+.toast-neon-success { --toast-neon: 52 211 153; }
+.toast-neon-error { --toast-neon: 251 113 133; }
+.toast-neon-warning { --toast-neon: 251 191 36; }
+.toast-neon-info { --toast-neon: 56 189 248; }
+.toast-neon-default { --toast-neon: 167 139 250; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     scroll-behavior: auto !important;

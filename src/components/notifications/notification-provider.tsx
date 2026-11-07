@@ -7,7 +7,7 @@ import { AppToast } from "./app-toast";
 export function NotificationProvider({ children }: { children: ReactNode }) {
   return <SnackbarProvider
     maxSnack={3}
-    autoHideDuration={5200}
+    autoHideDuration={4800}
     anchorOrigin={{ vertical: "top", horizontal: "right" }}
     Components={{ success: AppToast, error: AppToast, warning: AppToast, info: AppToast, default: AppToast }}
     classes={{

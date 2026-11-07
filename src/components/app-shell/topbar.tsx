@@ -54,20 +54,21 @@ export async function Topbar() {
     .toUpperCase();
 
   return (
-    <header data-topbar className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-white/8 bg-[#101218]/90 px-3 backdrop-blur-xl sm:px-5 md:px-8">
+    <header data-topbar className="sticky top-0 z-30 flex h-[4.5rem] items-center justify-between gap-2 border-b border-violet-400/10 bg-[#0e1016]/88 px-3 shadow-[0_14px_45px_rgba(0,0,0,.16)] backdrop-blur-2xl sm:gap-3 sm:px-5 md:px-8">
+      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-linear-to-r from-transparent via-violet-400/30 to-transparent" />
       <TopbarDropdownCoordinator />
-      <div className="flex min-w-0 flex-1 items-center gap-2 text-zinc-500 sm:gap-3">
+      <div className="relative flex min-w-0 flex-1 items-center gap-2 text-zinc-500 sm:gap-3">
         <MobileNavigation />
         <GlobalSearch />
       </div>
-      <div className="flex items-center gap-3">
+      <div className="relative flex items-center gap-1.5 sm:gap-2">
         {creator ? <EngagementNotificationsMenu /> : null}
         {creator ? <WorkflowAlertsMenu alerts={alerts} unreadCount={unreadAlertCount} /> : null}
         {creator ? (
           <details className="group relative">
             <summary
               aria-label="Abrir perfil de creador"
-              className="grid size-10 cursor-pointer list-none place-items-center overflow-hidden rounded-full border border-white/10 bg-gradient-to-br from-violet-400 to-fuchsia-600 text-xs font-semibold text-white ring-violet-400/30 transition hover:ring-4 [&::-webkit-details-marker]:hidden"
+              className="grid size-10 cursor-pointer list-none place-items-center overflow-hidden rounded-xl border border-violet-300/25 bg-linear-to-br from-violet-400 to-fuchsia-600 text-xs font-semibold text-white shadow-[0_0_20px_rgba(139,92,246,.16)] ring-violet-400/15 transition hover:shadow-[0_0_30px_rgba(168,85,247,.28)] hover:ring-4 [&::-webkit-details-marker]:hidden"
             >
               {creator.avatarUrl ? (
                 <span
@@ -80,9 +81,10 @@ export async function Topbar() {
                 initials
               )}
             </summary>
-            <div className="absolute right-0 mt-3 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-[#181a21] p-4 shadow-2xl shadow-black/50">
+            <div className="absolute right-0 mt-3 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-[1.35rem] border border-violet-400/15 bg-[#15171f]/98 p-4 shadow-[0_24px_80px_rgba(0,0,0,.68),0_0_40px_rgba(139,92,246,.08)] backdrop-blur-2xl">
+              <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-violet-300/60 to-transparent" />
               <div className="flex items-center gap-3">
-                <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-violet-400 to-fuchsia-600 text-sm font-semibold text-white">
+                <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-2xl border border-violet-300/20 bg-linear-to-br from-violet-400 to-fuchsia-600 text-sm font-semibold text-white shadow-[0_0_24px_rgba(139,92,246,.18)]">
                   {creator.avatarUrl ? (
                     <span
                       className="size-full bg-cover bg-center"
@@ -107,7 +109,7 @@ export async function Topbar() {
                 href={`https://www.fanvue.com/${creator?.username}`}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-violet-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-400"
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-violet-300/20 bg-violet-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_0_24px_rgba(139,92,246,.12)] transition hover:bg-violet-400"
               >
                 Ir a mi cuenta de Fanvue
                 <ExternalLink className="size-4" />

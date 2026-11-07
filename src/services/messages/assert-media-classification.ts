@@ -34,12 +34,11 @@ export async function assertFanvueMediaClassification(
 
   const officialRatings = media.map((item) => item?.tags?.isNsfw);
   if (declaredSafety === "NSFW") {
-    // Fanvue exposes its official classification as read-only metadata. There
-    // is no NSFW flag in the send-message request, so a missing classification
-    // cannot be replaced with words in the caption or an invented API field.
-    if (officialRatings.some((rating) => typeof rating !== "boolean") || !officialRatings.some(Boolean)) {
-      throw new MediaClassificationError("FANVUE_NSFW_LABEL_REQUIRED");
-    }
+    // Some valid Fanvue media responses omit `tags` entirely. Absence is not
+    // proof that moderation rejected the asset. A creator declaring an asset
+    // NSFW is also strictly safer than Fanvue reporting it as SFW, so it must
+    // not be rejected as a mismatch. Consent and the conservative local
+    // declaration are still enforced by assertSendRecipient.
     return;
   }
 

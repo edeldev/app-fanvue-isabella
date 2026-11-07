@@ -7,6 +7,7 @@ import { mediaBulkSchema } from "@/lib/fanvue/sync-schemas";
 import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 import { getValidFanvueAccessToken } from "@/services/fanvue/get-access-token";
+import { selectMediaVariants } from "@/lib/fanvue/media-variants";
 
 const mediaSchema = z.object({
   uuid: z.string().uuid(),
@@ -114,8 +115,7 @@ export async function GET(request: Request) {
           const resolved = await fanvueRequest(`/v1/media/bulk?mediaUuids=${encodeURIComponent(chunk.join(","))}&variants=main,thumbnail`, token, mediaBulkSchema);
           for (const item of Object.values(resolved.results)) {
             if (!item || item.status !== "ready") continue;
-            const main = item.variants.find((variant) => variant.variantType === "main" && variant.url) ?? item.variants.find((variant) => variant.url);
-            const thumbnail = item.variants.find((variant) => variant.variantType === "thumbnail" && variant.url) ?? item.variants.find((variant) => variant.variantType === "thumbnail_gallery" && variant.url);
+            const { main, thumbnail } = selectMediaVariants(item.variants);
             const detail = main ?? thumbnail;
             urls.set(item.uuid, { url: main?.url ?? thumbnail?.url, thumbnailUrl: thumbnail?.url ?? (item.mediaType !== "video" ? main?.url : undefined), width: typeof detail?.width === "number" ? detail.width : null, height: typeof detail?.height === "number" ? detail.height : null, durationMs: typeof detail?.lengthMs === "number" ? detail.lengthMs : null });
           }

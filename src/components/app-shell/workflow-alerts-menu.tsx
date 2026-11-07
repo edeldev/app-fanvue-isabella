@@ -28,5 +28,56 @@ export function WorkflowAlertsMenu({ alerts, unreadCount }: { alerts: WorkflowAl
     } finally { setBusy(null); }
   }
 
-  return <details className="group relative"><summary aria-label={`${unreadCount} alertas de workflows sin revisar`} title="Alertas del sistema" className="relative grid size-9 cursor-pointer list-none place-items-center rounded-lg border border-white/8 text-zinc-400 transition hover:border-white/15 hover:text-white [&::-webkit-details-marker]:hidden"><ShieldAlert className="size-4" />{unreadCount > 0 ? <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-red-500 px-1 text-[9px] font-bold leading-5 text-white ring-2 ring-[#101218]">{unreadCount > 99 ? "99+" : unreadCount}</span> : null}</summary><div className="fixed inset-x-3 top-[4.5rem] z-50 flex max-h-[calc(100dvh-5.5rem)] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#181a21] shadow-2xl shadow-black/60 sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-3 sm:max-h-[min(38rem,calc(100dvh-5rem))] sm:w-[min(24rem,calc(100vw-2rem))]"><div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/8 p-3 sm:gap-3 sm:p-4"><div className="min-w-0"><p className="truncate text-sm font-semibold text-white">Alertas de workflows</p><p className="mt-0.5 truncate text-[10px] text-zinc-600">{unreadCount ? `${unreadCount} pendientes de revisar` : "Todo revisado"}</p></div>{unreadCount ? <button type="button" disabled={busy !== null} onClick={() => review("all")} className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-[10px] font-medium text-violet-300 hover:bg-violet-400/10 disabled:opacity-40">{busy === "all" ? <LoaderCircle className="size-3 animate-spin" /> : <Check className="size-3" />}Revisar todas</button> : null}</div><div className="min-h-0 flex-1 overscroll-contain overflow-y-auto">{alerts.map((alert) => <div key={alert.id} className={`border-b border-white/6 p-3 last:border-0 sm:p-4 ${alert.reviewed ? "opacity-55" : "bg-red-400/[.025]"}`}><div className="flex min-w-0 items-start gap-3"><span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-red-400/10 text-red-300"><TriangleAlert className="size-3.5" /></span><div className="min-w-0 flex-1"><p className="break-words text-xs leading-5 text-zinc-200">{alert.explanation}</p><p className="mt-1 truncate text-[10px] text-zinc-600">{alert.fanName ?? "Fan desconocido"}{alert.workflowName ? ` · ${alert.workflowName}` : ""}</p><div className="mt-2 flex flex-col items-start gap-1 min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between min-[380px]:gap-2"><time className="shrink-0 text-[9px] text-zinc-700 min-[380px]:text-[10px]" dateTime={alert.occurredAt}>{formatAppDateTime(alert.occurredAt)}</time>{!alert.reviewed ? <button type="button" disabled={busy !== null} onClick={() => review("one", alert.id)} className="text-[10px] font-medium text-zinc-500 hover:text-emerald-300 disabled:opacity-40">{busy === alert.id ? "Revisando…" : "Marcar revisada"}</button> : <span className="text-[10px] text-emerald-400/60">Revisada</span>}</div>{alert.reasonCode ? <p className="mt-1 break-all font-mono text-[9px] text-zinc-700">{alert.reasonCode}</p> : null}</div></div></div>)}{!alerts.length ? <div className="p-8 text-center"><Check className="mx-auto size-6 text-emerald-400/60" /><p className="mt-2 text-xs text-zinc-500">No hay ejecuciones fallidas.</p></div> : null}</div><Link href="/workflows#historial-workflows" className="flex shrink-0 items-center justify-center gap-2 border-t border-white/8 px-3 py-3 text-center text-xs font-medium text-violet-300 hover:bg-white/[.025] sm:px-4">Abrir historial de workflows<ExternalLink className="size-3 shrink-0" /></Link></div></details>;
+  return (
+    <details className="group relative">
+      <summary
+        aria-label={`${unreadCount} alertas de workflows sin revisar`}
+        title="Alertas de workflows"
+        className={`relative grid size-10 cursor-pointer list-none place-items-center rounded-xl border transition [&::-webkit-details-marker]:hidden ${unreadCount ? "border-rose-400/25 bg-rose-400/10 text-rose-200 shadow-[0_0_22px_rgba(251,113,133,.1)]" : "border-white/[.075] bg-white/[.025] text-zinc-500 hover:border-rose-400/20 hover:bg-rose-400/[.06] hover:text-rose-200"}`}
+      >
+        <ShieldAlert className="size-4" />
+        {unreadCount > 0 ? (
+          <span className="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-5 text-white shadow-[0_0_12px_rgba(244,63,94,.5)] ring-2 ring-[#101218]">
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        ) : null}
+      </summary>
+      <div className="fixed inset-x-3 top-[5rem] z-50 flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-[1.4rem] border border-rose-400/15 bg-[#14161e]/98 shadow-[0_24px_80px_rgba(0,0,0,.72),0_0_45px_rgba(244,63,94,.07)] backdrop-blur-2xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-3 sm:max-h-[min(38rem,calc(100dvh-5rem))] sm:w-[min(24rem,calc(100vw-2rem))]">
+        <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-rose-300/65 to-transparent" />
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/8 p-3 sm:gap-3 sm:p-4">
+          <div className="min-w-0">
+            <p className="truncate text-[9px] font-semibold uppercase tracking-[.16em] text-rose-300/70">Centro de operaciones</p>
+            <p className="mt-1 truncate text-sm font-semibold text-white">Alertas de workflows</p>
+            <p className="mt-0.5 truncate text-[10px] text-zinc-600">{unreadCount ? `${unreadCount} pendientes de revisar` : "Todo revisado"}</p>
+          </div>
+          {unreadCount ? (
+            <button type="button" disabled={busy !== null} onClick={() => review("all")} className="flex shrink-0 items-center gap-1.5 rounded-lg border border-violet-400/10 bg-violet-400/[.06] px-2 py-1.5 text-[10px] font-medium text-violet-200 hover:bg-violet-400/10 disabled:opacity-40">
+              {busy === "all" ? <LoaderCircle className="size-3 animate-spin" /> : <Check className="size-3" />}
+              Revisar todas
+            </button>
+          ) : null}
+        </div>
+        <div className="min-h-0 flex-1 overscroll-contain overflow-y-auto">
+          {alerts.map((alert) => (
+            <div key={alert.id} className={`border-b border-white/6 p-3 transition last:border-0 hover:bg-white/[.025] sm:p-4 ${alert.reviewed ? "opacity-55" : "bg-rose-400/[.025]"}`}>
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl border border-rose-400/10 bg-rose-400/10 text-rose-300"><TriangleAlert className="size-3.5" /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="break-words text-xs leading-5 text-zinc-200">{alert.explanation}</p>
+                  <p className="mt-1 truncate text-[10px] text-zinc-600">{alert.fanName ?? "Fan desconocido"}{alert.workflowName ? ` · ${alert.workflowName}` : ""}</p>
+                  <div className="mt-2 flex flex-col items-start gap-1 min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between min-[380px]:gap-2">
+                    <time className="shrink-0 text-[9px] text-zinc-700 min-[380px]:text-[10px]" dateTime={alert.occurredAt}>{formatAppDateTime(alert.occurredAt)}</time>
+                    {!alert.reviewed ? <button type="button" disabled={busy !== null} onClick={() => review("one", alert.id)} className="text-[10px] font-medium text-zinc-500 hover:text-emerald-300 disabled:opacity-40">{busy === alert.id ? "Revisando…" : "Marcar revisada"}</button> : <span className="text-[10px] text-emerald-400/60">Revisada</span>}
+                  </div>
+                  {alert.reasonCode ? <p className="mt-1 break-all font-mono text-[9px] text-zinc-700">{alert.reasonCode}</p> : null}
+                </div>
+              </div>
+            </div>
+          ))}
+          {!alerts.length ? <div className="p-8 text-center"><Check className="mx-auto size-6 text-emerald-400/60" /><p className="mt-2 text-xs text-zinc-500">No hay ejecuciones fallidas.</p></div> : null}
+        </div>
+        <Link href="/workflows#historial-workflows" className="flex shrink-0 items-center justify-center gap-2 border-t border-white/8 px-3 py-3 text-center text-xs font-medium text-violet-300 transition hover:bg-violet-400/[.045] sm:px-4">Abrir historial de workflows<ExternalLink className="size-3 shrink-0" /></Link>
+      </div>
+    </details>
+  );
 }

@@ -32,7 +32,7 @@ export function SyncFanvueButton() {
         type="submit"
         disabled={pending}
         aria-busy={pending}
-        className="flex min-w-49 items-center justify-center gap-2 rounded-lg bg-violet-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-wait disabled:opacity-60"
+        className="flex min-w-49 items-center justify-center gap-2 rounded-xl border border-violet-300/20 bg-violet-500 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_26px_rgba(139,92,246,.16)] transition hover:bg-violet-400 hover:shadow-[0_0_34px_rgba(168,85,247,.25)] disabled:cursor-wait disabled:opacity-60"
       >
         <RefreshCw className={`size-4 ${pending ? "animate-spin" : ""}`} />
         <span aria-live="polite">
