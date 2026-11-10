@@ -27,6 +27,7 @@ export async function triggerWorkflowForFan(creatorId: string, fanId: string, tr
     if (error instanceof Error && error.message === "WORKFLOW_REENTRY_ONCE") return { outcome: "REENTRY_BLOCKED_ONCE" } as const;
     if (error instanceof Error && error.message === "WORKFLOW_REENTRY_COOLDOWN") return { outcome: "REENTRY_COOLDOWN" } as const;
     if (error instanceof Error && error.message === "ENROLLMENT_ALREADY_ACTIVE") return { outcome: "ALREADY_ACTIVE" } as const;
+    if (error instanceof Error && error.message === "WORKFLOW_ENTRY_CONDITIONS_NOT_MET") return { outcome: "ENTRY_CONDITIONS_NOT_MET" } as const;
     const retry = await prisma.workflowEnrollment.findFirst({ where: { creatorId, fanId, workflowId: workflow.id, status: { in: ["ACTIVE", "WAITING"] } }, orderBy: { createdAt: "desc" }, select: { id: true } });
     if (!retry) return { outcome: "FAILED_TO_START" } as const;
     return { outcome: "SCHEDULED_FOR_RETRY", enrollmentId: retry.id } as const;

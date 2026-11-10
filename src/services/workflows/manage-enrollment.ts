@@ -7,18 +7,25 @@ import { silenceWaitDeadline } from "@/domain/workflows/silence-wait";
 import { reentryBlockedReason } from "@/domain/workflows/reentry-policy";
 import { isReplyWithinAttributionWindow } from "@/domain/workflows/reply-attribution";
 import { resolveReplyPausePolicy } from "@/domain/workflows/reply-pause-policy";
+import { fanPassesWorkflowEntryGate, workflowEntryGate } from "@/domain/workflows/entry-gate";
 
 const nonTerminalStatuses: EnrollmentStatus[] = ["ACTIVE", "WAITING", "PAUSED"];
 
 export async function startEnrollment(creatorId: string, fanId: string, workflowId: string) {
   const [fan, workflow] = await Promise.all([
     prisma.fan.findFirst({ where: { id: fanId, creatorId, isCreatorAccount: false } }),
-    prisma.workflow.findFirst({ where: { id: workflowId, creatorId, status: "PUBLISHED", isPrimary: true }, include: { steps: { orderBy: { position: "asc" }, take: 1 } } }),
+    prisma.workflow.findFirst({ where: { id: workflowId, creatorId, status: "PUBLISHED", isPrimary: true }, include: { steps: { orderBy: { position: "asc" } } } }),
   ]);
   if (!fan) throw new Error("ENROLLMENT_FAN_NOT_FOUND");
   if (fan.doNotMessage) throw new Error("FAN_DO_NOT_MESSAGE");
   if (fan.automationPaused) throw new Error("FAN_AUTOMATION_PAUSED");
   if (!workflow || !workflow.steps[0]) throw new Error("ENROLLMENT_WORKFLOW_NOT_FOUND");
+  if (workflowEntryGate(workflow.steps)) {
+    const paidPurchasesCount = await prisma.purchase.count({ where: { creatorId, fanId, amountMinor: { gt: 0 }, reversedAt: null } });
+    if (!fanPassesWorkflowEntryGate(workflow.steps, { ...fan, paidPurchasesCount })) {
+      throw new Error("WORKFLOW_ENTRY_CONDITIONS_NOT_MET");
+    }
+  }
 
   const result = await prisma.$transaction(async (transaction) => {
     const current = await transaction.workflowEnrollment.findFirst({

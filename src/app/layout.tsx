@@ -29,7 +29,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <a href="#main-content" className="fixed left-4 top-4 z-[200] -translate-y-24 rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white shadow-xl transition focus:translate-y-0">Saltar al contenido principal</a>
         <NotificationProvider>
           <MediaRightsProvider>
-            <Suspense fallback={null}><RouteNotifications /></Suspense>
+            <Suspense fallback={null}><RouteNotifications authenticated={Boolean(creatorId)} /></Suspense>
             {creatorId ? <><WorkflowAutoRunner /><FanvueReconciler /></> : null}
             {children}
           </MediaRightsProvider>

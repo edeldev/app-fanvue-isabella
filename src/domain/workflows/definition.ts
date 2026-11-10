@@ -62,6 +62,9 @@ export const workflowStepInputSchema = z.object({
     if (!result.success) context.addIssue({ code: "custom", path: ["config", "silenceMinutes"], message: "El silencio debe estar entre 1 minuto y 30 días." });
   }
   if (step.type === "CONDITION") {
+    if (step.config.entryGate !== undefined && typeof step.config.entryGate !== "boolean") {
+      context.addIssue({ code: "custom", path: ["config", "entryGate"], message: "El filtro de entrada debe estar activado o desactivado." });
+    }
     const legacyValid = workflowConditions.includes(String(step.config.condition) as (typeof workflowConditions)[number]);
     const rules = Array.isArray(step.config.conditions) ? step.config.conditions : [];
     const rulesValid = rules.length > 0 && rules.length <= 10 && rules.every((value) => {
@@ -101,6 +104,10 @@ export const workflowDefinitionInputSchema = z.object({
   goalAmountMinor: z.number().int().min(1).nullable().default(null),
   steps: z.array(workflowStepInputSchema).min(1).max(50),
 }).superRefine((workflow, context) => {
+  const entryGates = workflow.steps.filter((step) => step.type === "CONDITION" && step.config.entryGate === true);
+  if (entryGates.length > 1) {
+    context.addIssue({ code: "custom", path: ["steps"], message: "Solo una condición puede funcionar como filtro de entrada." });
+  }
   if (workflow.reentryPolicy === "AFTER_DELAY" && workflow.reentryDelayDays === null) {
     context.addIssue({ code: "custom", path: ["reentryDelayDays"], message: "Indica cuántos días deben pasar antes del reingreso." });
   }

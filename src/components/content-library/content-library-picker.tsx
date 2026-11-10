@@ -24,6 +24,7 @@ type Pack = {
   name: string;
   status: string;
   priceMinor: number | null;
+  coverContentId?: string | null;
   assets: Array<{
     id: string;
     name: string;
@@ -395,28 +396,33 @@ export function ContentLibraryPicker({
               {visiblePacks.map((pack) => (
                 <article
                   key={pack.id}
-                  className="rounded-2xl border border-white/8 bg-black/15 p-4"
+                  className="group overflow-hidden rounded-2xl border border-white/8 bg-black/15 transition hover:border-violet-400/20 hover:bg-violet-400/[.025]"
                 >
-                  <div className="flex items-start justify-between">
-                    <PackageOpen className="size-5 text-violet-300" />
-                    <span className="text-[9px] uppercase text-zinc-600">
-                      {statusLabel(pack.status)}
-                    </span>
+                  <PackPreview pack={pack} />
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="truncate text-sm font-medium text-white">{pack.name}</h3>
+                        <p className="mt-1 text-[11px] text-zinc-600">
+                          {pack.stats.total} archivos · {pack.stats.photos} fotos · {pack.stats.videos} videos
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-[9px] uppercase text-zinc-600">{statusLabel(pack.status)}</span>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <span className="text-[10px] font-medium text-amber-200/80">
+                        {pack.priceMinor ? `$${(pack.priceMinor / 100).toFixed(2)} USD` : "Sin precio sugerido"}
+                      </span>
+                      <span className="text-[10px] text-zinc-600">Vista previa del Pack</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => addPack(pack)}
+                      className="mt-4 w-full cursor-pointer rounded-xl bg-violet-500 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-violet-400"
+                    >
+                      Agregar Pack completo
+                    </button>
                   </div>
-                  <h3 className="mt-3 truncate text-sm font-medium text-white">
-                    {pack.name}
-                  </h3>
-                  <p className="mt-1 text-[11px] text-zinc-600">
-                    {pack.stats.total} assets · {pack.stats.photos} fotos ·{" "}
-                    {pack.stats.videos} videos
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => addPack(pack)}
-                    className="mt-4 w-full cursor-pointer rounded-xl bg-violet-500 px-3 py-2.5 text-xs font-semibold text-white hover:bg-violet-400"
-                  >
-                    Agregar Pack completo
-                  </button>
                 </article>
               ))}
             </div>
@@ -466,6 +472,46 @@ export function ContentLibraryPicker({
           </footer>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function PackPreview({ pack }: { pack: Pack }) {
+  const cover = pack.assets.find((asset) => asset.id === pack.coverContentId);
+  const ordered = cover
+    ? [cover, ...pack.assets.filter((asset) => asset.id !== cover.id)]
+    : pack.assets;
+  const visible = ordered.slice(0, 4);
+  const remaining = Math.max(ordered.length - visible.length, 0);
+
+  if (!visible.length) {
+    return (
+      <div className="grid aspect-[16/9] place-items-center border-b border-white/8 bg-white/[.02]">
+        <span className="grid size-12 place-items-center rounded-2xl border border-violet-400/10 bg-violet-400/[.05] text-violet-300/45">
+          <PackageOpen className="size-5" />
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`grid aspect-[16/9] gap-px overflow-hidden border-b border-white/8 bg-white/8 ${visible.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+      {visible.map((asset, index) => {
+        const source = asset.thumbnailUrl ?? asset.url;
+        const showRemaining = remaining > 0 && index === visible.length - 1;
+        return (
+          <div key={asset.id} className={`relative min-h-0 overflow-hidden bg-[#0d0f15] ${visible.length === 3 && index === 0 ? "row-span-2" : ""}`}>
+            {source ? (
+              <img src={source} alt={asset.name} className="size-full object-cover transition duration-500 group-hover:scale-[1.025]" />
+            ) : (
+              <span className="absolute inset-0 grid place-items-center text-zinc-700">{asset.type === "video" ? <Film className="size-5" /> : <ImageIcon className="size-5" />}</span>
+            )}
+            {asset.type === "video" ? <span className="absolute bottom-1.5 left-1.5 grid size-6 place-items-center rounded-full border border-white/15 bg-black/65 text-white backdrop-blur-sm"><Film className="size-3" /></span> : null}
+            {index === 0 ? <span className="absolute left-2 top-2 rounded-full border border-white/10 bg-black/55 px-2 py-1 text-[8px] font-semibold uppercase tracking-[.12em] text-white/80 backdrop-blur-sm">Portada</span> : null}
+            {showRemaining ? <span className="absolute inset-0 grid place-items-center bg-black/62 text-lg font-semibold text-white backdrop-blur-[1px]">+{remaining}</span> : null}
+          </div>
+        );
+      })}
     </div>
   );
 }

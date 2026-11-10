@@ -44,6 +44,10 @@ const syncNotices: Record<string, Notice> = {
     message: "Vuelve a conectar Fanvue antes de sincronizar.",
     variant: "warning",
   },
+  rate_limited: {
+    message: "Los datos se actualizaron recientemente. Espera unos minutos antes de solicitar otra actualización manual.",
+    variant: "info",
+  },
 };
 const messageErrors: Record<string, string> = {
   rate_limited:
@@ -77,7 +81,7 @@ const templateErrors: Record<string, string> = {
   unknown: "No se pudo completar la operación con la plantilla.",
 };
 
-export function RouteNotifications() {
+export function RouteNotifications({ authenticated = false }: { authenticated?: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -100,6 +104,10 @@ export function RouteNotifications() {
     const serialized = searchParams.toString();
     const key = `${pathname}?${serialized}`;
     if (!serialized) { handled.current = ""; return; }
+    // Home redirects authenticated sessions on the server. Suppress route
+    // notices during the client transition so the public landing never flashes
+    // an obsolete OAuth snackbar before navigation completes.
+    if (pathname === "/" && authenticated) return;
     if (handled.current === key) return;
     const notices: Notice[] = [];
     const fanvue = searchParams.get("fanvue");
@@ -155,7 +163,7 @@ export function RouteNotifications() {
     if (messageSent) return;
     const cleanUrl = clean.size ? `${pathname}?${clean}` : pathname;
     router.replace(cleanUrl, { scroll: false });
-  }, [messageSent, pathname, router, searchParams]);
+  }, [authenticated, messageSent, pathname, router, searchParams]);
 
   return null;
 }
