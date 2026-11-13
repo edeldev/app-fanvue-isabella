@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
-import { ArrowLeft, MessageCircle, Search } from "lucide-react";
+import { ArrowLeft, BrainCircuit, Languages, MessageCircle, Search, Sparkles } from "lucide-react";
 import { Sidebar } from "@/components/app-shell/sidebar";
 import { Topbar } from "@/components/app-shell/topbar";
 import { LiveRefresh } from "@/components/live-refresh";
@@ -392,21 +392,15 @@ export default async function MessagesPage({ searchParams }: Props) {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar />
         <main id="main-content" tabIndex={-1} className="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-col px-3 py-3 sm:px-5 sm:py-5 md:px-8">
-          <div className={`${conversationIsOpen ? "hidden md:block" : "block"} mb-4 shrink-0`}>
-            <p className="mb-1 text-xs font-medium uppercase tracking-[.18em] text-violet-400">
-              Bandeja de entrada
-            </p>
-            <h1 className="text-2xl font-semibold tracking-tight text-white">
-              Mensajes
-            </h1>
-            <p className="mt-1 text-sm text-zinc-500">
-              Conversaciones con fans y suscriptores sincronizadas con Fanvue.
-            </p>
+          <div className={`${conversationIsOpen ? "hidden md:block" : "block"} relative mb-4 shrink-0 overflow-hidden rounded-3xl border border-violet-400/15 bg-[radial-gradient(circle_at_8%_0%,rgba(139,92,246,.18),transparent_38%),linear-gradient(135deg,#191b26,#111319)] px-5 py-4 shadow-[0_0_45px_rgba(124,58,237,.07)] sm:px-6`}>
+            <div aria-hidden className="absolute inset-x-16 top-0 h-px bg-gradient-to-r from-transparent via-violet-300/75 to-transparent shadow-[0_0_18px_rgba(196,181,253,.55)]" />
+            <div className="relative flex flex-wrap items-center justify-between gap-4"><div><p className="mb-1 text-[9px] font-semibold uppercase tracking-[.2em] text-violet-300">Conversation intelligence</p><h1 className="text-2xl font-semibold tracking-tight text-white">Mensajes</h1><p className="mt-1 text-xs text-zinc-500">Entiende, traduce y responde con el contexto completo del fan.</p></div><div className="hidden flex-wrap gap-2 lg:flex"><FeaturePill icon={Languages} text="Traducción contextual"/><FeaturePill icon={BrainCircuit} text="Memoria Lifecycle"/><FeaturePill icon={Sparkles} text="Respuesta con IA"/></div></div>
           </div>
-          <div className="grid min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/8 bg-white/[.025] md:grid-cols-[340px_minmax(0,1fr)]">
+          <div className="grid min-h-0 flex-1 overflow-hidden rounded-3xl border border-violet-400/12 bg-white/[.025] shadow-[0_24px_60px_rgba(0,0,0,.22),0_0_36px_rgba(124,58,237,.035)] md:grid-cols-[350px_minmax(0,1fr)]">
             <section className={`${conversationIsOpen ? "hidden md:flex" : "flex"} min-h-0 flex-col border-b border-white/8 md:border-b-0 md:border-r`}>
-              <div className="shrink-0 border-b border-white/8 p-4">
-                <form className="flex items-center gap-2 rounded-xl border border-white/8 bg-black/20 px-3 py-2.5">
+              <div className="shrink-0 border-b border-white/8 bg-[linear-gradient(145deg,rgba(139,92,246,.035),transparent)] p-4">
+                <div className="mb-3 flex items-center justify-between gap-3"><div><p className="text-[9px] font-semibold uppercase tracking-[.14em] text-zinc-600">Bandeja de entrada</p><p className="mt-0.5 text-sm font-medium text-white">{conversations.length} conversaciones</p></div>{unreadTotal > 0 ? <span className="rounded-full border border-violet-400/20 bg-violet-400/10 px-2.5 py-1 text-[10px] font-semibold text-violet-200">{unreadTotal} sin leer</span> : null}</div>
+                <form className="flex items-center gap-2 rounded-xl border border-white/8 bg-black/20 px-3 py-2.5 transition focus-within:border-violet-400/35 focus-within:ring-2 focus-within:ring-violet-400/8">
                   <Search className="size-4 text-zinc-600" />
                   <input
                     name="q"
@@ -425,7 +419,7 @@ export default async function MessagesPage({ searchParams }: Props) {
                       href={filterHref(filter.value)}
                       prefetch={false}
                       aria-current={activeFilter === filter.value ? "page" : undefined}
-                      className={`shrink-0 rounded-full border px-3 py-1.5 transition ${activeFilter === filter.value ? "border-violet-400/30 bg-violet-500 text-white shadow-md shadow-violet-950/30" : "border-white/8 bg-white/5 text-zinc-400 hover:border-white/15 hover:bg-white/8 hover:text-white"}`}
+                      className={`shrink-0 rounded-full border px-3 py-1.5 transition ${activeFilter === filter.value ? "border-violet-300/30 bg-violet-500 text-white shadow-[0_0_16px_rgba(139,92,246,.18)]" : "border-white/8 bg-white/[.035] text-zinc-400 hover:border-white/15 hover:bg-white/8 hover:text-white"}`}
                     >
                       {filter.label}{filter.value === "unread" && unreadTotal > 0 ? ` (${unreadTotal})` : ""}
                     </Link>
@@ -442,18 +436,17 @@ export default async function MessagesPage({ searchParams }: Props) {
                       prefetch={false}
                       key={item.id}
                       href={conversationHref(item.fan.fanvueUserId)}
-                      className={`flex gap-3 border-b border-white/5 px-4 py-4 transition hover:bg-white/5 ${selected?.id === item.id ? "bg-violet-500/10" : ""}`}
+                      className={`group relative flex gap-3 border-b border-white/5 px-4 py-4 transition hover:bg-violet-400/[.035] ${selected?.id === item.id ? "bg-violet-500/[.09]" : ""}`}
                     >
-                      <div className="grid size-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-violet-500/50 to-fuchsia-600/40 text-xs font-semibold">
-                        {initials(name)}
-                      </div>
+                      {selected?.id === item.id ? <span aria-hidden className="absolute inset-y-3 left-0 w-0.5 rounded-full bg-violet-400 shadow-[0_0_12px_rgba(167,139,250,.8)]"/> : null}
+                      <div className="relative size-11 shrink-0">{item.fan.avatarUrl ? <span className="block size-11 rounded-2xl bg-cover bg-center ring-1 ring-white/10" style={{ backgroundImage: `url(${JSON.stringify(item.fan.avatarUrl).slice(1, -1)})` }}/> : <span className="grid size-11 place-items-center rounded-2xl border border-violet-400/10 bg-gradient-to-br from-violet-500/30 to-fuchsia-600/20 text-xs font-semibold text-violet-100">{initials(name)}</span>}{isFanOnlineNow(item.fan.isOnline, item.fan.presenceChangedAt) ? <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-[#171920] bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,.7)]"/> : null}</div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <p className="truncate text-sm font-medium text-zinc-200">
                             {name}
                           </p>
                           {item.unreadMessagesCount > 0 ? (
-                            <span className="rounded-full bg-violet-500 px-2 py-0.5 text-[10px] font-semibold">
+                            <span className="rounded-full bg-violet-500 px-2 py-0.5 text-[10px] font-semibold shadow-[0_0_12px_rgba(139,92,246,.28)]">
                               {item.unreadMessagesCount}
                             </span>
                           ) : null}
@@ -488,19 +481,20 @@ export default async function MessagesPage({ searchParams }: Props) {
                 ) : null}
               </div>
             </section>
-            <section className={`${conversationIsOpen ? "flex" : "hidden md:flex"} min-h-0 min-w-0 flex-col`}>
+            <section className={`${conversationIsOpen ? "flex" : "hidden md:flex"} min-h-0 min-w-0 flex-col bg-[radial-gradient(circle_at_50%_0%,rgba(139,92,246,.025),transparent_32%)]`}>
               {selected ? (
                 <>
-                  <header className="sticky top-0 z-10 flex shrink-0 items-center gap-3 border-b border-white/8 bg-[#161820] px-4 py-3 md:px-5">
+                  <header className="sticky top-0 z-10 flex shrink-0 items-center gap-3 border-b border-white/8 bg-[#161820]/95 px-4 py-3 backdrop-blur-xl md:px-5">
                     <Link href={inboxHref} aria-label="Volver a conversaciones" className="grid size-9 shrink-0 place-items-center rounded-lg border border-white/8 text-zinc-400 hover:bg-white/5 hover:text-white md:hidden"><ArrowLeft className="size-4" /></Link>
-                    <div className="min-w-0"><p className="truncate font-medium text-zinc-200">
+                    {selected.fan.avatarUrl ? <span className="size-10 shrink-0 rounded-xl bg-cover bg-center ring-1 ring-white/10" style={{ backgroundImage: `url(${JSON.stringify(selected.fan.avatarUrl).slice(1, -1)})` }}/> : <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-violet-400/10 bg-violet-400/[.08] text-xs font-semibold text-violet-200">{initials(selected.fan.displayName || selected.fan.username || "Fan")}</span>}
+                    <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate font-medium text-zinc-200">
                       {selected.fan.displayName ||
                         selected.fan.username ||
                         "Fan"}
-                    </p>
+                    </p>{isFanOnlineNow(selected.fan.isOnline, selected.fan.presenceChangedAt) ? <span className="shrink-0 text-[9px] font-medium text-emerald-300">En línea</span> : null}</div>
                     <p className="truncate text-xs text-zinc-600">
                       @{selected.fan.username || "sin-usuario"}
-                    </p></div>
+                    </p></div><Link href={`/lifecycle/fans/${selected.fan.id}`} className="hidden shrink-0 items-center gap-1.5 rounded-xl border border-white/8 bg-white/[.025] px-3 py-2 text-[10px] font-medium text-zinc-500 transition hover:border-violet-400/20 hover:text-violet-200 sm:flex"><BrainCircuit className="size-3.5"/>Ver contexto</Link>
                   </header>
                   <MessageHistory conversationKey={selected.id} latestMessageId={messages.at(-1)?.uuid ?? null}>
                     {historyError ? (
@@ -622,12 +616,12 @@ export default async function MessagesPage({ searchParams }: Props) {
               ) : (
                 <div className="grid flex-1 place-items-center text-center">
                   <div className="max-w-sm px-6">
-                    <span className="mx-auto mb-5 grid size-14 place-items-center rounded-2xl border border-violet-400/15 bg-violet-400/[.06] text-violet-300 shadow-xl shadow-black/20"><MessageCircle className="size-6" /></span>
+                    <span className="mx-auto mb-5 grid size-16 place-items-center rounded-3xl border border-violet-400/20 bg-violet-400/[.07] text-violet-300 shadow-[0_0_35px_rgba(139,92,246,.1)]"><MessageCircle className="size-7" /></span>
                     <p className="text-lg font-semibold text-zinc-200">
                       Bienvenido a chats
                     </p>
                     <p className="mt-2 text-sm leading-6 text-zinc-500">
-                      Selecciona un contacto de la lista ¡y diviértete!
+                      Selecciona un contacto para ver su conversación, contexto y herramientas de respuesta.
                     </p>
                   </div>
                 </div>
@@ -638,6 +632,10 @@ export default async function MessagesPage({ searchParams }: Props) {
       </div>
     </div>
   );
+}
+
+function FeaturePill({ icon: Icon, text }: { icon: typeof Languages; text: string }) {
+  return <span className="flex items-center gap-1.5 rounded-full border border-violet-400/12 bg-violet-400/[.045] px-3 py-1.5 text-[9px] font-medium text-violet-200/75"><Icon className="size-3"/>{text}</span>;
 }
 
 function readTemplateMetadata(value: unknown) {
