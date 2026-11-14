@@ -29,6 +29,7 @@ import type { WorkflowDefinitionInput } from "@/domain/workflows/definition";
 import { workflowReentryPolicyLabels } from "@/domain/workflows/reentry-policy";
 import { workflowTriggerLabels } from "@/domain/workflows/triggers";
 import { workflowGoalLabels } from "@/domain/workflows/conversion-goal";
+import { formatAppDate } from "@/lib/date-time";
 import { WorkflowDeleteDialog } from "./workflow-delete-dialog";
 import { WorkflowEditor } from "./workflow-editor";
 import { WorkflowPreviewModal } from "./workflow-preview-modal";
@@ -38,7 +39,7 @@ const PAGE_SIZE = 6;
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 type StatusFilter = "ALL" | WorkflowView["status"];
 
-export function WorkflowManager({ workflows, templates, defaults, analytics, profileAiLabelConfirmed = false, initialQuery = "", openCreator = false }: {
+export function WorkflowManager({ workflows, templates, defaults, analytics, profileAiLabelConfirmed = false, initialQuery = "", openCreator = false, initialEditorId = "" }: {
   workflows: WorkflowView[];
   templates: TemplateOption[];
   defaults: WorkflowDefaultsView;
@@ -46,9 +47,11 @@ export function WorkflowManager({ workflows, templates, defaults, analytics, pro
   profileAiLabelConfirmed?: boolean;
   initialQuery?: string;
   openCreator?: boolean;
+  initialEditorId?: string;
 }) {
   const router = useRouter();
-  const [editor, setEditor] = useState<WorkflowView | null | undefined>(openCreator ? null : undefined);
+  const initialEditor = workflows.find((workflow) => workflow.id === initialEditorId && workflow.status === "DRAFT");
+  const [editor, setEditor] = useState<WorkflowView | null | undefined>(openCreator ? null : initialEditor);
   const [busy, setBusy] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<WorkflowView | null>(null);
   const [previewing, setPreviewing] = useState<WorkflowView | null>(null);
@@ -105,6 +108,27 @@ export function WorkflowManager({ workflows, templates, defaults, analytics, pro
     body: JSON.stringify(input),
   });
 
+  async function revise(workflow: WorkflowView) {
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/workflows/${workflow.id}/revise`, { method: "POST" });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body?.error ?? "No se pudo crear la nueva versión.");
+      enqueueSnackbar(body.reused ? "Ya existía un borrador para esta estrategia." : `Versión ${body.workflow.version} creada como borrador.`, { variant: "success" });
+      window.location.assign(`/workflows?edit=${encodeURIComponent(body.workflow.id)}`);
+    } catch (error) {
+      enqueueSnackbar(error instanceof Error ? translateError(error.message) : "No se pudo crear la nueva versión.", { variant: "error" });
+      setBusy(false);
+    }
+  }
+
+  function publish(workflow: WorkflowView) {
+    const previous = workflows.find((item) => item.status === "PUBLISHED" && item.stableKey === workflow.stableKey);
+    const active = previous?.activeEnrollments ?? 0;
+    if (workflow.version > 1 && !window.confirm(`Publicar la versión ${workflow.version} archivará la versión anterior y cancelará ${active} ejecución${active === 1 ? "" : "es"} activa${active === 1 ? "" : "s"}. El historial se conservará. ¿Deseas continuar?`)) return;
+    void request(`/api/workflows/${workflow.id}/publish`, { method: "POST" }, `Versión ${workflow.version} publicada correctamente.`);
+  }
+
   if (editor !== undefined) {
     return <section>
       <button type="button" onClick={() => setEditor(undefined)} className="mb-4 inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-zinc-400 hover:bg-white/5 hover:text-white"><ChevronLeft className="size-4" />Volver a mis workflows</button>
@@ -148,7 +172,7 @@ export function WorkflowManager({ workflows, templates, defaults, analytics, pro
         <div className="p-4 sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Status status={workflow.status} />{workflow.isPrimary ? <span className="rounded-full border border-violet-400/20 bg-violet-400/8 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-violet-300">Principal</span> : null}<span className={`rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-wide ${priority.className}`}>{priority.label}</span></div><h3 className="mt-3 truncate text-lg font-semibold text-white">{workflow.name}</h3><p className="mt-1 text-[11px] text-zinc-600">Versión {workflow.version} · prioridad {workflow.priority}</p></div>
-            <div className="flex shrink-0 gap-1">{workflow.status === "DRAFT" ? <button onClick={() => setEditor(workflow)} className="rounded-lg border border-white/8 p-2 text-zinc-400 hover:bg-white/5 hover:text-white" aria-label={`Editar ${workflow.name}`}><Edit3 className="size-4" /></button> : null}{workflow.status === "DRAFT" || (workflow.status === "PUBLISHED" && workflow.activeEnrollments === 0) ? <button disabled={busy} onClick={() => setPendingDelete(workflow)} className="rounded-lg border border-white/8 p-2 text-zinc-500 hover:bg-red-400/8 hover:text-red-300" aria-label={`Eliminar ${workflow.name}`}><Trash2 className="size-4" /></button> : null}{workflow.status === "DRAFT" ? <button disabled={busy} onClick={() => request(`/api/workflows/${workflow.id}/publish`, { method: "POST" })} className="flex items-center gap-1.5 rounded-lg bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-400/15"><Rocket className="size-3.5" />Publicar</button> : null}</div>
+            <div className="flex shrink-0 gap-1">{workflow.status === "DRAFT" ? <button onClick={() => setEditor(workflow)} className="rounded-lg border border-white/8 p-2 text-zinc-400 hover:bg-white/5 hover:text-white" aria-label={`Editar ${workflow.name}`}><Edit3 className="size-4" /></button> : workflow.status === "PUBLISHED" ? <button disabled={busy} onClick={() => void revise(workflow)} className="flex items-center gap-1.5 rounded-lg border border-violet-400/20 bg-violet-400/[.06] px-3 py-2 text-xs font-semibold text-violet-300 hover:bg-violet-400/10 disabled:opacity-40" aria-label={`Editar nueva versión de ${workflow.name}`}><Edit3 className="size-3.5" />Nueva versión</button> : null}{workflow.status === "DRAFT" || (workflow.status === "PUBLISHED" && workflow.activeEnrollments === 0) ? <button disabled={busy} onClick={() => setPendingDelete(workflow)} className="rounded-lg border border-white/8 p-2 text-zinc-500 hover:bg-red-400/8 hover:text-red-300" aria-label={`Eliminar ${workflow.name}`}><Trash2 className="size-4" /></button> : null}{workflow.status === "DRAFT" ? <button disabled={busy} onClick={() => publish(workflow)} className="flex items-center gap-1.5 rounded-lg bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-400/15"><Rocket className="size-3.5" />Publicar</button> : null}</div>
           </div>
           <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-stretch gap-2 rounded-2xl border border-white/7 bg-black/15 p-2">
             <StrategyPoint icon={GitBranch} eyebrow="Cuando ocurre" value={workflowTriggerLabels[workflow.triggerEvent]} />
@@ -160,7 +184,7 @@ export function WorkflowManager({ workflows, templates, defaults, analytics, pro
             <QuickFact icon={Users} label="Fans" value={String(workflow.enrollments)} />
             <QuickFact icon={BarChart3} label="Conversión" value={result ? `${result.conversionRate.toFixed(1)}%` : "—"} />
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-zinc-600"><span>{workflowReentryPolicyLabels[workflow.reentryPolicy]}{workflow.reentryPolicy === "AFTER_DELAY" ? ` · ${workflow.reentryDelayDays} días` : ""}</span>{result?.messagesSent ? <span className="flex items-center gap-1"><MessageSquare className="size-3" />{result.messagesSent} mensajes</span> : null}{result?.attributedRevenueMinor ? <span className="font-medium text-emerald-400">{money.format(result.attributedRevenueMinor / 100)} atribuido</span> : null}{workflow.publishedAt ? <span className="ml-auto flex items-center gap-1"><Clock3 className="size-3" />{new Date(workflow.publishedAt).toLocaleDateString("es-MX")}</span> : null}</div>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-zinc-600"><span>{workflowReentryPolicyLabels[workflow.reentryPolicy]}{workflow.reentryPolicy === "AFTER_DELAY" ? ` · ${workflow.reentryDelayDays} días` : ""}</span>{result?.messagesSent ? <span className="flex items-center gap-1"><MessageSquare className="size-3" />{result.messagesSent} mensajes</span> : null}{result?.attributedRevenueMinor ? <span className="font-medium text-emerald-400">{money.format(result.attributedRevenueMinor / 100)} atribuido</span> : null}{workflow.publishedAt ? <span className="ml-auto flex items-center gap-1"><Clock3 className="size-3" />{formatAppDate(workflow.publishedAt)}</span> : null}</div>
         </div>
         <button type="button" onClick={() => setPreviewing(workflow)} className="flex w-full cursor-pointer items-center justify-between border-t border-white/6 px-5 py-3.5 text-left text-xs font-medium text-zinc-400 transition hover:bg-violet-400/[.04] hover:text-violet-200"><span className="flex items-center gap-2"><Sparkles className="size-3.5 text-violet-400" />Explorar estrategia</span><span className="text-violet-400/50">→</span></button>
       </article>;

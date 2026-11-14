@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { templateContentRating } from "@/domain/workflows/media-safety";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 import { consumeRateLimit, rateLimitedResponse, rateLimitPolicies } from "@/lib/rate-limit";
+import { replaceWorkflowTarget } from "@/domain/workflows/revision";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ workflowId: string }> }) {
   const creatorId = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
@@ -66,9 +67,41 @@ export async function POST(_request: Request, { params }: { params: Promise<{ wo
         data: { config: { ...rest, publishedMediaUuids: mediaUuids, ...(contentRating !== "UNREVIEWED" ? { publishedContentRating: contentRating } : {}), ...(mediaOrigin === "original" || mediaOrigin === "ai_generated" ? { publishedMediaOrigin: mediaOrigin } : {}) } as Prisma.InputJsonValue },
       });
     }
+    const previousVersions = await transaction.workflow.findMany({
+      where: { creatorId, stableKey: workflow.stableKey, status: "PUBLISHED", id: { not: workflow.id } },
+      select: { id: true, name: true, version: true },
+    });
+    const previousIds = previousVersions.map((item) => item.id);
+    if (previousIds.length) {
+      const now = new Date();
+      const activeEnrollments = await transaction.workflowEnrollment.findMany({
+        where: { creatorId, workflowId: { in: previousIds }, status: { in: ["ACTIVE", "WAITING", "PAUSED"] } },
+        select: { id: true, fanId: true, workflowId: true },
+      });
+      for (const enrollment of activeEnrollments) {
+        await transaction.workflowEnrollment.update({
+          where: { id: enrollment.id },
+          data: { status: "CANCELLED", cancelledAt: now, nextRunAt: null, pausedAt: null, pausedFromStatus: null, pausedRemainingSeconds: null, cancellationReason: `Cancelado al publicar ${workflow.name} v${workflow.version}.`, lockedAt: null, lockOwner: null, lockExpiresAt: null },
+        });
+        await transaction.automationLog.create({
+          data: { creatorId, fanId: enrollment.fanId, enrollmentId: enrollment.id, eventType: "WORKFLOW_VERSION_REPLACED", explanation: `${workflow.name}: la ejecución fue cancelada porque el administrador publicó la versión ${workflow.version}.`, metadata: { previousWorkflowId: enrollment.workflowId, replacementWorkflowId: workflow.id, replacementVersion: workflow.version } },
+        });
+      }
+      const transitionSteps = await transaction.workflowStep.findMany({
+        where: { workflow: { creatorId, status: "PUBLISHED" }, type: "CHANGE_WORKFLOW" },
+        select: { id: true, config: true },
+      });
+      for (const previousId of previousIds) {
+        for (const step of transitionSteps) {
+          const nextConfig = replaceWorkflowTarget(step.config, previousId, workflow.id);
+          if (nextConfig) await transaction.workflowStep.update({ where: { id: step.id }, data: { config: nextConfig as Prisma.InputJsonValue } });
+        }
+      }
+      await transaction.workflow.updateMany({ where: { id: { in: previousIds } }, data: { status: "ARCHIVED", isPrimary: false } });
+    }
     return transaction.workflow.update({
       where: { id: workflow.id },
-      data: { status: "PUBLISHED", publishedAt: new Date() },
+      data: { status: "PUBLISHED", publishedAt: new Date(), isPrimary: true },
     });
   });
   return Response.json({ workflow: published });

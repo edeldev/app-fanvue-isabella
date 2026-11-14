@@ -5,6 +5,7 @@ export type WorkflowStepAnalyticsView = WorkflowStepAnalytics;
 
 export interface WorkflowView {
   id: string;
+  stableKey: string;
   name: string;
   version: number;
   priority: number;

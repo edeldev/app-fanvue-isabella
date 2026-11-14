@@ -24,10 +24,11 @@ import {
   type WorkflowAnalyticsEvent,
 } from "@/domain/workflows/step-analytics";
 
-export default async function WorkflowsPage({ searchParams }: { searchParams: Promise<{ q?: string | string[]; new?: string | string[]; fan?: string | string[]; workflow?: string | string[] }> }) {
+export default async function WorkflowsPage({ searchParams }: { searchParams: Promise<{ q?: string | string[]; new?: string | string[]; edit?: string | string[]; fan?: string | string[]; workflow?: string | string[] }> }) {
   const queryParams = await searchParams;
   const initialQuery = (Array.isArray(queryParams.q) ? queryParams.q[0] : queryParams.q)?.trim().slice(0, 80) ?? "";
   const openCreator = (Array.isArray(queryParams.new) ? queryParams.new[0] : queryParams.new) === "1";
+  const initialEditorId = (Array.isArray(queryParams.edit) ? queryParams.edit[0] : queryParams.edit) ?? "";
   const initialFanId = (Array.isArray(queryParams.fan) ? queryParams.fan[0] : queryParams.fan) ?? "";
   const initialWorkflowId = (Array.isArray(queryParams.workflow) ? queryParams.workflow[0] : queryParams.workflow) ?? "";
   const creatorId = readCreatorSession(
@@ -146,6 +147,7 @@ export default async function WorkflowsPage({ searchParams }: { searchParams: Pr
     : [[], [], [], [], [], 0, 0, [], null];
   const workflows = records.map((workflow) => ({
     id: workflow.id,
+    stableKey: workflow.stableKey,
     name: workflow.name,
     version: workflow.version,
     priority: workflow.priority,
@@ -337,7 +339,7 @@ export default async function WorkflowsPage({ searchParams }: { searchParams: Pr
           </div>
           {creatorId ? (
             <>
-              <WorkflowManager workflows={workflows} templates={templateOptions} defaults={workflowDefaults} analytics={workflowAnalytics} profileAiLabelConfirmed={settingsRecord?.aiProfileLabelConfirmed === true} initialQuery={initialQuery} openCreator={openCreator} />
+              <WorkflowManager workflows={workflows} templates={templateOptions} defaults={workflowDefaults} analytics={workflowAnalytics} profileAiLabelConfirmed={settingsRecord?.aiProfileLabelConfirmed === true} initialQuery={initialQuery} openCreator={openCreator} initialEditorId={initialEditorId} />
               <WorkflowAnalyticsPanel analytics={workflowAnalytics} stepAnalytics={stepAnalytics} />
               <EnrollmentPanel
                 fans={fans}
