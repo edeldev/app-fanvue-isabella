@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { useFormStatus } from "react-dom";
+import { createPortal, useFormStatus } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { formatAppDateTime } from "@/lib/date-time";
 import { Bot, Braces, CalendarClock, Check, Copy, FileText, Film, ImageIcon, Languages, LoaderCircle, Plus, RefreshCw, Reply, Send, Sparkles, WandSparkles, X } from "lucide-react";
@@ -282,10 +282,7 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
         <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={() => void copyAiSuggestion()} className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/10 px-3 text-xs font-medium text-zinc-400 hover:bg-white/5 hover:text-white"><Copy className="size-3.5" />Copiar</button><button type="button" onClick={() => void generateAiSuggestion(aiMode)} className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/10 px-3 text-xs font-medium text-zinc-300 hover:bg-white/5 hover:text-white"><RefreshCw className="size-3.5" />Generar otra</button><button type="button" onClick={useAiSuggestion} className="inline-flex h-9 items-center gap-2 rounded-xl bg-violet-500 px-4 text-xs font-semibold text-white shadow-lg shadow-violet-950/30 hover:bg-violet-400"><WandSparkles className="size-3.5" />{aiMode === "improve" ? "Usar versión mejorada" : "Usar respuesta"}</button></div>
       </div> : <div className="flex min-h-32 flex-col items-center justify-center gap-3 px-5 py-6 text-center"><p className="max-w-md text-sm text-rose-200">{aiError || "No se pudo crear una sugerencia."}</p><button type="button" onClick={() => void generateAiSuggestion(aiMode)} className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/10 px-3 text-xs font-medium text-zinc-200 hover:bg-white/5"><RefreshCw className="size-3.5" />Intentar otra vez</button></div>}
     </section> : null}
-    {command ? <div className="absolute bottom-[calc(100%-4px)] left-14 z-30 w-[min(430px,calc(100%-4.5rem))] overflow-hidden rounded-2xl border border-white/10 bg-[#1a1c23] shadow-2xl shadow-black/50">
-      <div className="flex items-center gap-2 border-b border-white/8 px-4 py-3"><Sparkles className="size-4 text-violet-400" /><div><p className="text-xs font-medium text-zinc-200">Plantillas</p><p className="text-[10px] text-zinc-600">{command.query ? `Resultados para “${command.query}”` : "Escribe para buscar · ↑↓ para navegar · Enter para usar"}</p></div></div>
-      <div className="max-h-72 overflow-y-auto">{matches.map((template, index) => <button key={template.id} type="button" onMouseDown={event => event.preventDefault()} onClick={() => chooseTemplate(template)} className={`flex w-full items-start gap-3 px-4 py-3 text-left transition ${index === activeCommand ? "bg-violet-500/15" : "hover:bg-white/5"}`}><span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-violet-500/10 text-violet-300"><FileText className="size-4" /></span><span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="truncate text-sm font-medium text-zinc-200">{template.name}</span><span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-zinc-500">{categoryLabels[template.category] ?? template.category}</span></span><span className="mt-1 block truncate text-xs text-zinc-500">{renderTemplate(template.text, fanName, username) || `${template.media.length} archivos`}</span></span></button>)}{matches.length === 0 ? <div className="px-4 py-6 text-center text-xs text-zinc-500">No hay plantillas que coincidan.</div> : null}</div>
-    </div> : null}
+    {command ? <TemplateCommandMenu anchor={textarea} query={command.query} matches={matches} activeIndex={activeCommand} fanName={fanName} username={username} onChoose={chooseTemplate} /> : null}
     <div className={`${mediaOpen ? "flex" : "hidden"} fixed inset-0 z-[220] items-end justify-center bg-black/75 p-0 backdrop-blur-sm sm:items-center sm:p-5`} role="presentation" aria-hidden={!mediaOpen} onMouseDown={(event) => { if (event.target === event.currentTarget) setMediaOpen(false); }}><section role="dialog" aria-modal="true" aria-labelledby="chat-media-title" className="flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[#181a21] shadow-2xl shadow-black/70 sm:rounded-3xl"><header className="flex shrink-0 items-start justify-between gap-3 border-b border-white/8 bg-[#181a21] px-5 py-4"><div><h2 id="chat-media-title" className="text-sm font-semibold text-zinc-100">Fotos, videos y PPV</h2><p className="mt-1 text-[11px] text-zinc-500">Adjunta hasta 10 archivos y configura qué verá el fan.</p></div><button type="button" onClick={() => setMediaOpen(false)} aria-label="Cerrar archivos" className="grid size-9 cursor-pointer place-items-center rounded-xl text-zinc-500 hover:bg-white/5 hover:text-white"><X className="size-4" /></button></header><div className="min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5"><p className="mb-4 rounded-xl border border-amber-400/15 bg-amber-400/[.04] px-3 py-2 text-[11px] leading-5 text-amber-200/80">Clasifica todos los archivos. El contenido 18+ / NSFW exige consentimiento explícito verificable; una suscripción, renovación o compra no lo sustituyen.</p><MediaFields key={templateId || "new"} initialMedia={selected?.media} initialPriceMinor={selected?.priceMinor} initialPreviewUuid={selected?.previewUuid} initialSfwAttested={selected?.sfwAttested} initialContentRating={selected?.contentRating} allowSfwAttestation onValueChange={(value) => { setMediaCount(value.media.length); setMediaValue(value); if (selected && (selected.media.length !== value.media.length || selected.media.some((item, index) => item.uuid !== value.media[index]?.uuid))) setMediaOrigin(""); }} />{mediaCount > 0 && !profileAiLabelConfirmed ? <fieldset className="mt-3 rounded-xl border border-white/10 p-3"><legend className="px-1 text-xs text-zinc-300">Origen de los archivos</legend><label className="flex items-center gap-2 text-xs text-zinc-400"><input type="radio" checked={mediaOrigin === "original"} onChange={() => setMediaOrigin("original")} />Originales</label><label className="mt-2 flex items-center gap-2 text-xs text-zinc-400"><input type="radio" checked={mediaOrigin === "ai_generated"} onChange={() => setMediaOrigin("ai_generated")} />Generados o alterados con IA</label></fieldset> : null}</div><footer className="flex shrink-0 justify-end border-t border-white/8 bg-[#181a21] px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"><button type="button" onClick={() => setMediaOpen(false)} className="cursor-pointer rounded-xl bg-violet-500 px-5 py-2.5 text-xs font-semibold text-white hover:bg-violet-400">Listo</button></footer></section></div>
     {mediaValue.media.length > 0 && !mediaOpen ? <ComposerMediaSummary value={mediaValue} onEdit={() => setMediaOpen(true)} /> : null}
     <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
@@ -315,6 +312,57 @@ export function MessageComposer({ fanUuid, fanName, username, templates, profile
     </div>
     {scheduleOpen ? <div className="mt-2 flex flex-col gap-2 rounded-xl border border-sky-400/15 bg-sky-400/[.04] p-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="text-xs font-medium text-sky-100">Programar para después</p><p className="mt-0.5 text-[10px] text-zinc-600">El cron lo enviará aunque cierres la aplicación.</p></div><input type="datetime-local" value={scheduledLocal} onChange={(event) => setScheduledLocal(event.target.value)} className="h-10 rounded-lg border border-white/10 bg-[#171920] px-3 text-xs text-zinc-200 outline-none focus:border-sky-400/40" /><button type="button" onClick={() => { setScheduleOpen(false); setScheduledLocal(""); }} className="rounded-lg px-3 py-2 text-xs text-zinc-500 hover:bg-white/5 hover:text-white">Cancelar</button></div> : null}
   </form>;
+}
+
+function TemplateCommandMenu({ anchor, query, matches, activeIndex, fanName, username, onChoose }: {
+  anchor: React.RefObject<HTMLTextAreaElement | null>;
+  query: string;
+  matches: Template[];
+  activeIndex: number;
+  fanName: string;
+  username: string;
+  onChoose: (template: Template) => void;
+}) {
+  const [position, setPosition] = useState<{ left: number; top: number; width: number; opensUp: boolean } | null>(null);
+
+  useLayoutEffect(() => {
+    const update = () => {
+      const field = anchor.current;
+      if (!field) return;
+      const rect = field.getBoundingClientRect();
+      const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const width = Math.min(430, Math.max(280, viewportWidth - 24));
+      const left = Math.min(Math.max(12, rect.left), Math.max(12, viewportWidth - width - 12));
+      const opensUp = rect.top >= Math.min(340, viewportHeight * 0.48);
+      setPosition({ left, top: opensUp ? rect.top - 8 : rect.bottom + 8, width, opensUp });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    window.visualViewport?.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("scroll", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+      window.visualViewport?.removeEventListener("resize", update);
+      window.visualViewport?.removeEventListener("scroll", update);
+    };
+  }, [anchor]);
+
+  if (!position) return null;
+  return createPortal(
+    <div
+      className="fixed z-[450] overflow-hidden rounded-2xl border border-violet-400/20 bg-[#1a1c23]/98 shadow-[0_24px_80px_rgba(0,0,0,.7),0_0_32px_rgba(139,92,246,.12)] backdrop-blur-xl"
+      style={{ left: position.left, top: position.top, width: position.width, transform: position.opensUp ? "translateY(-100%)" : undefined }}
+      role="listbox"
+      aria-label="Atajos de plantillas"
+    >
+      <div className="flex items-center gap-2 border-b border-white/8 bg-violet-400/[.035] px-4 py-3"><Sparkles className="size-4 text-violet-400" /><div className="min-w-0"><p className="text-xs font-medium text-zinc-200">Plantillas</p><p className="truncate text-[10px] text-zinc-600">{query ? `Resultados para “${query}”` : "Escribe para buscar · ↑↓ para navegar · Enter para usar"}</p></div></div>
+      <div className="max-h-[min(18rem,45dvh)] overflow-y-auto overscroll-contain">{matches.map((template, index) => <button key={template.id} type="button" role="option" aria-selected={index === activeIndex} onMouseDown={event => event.preventDefault()} onClick={() => onChoose(template)} className={`flex w-full items-start gap-3 px-4 py-3 text-left transition ${index === activeIndex ? "bg-violet-500/15" : "hover:bg-white/5"}`}><span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-violet-500/10 text-violet-300"><FileText className="size-4" /></span><span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="truncate text-sm font-medium text-zinc-200">{template.name}</span><span className="shrink-0 rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-zinc-500">{categoryLabels[template.category] ?? template.category}</span></span><span className="mt-1 block truncate text-xs text-zinc-500">{renderTemplate(template.text, fanName, username) || `${template.media.length} archivos`}</span></span></button>)}{matches.length === 0 ? <div className="px-4 py-6 text-center text-xs text-zinc-500">No hay plantillas que coincidan.</div> : null}</div>
+    </div>,
+    document.body,
+  );
 }
 
 function ComposerMediaSummary({ value, onEdit }: { value: ComposerMediaValue; onEdit: () => void }) {
