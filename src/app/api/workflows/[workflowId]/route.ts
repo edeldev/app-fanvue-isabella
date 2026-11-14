@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
+import type { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { canDeleteWorkflow } from "@/domain/workflows/deletion-policy";
+import { replaceWorkflowTarget } from "@/domain/workflows/revision";
 import { prisma } from "@/lib/prisma";
 import { CREATOR_SESSION_COOKIE, readCreatorSession } from "@/lib/session/creator-session";
 import { updateWorkflow } from "@/services/workflows/save-workflow";
@@ -41,8 +43,26 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     return Response.json({ error: "WORKFLOW_IS_RUNNING" }, { status: 409 });
   }
   await prisma.$transaction(async (transaction) => {
+    const fallback = workflow.status === "PUBLISHED"
+      ? await transaction.workflow.findFirst({
+          where: { creatorId, stableKey: workflow.stableKey, status: "ARCHIVED", id: { not: workflow.id } },
+          orderBy: { version: "desc" },
+          select: { id: true },
+        })
+      : null;
     if (workflow.status === "PUBLISHED") {
       await transaction.workflowEnrollment.deleteMany({ where: { workflowId: workflow.id, creatorId } });
+    }
+    if (fallback) {
+      const transitions = await transaction.workflowStep.findMany({
+        where: { workflow: { creatorId, status: "PUBLISHED" }, type: "CHANGE_WORKFLOW" },
+        select: { id: true, config: true },
+      });
+      for (const step of transitions) {
+        const config = replaceWorkflowTarget(step.config, workflow.id, fallback.id);
+        if (config) await transaction.workflowStep.update({ where: { id: step.id }, data: { config: config as Prisma.InputJsonValue } });
+      }
+      await transaction.workflow.update({ where: { id: fallback.id }, data: { status: "PUBLISHED", isPrimary: true } });
     }
     await transaction.workflow.delete({ where: { id: workflow.id } });
   });
